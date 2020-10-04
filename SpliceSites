@@ -1,0 +1,55 @@
+#//https://metasystems.riken.jp/conjoing/faqs
+#//    GT-AG, GC-AG, CT-AG, GG-AG, GA-AG, CA-AG, GT-CG, GT-GG,
+#// TG-AG, GT-TG, AT-AG, TC-AG, GT-AC, CC-AG, TT-AG,
+#// GT-AA, AA-AG, GT-AT, GT-GC, AC-AG, AG-AG, CT-AT, GT-CC,
+#// GA-CT, GT-CT, GT-GA, CC-GC, GG-GT, GT-GT, GT-TC, CT-TT, and GT-TT.
+GT AG
+GC AG
+CT AG
+GG AG
+GA AG
+CA AG
+GT CG
+GT GG
+TG AG
+GT TG
+AT AG
+TC AG
+GT AC
+CC AG
+TT AG
+GT AA
+AA AG
+GT AT
+GT GC
+AC AG
+AG AG
+CT AT
+GT CC
+GA CT
+GT CT
+GT GA
+CC GC
+GG GT
+GT GT
+GT TC
+CT TT
+GT TT
+#
+#    //https://www.ncbi.nlm.nih.gov/pmc/articles/PMC84117/
+AT AC
+#    //https://www.ncbi.nlm.nih.gov/pmc/articles/PMC113136/
+CT GC
+#    //https://www.ncbi.nlm.nih.gov/pmc/articles/PMC84117/
+AT AA
+
+#GC CT
+this splice is used by AT1G79350.1. But it is never reported before. switch it off here
+#tair10
+# dornors.push_back("GT");    acceptors.push_back("TA");
+# dornors.push_back("TA");    acceptors.push_back("AG");
+# dornors.push_back("TA");    acceptors.push_back("AT");
+# dornors.push_back("AT");    acceptors.push_back("AT");
+# dornors.push_back("CG");    acceptors.push_back("AG");
+# dornors.push_back("TG");    acceptors.push_back("AT");
+
