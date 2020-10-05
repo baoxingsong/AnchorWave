@@ -271,7 +271,7 @@ void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsM
                 startRef = orthologPair.getRefEndPos()+1;
                 endQuery= orthologPair.getQueryStartPos()-1;
             }
-            std::cout << refChr << " last align" << std::endl;
+//            std::cout << refChr << " last align" << std::endl;
 
             std::string temp = refAlign.str();
             temp.erase(std::remove(temp.begin(), temp.end(), '-'), temp.end());
@@ -314,20 +314,7 @@ void deNovoGenomeVariantCalling( std::map<std::string, std::vector<AlignmentMatc
         outPutFraged = true;
     }
 
-    std::ofstream omaffile;
-    std::ofstream ovcffile;
-    std::ofstream ofragfile;
-    if( outPutMaf ){
-        omaffile.open(outPutMafFile);
-    }
-    if( outPutVcf ){
-        ovcffile.open(outPutVcfFile);
-        ovcffile << "##fileformat=VCFv4.3" << std::endl;
-        ovcffile << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER" << std::endl;
-    }
-    if( outPutFraged ){
-        ofragfile.open(outPutFragedFile);
-    }
+
 
     std::map <std::string, Fasta> refSequences;
     readFastaFile(refFastaFilePath, refSequences);
@@ -357,6 +344,31 @@ void deNovoGenomeVariantCalling( std::map<std::string, std::vector<AlignmentMatc
                 chrWidth = (queryFileName + "." + itchr->first).size();
             }
         }
+    }
+
+    std::ofstream omaffile;
+    std::ofstream ovcffile;
+    std::ofstream ofragfile;
+    if( outPutMaf ){
+        omaffile.open(outPutMafFile);
+    }
+
+    time_t now = time(0);
+    tm *ltm = localtime(&now);
+    std::string filedate = std::to_string((1900 + ltm->tm_year) + std::to_string(1 + ltm->tm_mon) + std::to_string(ltm->tm_mday);
+
+
+    if( outPutVcf ){
+        ovcffile.open(outPutVcfFile);
+        ovcffile << "##fileformat=VCFv4.3" << std::endl;
+        ovcffile << "##fileDate=" << filedate << std::endl;
+        ovcffile << "##source=proali" << std::endl;
+        ovcffile <<"##reference=" << refFileName << std::endl;
+        ovcffile << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER" << std::endl;
+    }
+
+    if( outPutFraged ){
+        ofragfile.open(outPutFragedFile);
     }
 
 

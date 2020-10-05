@@ -4,7 +4,7 @@
 
 #ifndef PROALI_DENOVOGENOMEVARIANTCALLING_H
 #define PROALI_DENOVOGENOMEVARIANTCALLING_H
-
+#include <ctime>
 #include "../model/model.h"
 #include "../util/util.h"
 #include "./readFastaFile.h"

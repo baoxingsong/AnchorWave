@@ -244,7 +244,7 @@ void longestPathQuotav2 (std::vector<OrthologPair2> pairedSimilarFragments, std:
     do{
         done = true;
         n=pairedSimilarFragments.size();
-        std::cout << "longest path n:" << n << std::endl;
+//        std::cout << "longest path n:" << n << std::endl;
         double scoreArray [n]; // arrays of scores
         int prev [n];  // index of previous node in longest path
 
