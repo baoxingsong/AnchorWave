@@ -13,7 +13,7 @@ minimap2
 ```
 git clone https://github.com/baoxingsong/proali.git
 cd proali
-cmake CMakeLists.txt
+cmake ./
 make
 ```
 
