@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0)
-project(progli)
+project(proali)
 
 include(CheckCXXCompilerFlag)
 set(CMAKE_CXX_STANDARD 14)
@@ -24,7 +24,7 @@ add_subdirectory(./googletest/googletest)
 include_directories(googletest/googletest/include googletest/googletest)
 
 
-add_executable(progli
+add_executable(proali
         googletest
         googletest/googletest
         #       ksw2_extz2_sse.c
@@ -175,4 +175,5 @@ add_executable(progli
         WFA/benchmark/benchmark_utils.h
         )
 
-target_link_libraries(progli gtest gtest_main)
+target_link_libraries(proali gtest gtest_main)
+

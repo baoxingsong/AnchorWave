@@ -193,6 +193,7 @@ void longestPath (std::vector<AlignmentMatch> & pairedSimilarFragments, std::vec
             // This gets rid of the noise, while preserving the inversions on
             // the diagonal
             // Are only looking at positions previous to our current "idx" position
+            // windowSize is a score, it is not well named
             if ( (scoreArray[jdx] + pairedSimilarFragments[idx].getWindowSize()) > scoreArray[idx] &&
                  pairedSimilarFragments[jdx].getQueryStart() < pairedSimilarFragments[idx].getQueryStart()){
                 scoreArray[idx] = scoreArray[jdx] + pairedSimilarFragments[idx].getWindowSize();

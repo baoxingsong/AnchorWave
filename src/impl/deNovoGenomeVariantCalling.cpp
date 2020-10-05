@@ -355,7 +355,7 @@ void deNovoGenomeVariantCalling( std::map<std::string, std::vector<AlignmentMatc
 
     time_t now = time(0);
     tm *ltm = localtime(&now);
-    std::string filedate = std::to_string((1900 + ltm->tm_year) + std::to_string(1 + ltm->tm_mon) + std::to_string(ltm->tm_mday);
+    std::string filedate = std::to_string((1900 + ltm->tm_year)) + std::to_string((1 + ltm->tm_mon)) + std::to_string((ltm->tm_mday));
 
 
     if( outPutVcf ){
@@ -370,7 +370,6 @@ void deNovoGenomeVariantCalling( std::map<std::string, std::vector<AlignmentMatc
     if( outPutFraged ){
         ofragfile.open(outPutFragedFile);
     }
-
 
     for ( std::map<std::string, std::vector<AlignmentMatch>>::iterator it0=alignmentMatchsMap.begin(); it0!=alignmentMatchsMap.end(); ++it0 ) {
         if( it0->second.size() > 0 ){
@@ -806,7 +805,7 @@ void deNovoGenomeVariantCalling( std::map<std::string, std::vector<AlignmentMatc
     if( outPutVcf ){
         ovcffile.close();
     }
-    if( outPutVcf ){
+    if( outPutFraged ){
         ofragfile.close();
     }
 }
