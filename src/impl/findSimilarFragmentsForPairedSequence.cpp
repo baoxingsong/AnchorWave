@@ -351,7 +351,7 @@ std::vector<PairedSimilarFragment> findSimilarFragmentsForPairedSequence ( int8_
             break;
         }
     }
-    std::cout << "seeds size" << seeds.size() << std::endl;
+//    std::cout << "seeds size" << seeds.size() << std::endl;
 //    std::cout << "line 461 begin to link seeds" << std::endl;
     link_seeds( seeds );  // this function is very fast, by using less seeds, the program is significantly faster
 

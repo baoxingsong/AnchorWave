@@ -235,7 +235,6 @@ void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsM
 
 
                         outputLocalAlignment(chrWidth, refFileName, queryFileName, pairedSimilarFragments0, strand, startRef, startQuery, refChr, queryChr,refSeq, querySeq, ofile, refSequences, targetSequences);
-                        outputLocalAlignment(chrWidth, refFileName, queryFileName, pairedSimilarFragments0, strand, startRef, startQuery, refChr, queryChr,refSeq, querySeq, ofile, refSequences, targetSequences);
 
                     }else{
 
