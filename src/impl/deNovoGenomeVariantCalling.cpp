@@ -325,13 +325,13 @@ void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsM
             temp.erase(std::remove(temp.begin(), temp.end(), '-'), temp.end());
 
             std::string refGenomerSequence = getSubsequence( refSequences, refChr, alignmentMatchsMap[i][0].getRefStartPos(), alignmentMatchsMap[i][alignmentMatchsMap[i].size()-1].getRefEndPos());
-            assert(temp.compare(refGenomerSequence)==0);
+            //assert(temp.compare(refGenomerSequence)==0);
 
             std::string queryGenomerSequence = getSubsequence( targetSequences, queryChr, alignmentMatchsMap[i][0].getQueryStartPos(), alignmentMatchsMap[i][alignmentMatchsMap[i].size()-1].getQueryEndPos());
 
             temp = queryAlign.str();
             temp.erase(std::remove(temp.begin(), temp.end(), '-'), temp.end());
-            assert(temp.compare(queryGenomerSequence)==0);
+            //assert(temp.compare(queryGenomerSequence)==0);
             ofile << "a\tscore=" << alignmentScore << std::endl;
 
             ofile << "s\t" << std::left << std::setw(chrWidth) << refFileName + "." + refChr << "\t" << std::right <<  std::setw(9) << alignmentMatchsMap[i][0].getRefStartPos()-1 << "\t" << std::setw(9) << refGenomerSequence.size() << "\t+\t" << refSequences[refChr].getSequence().size() << "\t" << refAlign.str() << std::endl;
