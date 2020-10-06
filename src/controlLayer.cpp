@@ -69,7 +69,7 @@ int getSequences( int argc, char** argv, std::map<std::string, std::string>& par
 int DenoveAssemblyVariantCalling( int argc, char** argv, std::map<std::string, std::string>& parameters ) {
     std::stringstream usage;
     usage << "Usage: " << softwareName
-          << " varcallv2 -i refGffFile -r refGenome  -t targetGff -s targetGenome -o output GFF/GTF file " << std::endl <<
+          << " genoAli -i refGffFile -r refGenome  -t targetGff -s targetGenome -o output GFF/GTF file " << std::endl <<
           "Options" << std::endl <<
           " -h        produce help message" << std::endl <<
           " -i FILE   reference GFF/GTF file" << std::endl <<
@@ -196,7 +196,7 @@ int genomeAlignment( int argc, char** argv, std::map<std::string, std::string>& 
     bool outPutAlignmentForEachInterval = false;
 
     usage << "Usage: " << softwareName
-          << " genoAli -i refGffFile -r refGenome -a samFile -s targetGenome -o output mafFile " << std::endl <<
+          << " genoAli -i proali -r refGenome -a samFile -s targetGenome -o output mafFile " << std::endl <<
           "Options" << std::endl <<
           " -h        produce help message" << std::endl <<
           " -i FILE   reference GFF/GTF file" << std::endl <<
