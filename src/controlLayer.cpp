@@ -194,26 +194,55 @@ int genomeAlignment( int argc, char** argv, std::map<std::string, std::string>& 
     int refMaximumTimes=1;
     int queryMaximumTimes=2;
     bool outPutAlignmentForEachInterval = false;
+    bool localAlignment = false;
+
+
+    int32_t matchingScore = 2;
+    int32_t mismatchingPenalty = -3;
+    int32_t openGapPenalty1 = -4;
+    int32_t extendGapPenalty1 = -2;
+
+
+    int32_t seed_window_size = 38;
+    int32_t mini_cns_score = 40;
+    int32_t step_size = 8;
+    int32_t matrix_boundary_distance = 0;
+
+    int32_t scoreThreshold = 54;
+
+    int32_t w = 10;  //this is the band width for band sequence alignments
+    int32_t xDrop = 20;
 
     usage << "Usage: " << softwareName
           << " genoAli -i proali -r refGenome -a samFile -s targetGenome -o output mafFile " << std::endl <<
           "Options" << std::endl <<
-          " -h        produce help message" << std::endl <<
-          " -i FILE   reference GFF/GTF file" << std::endl <<
-          " -r FILE   reference genome sequence" << std::endl <<
-          " -a FILE   sam file" << std::endl <<
-          " -s FILE   target genome sequence" << std::endl <<
-          " -o STRING output file prefix" << std::endl <<
-          " -w INT    sequence alignment window width (default: " << windownWidth << ")" << std::endl <<
-          " -R INT    reference coverage(default: " << refMaximumTimes << ")" << std::endl<<
-          " -Q INT    query coverage (default: " << queryMaximumTimes << ")"  << std::endl<<
+          " -h          produce help message" << std::endl <<
+          " -i  FILE    reference GFF/GTF file" << std::endl <<
+          " -r  FILE    reference genome sequence" << std::endl <<
+          " -a  FILE    sam file" << std::endl <<
+          " -s  FILE    target genome sequence" << std::endl <<
+          " -o  STRING  output file prefix" << std::endl <<
+          " -w  INT     sequence alignment window width (default: " << windownWidth << ")" << std::endl <<
+          " -R  INT     reference coverage(default: " << refMaximumTimes << ")" << std::endl<<
+          " -Q  INT     query coverage (default: " << queryMaximumTimes << ")"  << std::endl<<
+          " -A  INT     Matching score (default: " << matchingScore << ")" << std::endl <<
+          " -B  INT     Mismatching penalty (default: " << mismatchingPenalty << ")" << std::endl <<
+          " -O1 INT     open gap penalty (default: " << openGapPenalty1 << ")" << std::endl <<
+          " -E1 INT     extend gap penalty (default: " << extendGapPenalty1 << ")" << std::endl <<
           " advanced options" << std::endl<<
-          " -d DOUBLE calculateIndelDistance (default: " << calculateIndelDistance << ")"  << std::endl<<
-          " -O DOUBLE chain open gap penalty (default: " << GAP_OPEN_PENALTY << ")"  << std::endl<<
-          " -E DOUBLE chain extend gap penalty (default: " << INDEL_SCORE << ")"  << std::endl<<
-          " -I DOUBLE minimum chain score (default: " << MIN_ALIGNMENT_SCORE << ")"  << std::endl<<
-          " -D INT    maximum gap size for chain (default: " << MAX_DIST_BETWEEN_MATCHES << ")"  << std::endl<<
-          " -f        output alignment for each interval (default: " << outPutAlignmentForEachInterval << ")"  << std::endl<<
+          " -y  INT     minimum score to report a local sequence alignment (default: "<<scoreThreshold<<")" << std::endl <<
+          " -w  INT     the windows size used to run the smith-waterman algorithm to get the alignment seed (default: "<<seed_window_size<<")" << std::endl <<
+          " -c  INT     minimum seeds score to trigger a local alignment extension (default: " << mini_cns_score << ")" << std::endl <<
+          " -s  INT     step size for sliding the smith-waterman seeds alignment window (default: " << step_size << ")" << std::endl <<
+          " -x  INT     x-drop for local alignment (default: " << xDrop << ")" << std::endl <<
+          " -u  INT      xextend alignment band width (default: " << w << ")" << std::endl <<
+          " -d  DOUBLE  calculateIndelDistance (default: " << calculateIndelDistance << ")"  << std::endl<<
+          " -OC DOUBLE  chain open gap penalty (default: " << GAP_OPEN_PENALTY << ")"  << std::endl<<
+          " -EC DOUBLE chain extend gap penalty (default: " << INDEL_SCORE << ")"  << std::endl<<
+          " -I  DOUBLE  minimum chain score (default: " << MIN_ALIGNMENT_SCORE << ")"  << std::endl<<
+          " -D  INT     maximum gap size for chain (default: " << MAX_DIST_BETWEEN_MATCHES << ")"  << std::endl<<
+          " -f          output alignment for each interval (default: " << outPutAlignmentForEachInterval << ")"  << std::endl<<
+          " -l          perform local alignment for each interval (default: " << localAlignment << ")"  << std::endl<<
           std::endl;
 
     InputParser inputParser(argc, argv);
@@ -234,11 +263,11 @@ int genomeAlignment( int argc, char** argv, std::map<std::string, std::string>& 
         if( inputParser.cmdOptionExists("-d")){
             calculateIndelDistance = std::stod(inputParser.getCmdOption("-d"));
         }
-        if( inputParser.cmdOptionExists("-O")){
-            GAP_OPEN_PENALTY = std::stod(inputParser.getCmdOption("-O"));
+        if( inputParser.cmdOptionExists("-OC")){
+            GAP_OPEN_PENALTY = std::stod(inputParser.getCmdOption("-OC"));
         }
-        if( inputParser.cmdOptionExists("-E")){
-            INDEL_SCORE = std::stod(inputParser.getCmdOption("-E"));
+        if( inputParser.cmdOptionExists("-EC")){
+            INDEL_SCORE = std::stod(inputParser.getCmdOption("-EC"));
         }
         if( inputParser.cmdOptionExists("-I")){
             MIN_ALIGNMENT_SCORE = std::stod(inputParser.getCmdOption("-I"));
@@ -255,6 +284,49 @@ int genomeAlignment( int argc, char** argv, std::map<std::string, std::string>& 
         if( inputParser.cmdOptionExists("-f")){
             outPutAlignmentForEachInterval = true;
         }
+        if( inputParser.cmdOptionExists("-l")){
+            localAlignment = true;
+        }
+
+
+        if( inputParser.cmdOptionExists("-A") ){
+            matchingScore = std::stoi( inputParser.getCmdOption("-A") );
+        }
+        if( inputParser.cmdOptionExists("-B") ){
+            mismatchingPenalty = std::stoi( inputParser.getCmdOption("-B") );
+        }
+        if( inputParser.cmdOptionExists("-O1") ){
+            openGapPenalty1 = std::stoi( inputParser.getCmdOption("-O1") );
+        }
+        if( inputParser.cmdOptionExists("-E1") ){
+            extendGapPenalty1 = std::stoi( inputParser.getCmdOption("-E1") );
+        }
+
+
+        if( inputParser.cmdOptionExists("-w") ){
+            seed_window_size = std::stoi( inputParser.getCmdOption("-w") );
+        }
+        if( inputParser.cmdOptionExists("-c") ){
+            mini_cns_score = std::stoi( inputParser.getCmdOption("-c") );
+        }
+        if( inputParser.cmdOptionExists("-s") ){
+            step_size = std::stoi( inputParser.getCmdOption("-s") );
+        }
+        if( inputParser.cmdOptionExists("-y") ){
+            scoreThreshold = std::stoi( inputParser.getCmdOption("-y") );
+        }
+        if( inputParser.cmdOptionExists("-u") ){
+            w = std::stoi( inputParser.getCmdOption("-u") );
+        }
+        if( inputParser.cmdOptionExists("-x") ){
+            xDrop = std::stoi( inputParser.getCmdOption("-x") );
+        }
+
+        if( localAlignment && outPutAlignmentForEachInterval ){
+            std::cout << "please do not perform local alignment and global alignment for each interval at the same time" << std::endl;
+            return 1;
+        }
+
 
         std::vector<std::vector<OrthologPair2>> alignmentMatchsMap;
 
@@ -316,12 +388,10 @@ int genomeAlignment( int argc, char** argv, std::map<std::string, std::string>& 
             ofile << "#block end" << std::endl;
         }
         ofile.close();
-//        std::cout << "-D:" << inputParser.getCmdOption("-D") << std::endl;
-//        std::cout << "-E:" << inputParser.getCmdOption("-E") << std::endl;
-//        std::cout << "-O:" << inputParser.getCmdOption("-O") << std::endl;
-//        std::cout << "-d:" << inputParser.getCmdOption("-d") << std::endl;
-//        std::cout << "-totalAnchors:" << totalAnchors << std::endl;
-        genomeAlignment(alignmentMatchsMap, referenceGenomeSequence,  targetGenomeSequence, windownWidth, outPutFilePath, outPutAlignmentForEachInterval);
+
+
+        genomeAlignment(alignmentMatchsMap, referenceGenomeSequence,  targetGenomeSequence, windownWidth, outPutFilePath, outPutAlignmentForEachInterval,localAlignment,
+                        matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, seed_window_size, mini_cns_score, step_size, matrix_boundary_distance, scoreThreshold, w, xDrop);
         return 0;
     }else{
         std::cerr << usage.str();

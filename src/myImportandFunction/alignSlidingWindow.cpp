@@ -10,7 +10,8 @@
 
 
 int64_t alignSlidingWindow( const std::string& dna_q, const std::string& dna_d,
-                         std::string & _alignment_q, std::string & _alignment_d, const int & slidingWindowSize ){
+                         std::string & _alignment_q, std::string & _alignment_d, const int & slidingWindowSize, const int32_t & matchingScore, const  int32_t & mismatchingPenalty, const  int32_t & openGapPenalty1,
+                            const int32_t & extendGapPenalty1 ){
     int64_t totalScore = 0;
 
     _alignment_q = "";
@@ -32,9 +33,9 @@ int64_t alignSlidingWindow( const std::string& dna_q, const std::string& dna_d,
     // Set penalties
     affine_penalties_t affine_penalties = {
             .match = 0,
-            .mismatch = 5,
-            .gap_opening = 6,
-            .gap_extension = 4,
+            .mismatch = -mismatchingPenalty-matchingScore,
+            .gap_opening = -openGapPenalty1-matchingScore,
+            .gap_extension = -extendGapPenalty1-matchingScore,
     };
     mm_allocator_t* const mm_allocator = mm_allocator_new(BUFFER_SIZE_32M);
     try {

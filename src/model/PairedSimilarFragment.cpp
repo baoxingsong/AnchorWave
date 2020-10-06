@@ -12,8 +12,8 @@ PairedSimilarFragment::PairedSimilarFragment(){
 }
 
 PairedSimilarFragment::PairedSimilarFragment(uint32_t start1, uint32_t end1, uint32_t start2, uint32_t end2,
-        uint32_t score, const std::vector<uint32_t> &cigar, double & pValue, double & eValue): start1(start1),
-    end1(end1), start2(start2), end2(end2), score(score), cigar(cigar), pValue(pValue), eValue(eValue){
+        uint32_t score, const std::vector<uint32_t> &cigar): start1(start1),
+    end1(end1), start2(start2), end2(end2), score(score), cigar(cigar){
 
 }
 
@@ -55,21 +55,6 @@ const std::vector<uint32_t> &PairedSimilarFragment::getCigar() const {
 }
 void PairedSimilarFragment::setCigar(const std::vector<uint32_t> &cigar) {
     PairedSimilarFragment::cigar = cigar;
-}
-double PairedSimilarFragment::getPValue() const {
-    return pValue;
-}
-
-void PairedSimilarFragment::setPValue(double pValue) {
-    PairedSimilarFragment::pValue = pValue;
-}
-
-double PairedSimilarFragment::getEValue() const {
-    return eValue;
-}
-
-void PairedSimilarFragment::setEValue(double eValue) {
-    PairedSimilarFragment::eValue = eValue;
 }
 
 const std::string &PairedSimilarFragment::getAlignment1() const {

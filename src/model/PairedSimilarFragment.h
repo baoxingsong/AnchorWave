@@ -19,8 +19,6 @@ class PairedSimilarFragment {
         uint32_t end2;
         uint32_t score;
         std::vector<uint32_t>cigar;
-        double pValue;
-        double eValue;
         std::string alignment1;
         std::string alignment2;
 public:
@@ -31,15 +29,8 @@ public:
 
         PairedSimilarFragment();
         PairedSimilarFragment(uint32_t start1, uint32_t end1, uint32_t start2, uint32_t end2, uint32_t score,
-                          const std::vector<uint32_t> &cigar, double & pValue, double & eValue);
+                          const std::vector<uint32_t> &cigar);
 
-        double getPValue() const;
-
-        void setPValue(double pValue);
-
-        double getEValue() const;
-
-        void setEValue(double eValue);
 
         uint32_t getStart1() const;
 

@@ -201,54 +201,13 @@ void getSeeds( int8_t * seq1, int8_t * seq2, int8_t * seq1_rev_com, int8_t * seq
 }
 
 
-// using x-drop algorithm to extend the seeds alignment
-void x_extend_seed(int32_t & start1, int32_t & end1, int32_t & start2, int32_t & end2,
-                   int32_t & maxScore, int8_t * seq1, int8_t * seq1_rev_com,
-                   int8_t * seq2, int8_t * seq2_rev_com,
-                   const double & length1d, const double & length2d,const int32_t & length1,
-                   const int32_t & length2,const int32_t & _open_gap_penalty1, const int32_t & _extend_gap_penalty1,
-                   const int32_t & xdrop, const int32_t & w,
-                   const double & kValue, const double & lambda, double & eValue, double & pvalue, const Scorei & m ){
-
-    int32_t endPosition1;
-    int32_t endPosition2;
-    int32_t endPosition1_rc;
-    int32_t endPosition2_rc;
-    int32_t s1 = start1;
-    int32_t s2 = start2;
-    // TODO this SemiGlobal_xextend implementation could be faster
-    SemiGlobal_xextend(seq1+start1, seq2+start2, length1-start1, length2-start2, _open_gap_penalty1, _extend_gap_penalty1,
-    maxScore, endPosition1, endPosition2, m, xdrop, w);
-    if( endPosition1<0 || endPosition2 <0 ){
-        pvalue = 100;
-        return;
-    }
-
-    SemiGlobal_xextend(seq1_rev_com + (length1 - 1 - (start1+endPosition1)),
-                  seq2_rev_com + (length2 - 1 - (start2 + endPosition2)),
-                  start1+1 + endPosition1, start2+1+endPosition2, _open_gap_penalty1, _extend_gap_penalty1, maxScore,
-                  endPosition1_rc, endPosition2_rc, m,  xdrop, w);// this is the reverse alignment
-    if( endPosition1_rc<0 || endPosition2_rc <0 ){
-        pvalue = 100;
-        return;
-    }
-    end1 = s1 + endPosition1; // 0based
-    end2 = s2 + endPosition2; //0-based
-    start1 = s1+endPosition1-endPosition1_rc; //0-based coordinate
-    start2 = s2+endPosition2-endPosition2_rc; //0-based coordinate
-    eValue = kValue * length1d * length2d * exp(-1.0 * lambda * double(maxScore));
-    pvalue = 1.0 - exp(-1.0*eValue);
-}
-
-
 // same with the above one, but return cigar
 std::vector<uint32_t > x_extend_seed(int32_t & start1, int32_t & end1, int32_t & start2, int32_t & end2,
                    int32_t & maxScore, int8_t * seq1, int8_t * seq1_rev_com,
                    int8_t * seq2, int8_t * seq2_rev_com,
                    const double & length1d, const double & length2d, const int32_t & length1,
                    const int32_t & length2,const int32_t & _open_gap_penalty1, const int32_t & _extend_gap_penalty1,
-                   const int32_t & xdrop, const int32_t & w,
-                   const double & kValue, const double & lambda, double & eValue, double & pvalue, const Scorei & m, class Matrix & T){
+                   const int32_t & xdrop, const int32_t & w, const Scorei & m, class Matrix & T){
 
     int32_t endPosition1;
     int32_t endPosition2;
@@ -260,7 +219,7 @@ std::vector<uint32_t > x_extend_seed(int32_t & start1, int32_t & end1, int32_t &
                        maxScore, endPosition1, endPosition2, m, xdrop, w);
 
     if( endPosition1<0 || endPosition2 <0 ){
-        pvalue = 100;
+        maxScore = 0;
         std::vector<uint32_t > cigar;
         return cigar;
     }
@@ -270,7 +229,7 @@ std::vector<uint32_t > x_extend_seed(int32_t & start1, int32_t & end1, int32_t &
                        start1+1 + endPosition1, start2+1+endPosition2, _open_gap_penalty1, _extend_gap_penalty1, maxScore,
                        endPosition1_rc, endPosition2_rc, m,  xdrop, w, T, iii, jjj);// this is the reverse alignment
     if( endPosition1_rc<0 || endPosition2_rc <0 ){
-        pvalue = 100;
+        maxScore = 0;
         return cigar;
     }
     end1 = s1 + endPosition1; // 0based
@@ -279,8 +238,6 @@ std::vector<uint32_t > x_extend_seed(int32_t & start1, int32_t & end1, int32_t &
     start2 = s2+endPosition2-endPosition2_rc; //0-based coordinate
     end1 -= iii;
     end2 -= jjj;
-    eValue = kValue * length1d * length2d * exp(-1.0 * lambda * double(maxScore));
-    pvalue = 1.0 - exp(-1.0*eValue);
     return cigar;
 }
 
@@ -344,90 +301,6 @@ void link_seeds( std::set<Seed> & seeds ){
 }
 
 
-// using smith-waterman approach to find seeds and using x-drop to extend the seeds
-void getAllExtendSeed( int8_t * seq1, int8_t * seq1_rev_com,
-                       int8_t * seq2, int8_t * seq2_rev_com, int32_t & length1, int32_t & length2, int32_t & windowsSize,
-                       const int32_t & mini_cns_score, const int32_t & matrix_boundary_distance,
-                       const int32_t & _open_gap_penalty1, const int32_t & _extend_gap_penalty1, const int32_t & matchingScore,
-                       const int32_t & mismatchingPenalty, const Scorei & m, const int32_t & step_size,
-                       std::string & seq1_string, std::string & seq2_string, const double & pvalues,
-                       const double & lambda, const double & kValue, const int32_t & zDrop,
-                       const int32_t & w, const int32_t & xDrop,  std::vector<Seed> & x_extend_seeds ){
-
-
-    int32_t miniReferenceSize = mini_cns_score/matchingScore;
-    int32_t startPosition2 = 0;
-    int32_t this_windowsSize_return;
-    int32_t maxScore;
-
-
-    int32_t start1;
-    int32_t end1;
-    int32_t start2 ;
-    int32_t end2;
-
-    double length1d = double(length1);
-    double length2d = double(length2);
-    double eValue;
-    double pvalue;
-
-    std::set<Seed> seeds;
-
-    bool notEnd = true;
-    while( notEnd ) { // could not put == here, since the first one is startPosition2 + 0
-        getSeeds(seq1, seq2, seq1_rev_com, seq2_rev_com, length1, length2, miniReferenceSize,
-                 _open_gap_penalty1, _extend_gap_penalty1, matrix_boundary_distance,
-                 startPosition2, mini_cns_score, windowsSize,
-                 this_windowsSize_return, m, step_size, seeds);
-//        startPosition2 += (this_windowsSize_return - windowsSize  + step_size);
-        startPosition2 += step_size;
-        if( (startPosition2 + windowsSize) > length2 ){
-            getSeeds(seq1, seq2, seq1_rev_com, seq2_rev_com, length1, length2, miniReferenceSize,
-                     _open_gap_penalty1, _extend_gap_penalty1, matrix_boundary_distance,
-                     startPosition2, mini_cns_score, windowsSize,
-                     this_windowsSize_return, m, step_size, seeds);
-            notEnd = false;
-            break;
-        }
-    }
-    link_seeds( seeds );  // this function is very fast, by using less seeds, the program is significantly faster
-
-    for (Seed seed : seeds) {
-        start1 = seed.getStart1()+1;
-        end1 = seed.getEnd1()+1;
-        start2 = seed.getStart2()+1;
-        end2 = seed.getEnd2()+1;
-
-        x_extend_seed(start1, end1, start2, end2, maxScore, seq1, seq1_rev_com, seq2, seq2_rev_com,
-                      length1d, length2d, length1, length2, _open_gap_penalty1, _extend_gap_penalty1, xDrop, w,
-                      kValue, lambda, eValue, pvalue, m );
-
-//        std::cout << "line 439:" <<  start1 << " " << end1 << " " << start2 << " " << end2 << std::endl;
-        if (pvalue < pvalues ) {
-            bool never_used = true;
-            for ( int32_t i=0; i<x_extend_seeds.size(); ++i ){
-                if( x_extend_seeds[i].getStart1() == start1 && x_extend_seeds[i].getStart2() == start2 ){
-                    never_used = false;
-                    if( end1 > x_extend_seeds[i].getEnd1() && end2 > x_extend_seeds[i].getEnd2() ){
-                        x_extend_seeds[i].setEnd1(end1);
-                        x_extend_seeds[i].setEnd2(end2);
-                    }
-                }else if( x_extend_seeds[i].getEnd1() == end1 && x_extend_seeds[i].getEnd2() == end2 ){
-                    if( start1 < x_extend_seeds[i].getStart1() && start2 < x_extend_seeds[i].getStart2() ){
-                        x_extend_seeds[i].setStart1(start1);
-                        x_extend_seeds[i].setStart2(start2);
-                    }
-                    never_used = false;
-                }
-            }
-            if( never_used ){
-                Seed x_seed(start1, end1, start2, end2);
-                x_extend_seeds.push_back(x_seed);
-            }
-        }
-    }
-}
-
 // the first alignment algorithm
 // using smith-waterman approach to find seeds and using x-drop to extend the seeds, return result for output
 std::vector<PairedSimilarFragment> findSimilarFragmentsForPairedSequence ( int8_t * seq1, int8_t * seq1_rev_com,
@@ -435,8 +308,8 @@ std::vector<PairedSimilarFragment> findSimilarFragmentsForPairedSequence ( int8_
                    const int32_t & mini_cns_score, const int32_t & matrix_boundary_distance,
                    const int32_t & _open_gap_penalty1, const int32_t & _extend_gap_penalty1,const int32_t & matchingScore,
                    const int32_t & mismatchingPenalty, const Scorei & m, const int32_t & step_size,
-                   std::string & seq1_string, std::string & seq2_string, const double & pvalues,
-                   const double & lambda, const double & kValue, const int32_t & w, const int32_t & xDrop){
+                   std::string & seq1_string, std::string & seq2_string, const int32_t & scoreThreshold,
+                    const int32_t & w, const int32_t & xDrop){
     int32_t miniReferenceSize = mini_cns_score/matchingScore;
 
     std::vector<PairedSimilarFragment> pairedSimilarFragments;
@@ -454,8 +327,8 @@ std::vector<PairedSimilarFragment> findSimilarFragmentsForPairedSequence ( int8_
 
     double length1d = double(length1);
     double length2d = double(length2);
-    double eValue;
-    double pvalue;
+//    double eValue;
+//    double pvalue;
 
     std::set<Seed> seeds;
     bool notEnd = true;
@@ -481,11 +354,7 @@ std::vector<PairedSimilarFragment> findSimilarFragmentsForPairedSequence ( int8_
     std::cout << "seeds size" << seeds.size() << std::endl;
 //    std::cout << "line 461 begin to link seeds" << std::endl;
     link_seeds( seeds );  // this function is very fast, by using less seeds, the program is significantly faster
-//    std::cout << "line 463 generating seeds done" << std::endl;
 
-//    for (Seed seed : seeds) {
-//
-//    }
 
     class Matrix T (length1 + 1, length2 + 1);
     for (Seed seed : seeds) {
@@ -495,11 +364,11 @@ std::vector<PairedSimilarFragment> findSimilarFragmentsForPairedSequence ( int8_
         end2 = seed.getEnd2()+1;
         std::vector<uint32_t > cigar = x_extend_seed(start1, end1, start2, end2, maxScore, seq1, seq1_rev_com, seq2, seq2_rev_com,
                                         length1d, length2d, length1, length2, _open_gap_penalty1, _extend_gap_penalty1,
-                                                xDrop, w, kValue, lambda,  eValue,  pvalue,  m,  T);
+                                                xDrop, w, m,  T);
 
-        if (pvalue < pvalues ) {
+        if (maxScore >= scoreThreshold ) {
             bool never_used = true;
-            PairedSimilarFragment pairedSimilarFragment(start1+1, end1+1, start2+1, end2+1, maxScore, cigar, pvalue, eValue);
+            PairedSimilarFragment pairedSimilarFragment(start1+1, end1+1, start2+1, end2+1, maxScore, cigar);
             for ( int32_t i=0; i<pairedSimilarFragments.size(); ++i ){
                 if( pairedSimilarFragments[i].getStart1() == (start1+1) && pairedSimilarFragments[i].getStart2() == (start2+1) ){
                     never_used = false;
@@ -525,582 +394,3 @@ std::vector<PairedSimilarFragment> findSimilarFragmentsForPairedSequence ( int8_
 
 
 
-
-// the second algorithm, continue from the output of first result
-// using smith-waterman approach to find seeds and using x-drop to extend the seeds
-// extend the x-drop result using a 2-piece gap cost approach
-std::vector<PairedSimilarFragment> findSimilarFragmentsForPairedSequence ( int8_t * seq1, int8_t * seq1_rev_com,
-                                                                           int8_t * seq2, int8_t * seq2_rev_com, int32_t & length1, int32_t & length2, int32_t & windowsSize,
-                                                                           const int32_t & _open_gap_penalty1, const int32_t & _extend_gap_penalty1,
-                                                                           const int32_t & _open_gap_penalty2, const int32_t & _extend_gap_penalty2, const int32_t & matchingScore,
-                                                                           const int32_t & mismatchingPenalty, const Scorei & m,
-                                                                           std::string & seq1_string, std::string & seq2_string, const double & pvalues,
-                                                                           const double & lambda, const double & kValue, const int32_t & zDrop, const int32_t & bandwidth,
-                                                                           std::vector<Seed> & x_extend_seeds, class Matrix & T){
-
-    std::vector<PairedSimilarFragment> pairedSimilarFragments;
-    int32_t endPosition1;
-    int32_t endPosition2;
-    int32_t endPosition1_rc;
-    int32_t endPosition2_rc;
-
-    int32_t maxScore;
-
-    int32_t start1;
-    int32_t end1;
-    int32_t start2;
-    int32_t end2;
-    std::set<StartAlignment> startAlignments;
-    double length1d = double(length1);
-    double length2d = double(length2);
-    double eValue;
-    double pvalue;
-
-    for( Seed x_seed :  x_extend_seeds){
-
-        endPosition1 = x_seed.getEnd1();
-        endPosition2 = x_seed.getEnd2();
-
-        SemiGlobal(seq1_rev_com + (length1 - 1 - endPosition1),
-                   seq2_rev_com + (length2 - endPosition2 - 1),
-                   1 + endPosition1, endPosition2 + 1, _open_gap_penalty1, _extend_gap_penalty1, _open_gap_penalty2,
-                   _extend_gap_penalty2, maxScore, endPosition1_rc, endPosition2_rc, m, false, zDrop, bandwidth, T);// this is the reverse alignment
-//        std::cout << "line 779 " << maxScore << std::endl;
-        start1 = endPosition1 - endPosition1_rc; //0 based
-        start2 = endPosition2 - endPosition2_rc ; // 0 based
-
-        StartAlignment startAlignment(start1, start2);
-        if (startAlignments.find(startAlignment) == startAlignments.end()) {
-            startAlignments.insert(startAlignment);
-//            std::cout <<"line 786" << std::endl;
-            std::vector<uint32_t> cigar = SemiGlobal(seq1 + start1, seq2 + start2, length1 - start1,
-                                                     length2 - start2, _open_gap_penalty1, _extend_gap_penalty1,
-                                                     _open_gap_penalty2, _extend_gap_penalty2,
-                                                     maxScore, end1, end2, m, true, zDrop, bandwidth, T);
-            if( cigar.size() > 0  && end1>0 && end2>0) {
-                end1 += start1; // 0based
-                end2 += start2; // 0based
-
-                int32_t toRemove = -1;
-                bool found = false;
-                for (int32_t i = 0; i < pairedSimilarFragments.size(); ++i) {
-                    if (pairedSimilarFragments[i].getEnd1() == end1 + 1 &&
-                        pairedSimilarFragments[i].getEnd2() == end2 + 1) {
-                        found = true;
-                        if (start1 + 1 < pairedSimilarFragments[i].getStart1() &&
-                            start2 + 1 < pairedSimilarFragments[i].getStart2()) {
-                            toRemove = i;
-                        }
-                    }
-                }
-                if (!found or toRemove >= 0) {
-
-                    eValue = kValue * length1d * length2d * exp(-1.0 * lambda * double(maxScore));
-                    pvalue = 1.0 - exp(-1.0 * eValue);
-
-                    PairedSimilarFragment pairedSimilarFragment(start1 + 1, end1 + 1, start2 + 1, end2 + 1, maxScore,
-                                                                cigar,
-                                                                pvalue,
-                                                                eValue); // start1， start2, end1 and end2 are 1 based
-                    // here the ordinate put into pairedSimilarFragment is 1 based
-                    if (toRemove >= 0) {
-                        pairedSimilarFragments[toRemove] = pairedSimilarFragment;
-                    } else {
-                        pairedSimilarFragments.push_back(pairedSimilarFragment);
-                    }
-                }
-            }
-        }
-    }
-    return pairedSimilarFragments;
-}
-
-
-// the second algorithm, continue from the output of first result
-// using smith-waterman approach to find seeds and using x-drop to extend the seeds
-// extend the x-drop result using a 2-piece gap cost approach
-// maximumAlignLength is the maximum length of sequence being used for dynamic programming algorithm
-// if the input sequence is very long, we will have out of RAM problem, so here I set maximumAlignLength parameter to only align a fragment of the long sequence
-std::vector<PairedSimilarFragment> findSimilarFragmentsForPairedSequence ( int8_t * seq1, int8_t * seq1_rev_com,
-                                                                           int8_t * seq2, int8_t * seq2_rev_com, int32_t & length1, int32_t & length2, int32_t & windowsSize,
-                                                                           const int32_t & _open_gap_penalty1, const int32_t & _extend_gap_penalty1,
-                                                                           const int32_t & _open_gap_penalty2, const int32_t & _extend_gap_penalty2, const int32_t & matchingScore,
-                                                                           const int32_t & mismatchingPenalty, const Scorei & m,
-                                                                           std::string & seq1_string, std::string & seq2_string, const double & pvalues,
-                                                                           const double & lambda, const double & kValue, const int32_t & zDrop, const int32_t & bandwidth,
-                                                                           std::vector<Seed> & x_extend_seeds, class Matrix & T, int32_t & maximumAlignLength){
-
-    std::vector<PairedSimilarFragment> pairedSimilarFragments;
-    int32_t endPosition1;
-    int32_t endPosition2;
-    int32_t endPosition1_rc;
-    int32_t endPosition2_rc;
-
-    int32_t maxScore;
-
-    int32_t start1;
-    int32_t end1;
-    int32_t start2;
-    int32_t end2;
-    std::set<StartAlignment> startAlignments;
-    double length1d = double(length1);
-    double length2d = double(length2);
-    double eValue;
-    double pvalue;
-
-    for( Seed x_seed :  x_extend_seeds){
-        bool useThisSeed = true;
-        for ( PairedSimilarFragment pairedSimilarFragment : pairedSimilarFragments ){
-            if( pairedSimilarFragment.getStart1() <= x_seed.getStart1() && pairedSimilarFragment.getEnd1() >= x_seed.getEnd1() &&
-                    pairedSimilarFragment.getStart2() <= x_seed.getStart2() && pairedSimilarFragment.getEnd2() >= x_seed.getEnd2()){
-                useThisSeed = false;
-                break;
-            }
-        }
-        if ( useThisSeed ){
-            endPosition1 = x_seed.getEnd1();
-            endPosition2 = x_seed.getEnd2();
-            int32_t length11 = 1 + endPosition1 < maximumAlignLength ? 1 + endPosition1 : maximumAlignLength;
-            int32_t length12 = 1 + endPosition2 < maximumAlignLength ? 1 + endPosition2 : maximumAlignLength;
-            if( static_cast<int16_t>(*(seq1_rev_com + (length1 - 1 - endPosition1))) != static_cast<int16_t>(*(seq2_rev_com+(length2 - endPosition2 - 1))) ){
-                //todo, this is a patch, it should never run, but it ever ran. This suggests the seed x-drop extand code has small bug
-                --endPosition1;
-                --endPosition2;
-            }
-            SemiGlobal(seq1_rev_com + (length1 - 1 - endPosition1),
-                       seq2_rev_com + (length2 - endPosition2 - 1),
-                       length11, length12, _open_gap_penalty1, _extend_gap_penalty1, _open_gap_penalty2,
-                       _extend_gap_penalty2, maxScore, endPosition1_rc, endPosition2_rc, m, false, zDrop, bandwidth, T);// this is the reverse alignment
-
-//            for ( int32_t  seq_index = (length1 - 1 - endPosition1); seq_index <= (length1 - 1 - endPosition1 + 100); ++seq_index){
-//                std::cout << static_cast<int16_t>(*(seq1_rev_com+seq_index)) ;
-//            }
-//            std::cout << std::endl;
-//
-//            for ( int32_t  seq_index = (length2 - 1 - endPosition2); seq_index <= (length2 - 1 - endPosition2 + 100); ++seq_index){
-//                std::cout << static_cast<int16_t>(*(seq2_rev_com+seq_index)) ;
-//            }
-//            std::cout << std::endl;
-
-//            std::cout << "line 655 " << maxScore << " endPosition1_rc:" << endPosition1_rc << " endPosition2_rc:" << endPosition2_rc << std::endl;
-
-
-
-
-            start1 = endPosition1 - endPosition1_rc; //0 based
-            start2 = endPosition2 - endPosition2_rc ; // 0 based
-
-            StartAlignment startAlignment(start1, start2);
-            if (startAlignments.find(startAlignment) == startAlignments.end()) {
-                startAlignments.insert(startAlignment);
-    //            std::cout <<"line 638" << std::endl;
-                int32_t length21 = length1 - start1 < maximumAlignLength ? length1 - start1 : maximumAlignLength;
-                int32_t length22 = length2 - start2 < maximumAlignLength ? length2 - start2 : maximumAlignLength;
-
-                std::vector<uint32_t> cigar = SemiGlobal(seq1 + start1, seq2 + start2, length21,
-                                                         length22, _open_gap_penalty1, _extend_gap_penalty1,
-                                                         _open_gap_penalty2, _extend_gap_penalty2,
-                                                         maxScore, end1, end2, m, true, zDrop, bandwidth, T);
-    //            std::cout << "line 670 " << maxScore << std::endl;
-                if( cigar.size() > 0  && end1>0 && end2>0){
-                    end1 += start1; // 0based
-                    end2 += start2; // 0based
-
-                    int32_t toRemove = -1;
-                    bool found = false;
-                    for ( int32_t i=0; i< pairedSimilarFragments.size(); ++i) {
-                        if ( pairedSimilarFragments[i].getEnd1() == end1+1 && pairedSimilarFragments[i].getEnd2() == end2+1 ){
-                            found = true;
-                            if( start1+1 < pairedSimilarFragments[i].getStart1() && start2+1 < pairedSimilarFragments[i].getStart2() ){
-                                toRemove = i;
-                            }
-                        }
-                    }
-                    if( !found or toRemove>=0 ){
-
-                        eValue = kValue * length1d * length2d * exp(-1.0 * lambda * double(maxScore));
-                        pvalue = 1.0 - exp(-1.0*eValue);
-
-                        PairedSimilarFragment pairedSimilarFragment(start1+1, end1 + 1, start2+1, end2 + 1, maxScore, cigar,
-                                                                    pvalue, eValue); // start1， start2, end1 and end2 are 1 based
-                        // here the ordinate put into pairedSimilarFragment is 1 based
-                        if( toRemove>=0  ){
-                            pairedSimilarFragments[toRemove] = pairedSimilarFragment;
-                        }else{
-                            pairedSimilarFragments.push_back(pairedSimilarFragment);
-                        }
-                    }
-                }else{
-                    int32_t s1 = length1 - 1 - endPosition1;
-                    int32_t s2 = length2 - endPosition2 - 1;
-
-                    std::cerr << "error at findSimilarFragmentsForPairedSequence line 700 s1:" << s1 << " s2:" << s2 << " start1:" << start1 << " start2:" << start2 << " ";
-                    std::cerr << "x_seed.start1:" << x_seed.getStart1() << "x_seed.end1:" << x_seed.getEnd1() << "x_seed.start2:" << x_seed.getStart2() << "x_seed.end2:" << x_seed.getEnd1() << std::endl;
-                }
-            }
-        }
-    }
-
-    return pairedSimilarFragments;
-}
-
-
-
-// the second algorithm
-// using smith-waterman approach to find seeds and using x-drop to extend the seeds
-// extend the x-drop result using a 2-piece gap cost approach
-std::vector<PairedSimilarFragment> findSimilarFragmentsForPairedSequence ( int8_t * seq1, int8_t * seq1_rev_com,
-                int8_t * seq2, int8_t * seq2_rev_com, int32_t & length1, int32_t & length2, int32_t & windowsSize,
-                const int32_t & mini_cns_score, const int32_t & matrix_boundary_distance,
-                const int32_t & _open_gap_penalty1, const int32_t & _extend_gap_penalty1,
-                const int32_t & _open_gap_penalty2, const int32_t & _extend_gap_penalty2, const int32_t & matchingScore,
-                const int32_t & mismatchingPenalty, const Scorei & m, const int32_t & step_size,
-                std::string & seq1_string, std::string & seq2_string, const double & pvalues,
-                const double & lambda, const double & kValue, const int32_t & zDrop, const int32_t & bandwidth,
-                const int32_t & w, const int32_t & xDrop){
-
-    std::vector<Seed> x_extend_seeds;
-
-    getAllExtendSeed(seq1, seq1_rev_com, seq2, seq2_rev_com, length1, length2, windowsSize,
-                     mini_cns_score, matrix_boundary_distance, _open_gap_penalty1, _extend_gap_penalty1,
-                     matchingScore, mismatchingPenalty, m, step_size,
-                     seq1_string, seq2_string, pvalues, lambda, kValue, zDrop, w,
-                     xDrop, x_extend_seeds );
-    class Matrix T(length1+1, length2 + 1);
-    return findSimilarFragmentsForPairedSequence ( seq1, seq1_rev_com, seq2, seq2_rev_com, length1, length2, windowsSize,
-            _open_gap_penalty1, _extend_gap_penalty1, _open_gap_penalty2, _extend_gap_penalty2, matchingScore,
-            mismatchingPenalty, m, seq1_string, seq2_string, pvalues, lambda, kValue, zDrop, bandwidth, x_extend_seeds, T);
-
-}
-
-
-
-
-
-// the third algorithm
-// using smith-waterman approach to find seeds and using x-drop to extend the seeds
-// extend the x-drop result using a weighted sequence alignment approach
-
-std::vector<PairedSimilarFragment> findSimilarFragmentsForPairedSequence_wighted_1gap ( int8_t * seq1, int8_t * seq1_rev_com,
-                       int8_t * seq2, int8_t * seq2_rev_com, int32_t & length1, int32_t & length2, int32_t & windowsSize,
-                       const int32_t & mini_cns_score, const int32_t & matrix_boundary_distance,
-                       const int32_t & _open_gap_penalty1, const int32_t & _extend_gap_penalty1,  const int32_t & matchingScore, const int32_t & mismatchingPenalty,
-                       const Scorei & m, const int32_t & step_size, std::string & seq1_string, std::string & seq2_string,
-                       const double & pvalues, const double & lambda, const double & kValue, const int32_t & zDrop,
-                       const int32_t & bandwidth, int32_t & w, const int32_t & xDrop, Score & score,
-                       int16_t * weight, int16_t * weight_rev){
-
-    std::vector<PairedSimilarFragment> pairedSimilarFragments;
-    int32_t endPosition1;
-    int32_t endPosition2;
-    int32_t endPosition1_rc;
-    int32_t endPosition2_rc;
-
-    int32_t maxScore;
-
-    int32_t start1;
-    int32_t start2;
-    std::set<StartAlignment> startAlignments;
-    double length1d = double(length1);
-    double length2d = double(length2);
-    double eValue;
-    double pvalue;
-    Matrix T(length1+1, length2 + 1);
-
-    std::vector<Seed> x_extend_seeds;
-
-    getAllExtendSeed( seq1, seq1_rev_com, seq2, seq2_rev_com, length1, length2, windowsSize,
-                      mini_cns_score, matrix_boundary_distance, _open_gap_penalty1, _extend_gap_penalty1,
-                      matchingScore, mismatchingPenalty, m, step_size,
-                      seq1_string, seq2_string, pvalues, lambda, kValue, zDrop, w,
-                      xDrop, x_extend_seeds );
-
-//    std::cout << "line 970:" << x_extend_seeds.size() << std::endl;
-    for( Seed x_seed :  x_extend_seeds){
-
-        endPosition1 = x_seed.getEnd1();
-        endPosition2 = x_seed.getEnd2();
-//        std::cout << "line 975: endPosition1:" << endPosition1 << " endPosition2:" << endPosition2  << std::endl;
-        SemiGlobal_single_gap_penalty(seq1_rev_com + (length1 - 1 - endPosition1),
-                   seq2_rev_com + (length2 - endPosition2 - 1),
-                   1 + endPosition1, endPosition2 + 1,
-                   weight_rev + (length1 - 1 - endPosition1), score, maxScore,
-                   endPosition1_rc, endPosition2_rc, false, zDrop, bandwidth, T);
-//        std::cout << "line 981: maxScore:" << maxScore << " endPosition1_rc:" << endPosition1_rc << " endPosition2_rc:" << endPosition2_rc << std::endl;
-
-        start1 = endPosition1 - endPosition1_rc; //0 based
-        start2 = endPosition2 - endPosition2_rc ; // 0 based
-//        std::cout << "line 985 start1:" << start1 << " start2:" << start2 << std::endl;
-        StartAlignment startAlignment(start1, start2);
-        if (startAlignments.find(startAlignment) == startAlignments.end()) {
-
-            startAlignments.insert(startAlignment);
-
-            std::vector<uint32_t> cigar = SemiGlobal_single_gap_penalty(seq1 + start1, seq2 + start2, length1 - start1, length2 - start2,
-                                                     weight + start1, score, maxScore, endPosition1, endPosition2, true, zDrop, bandwidth, T);
-//            std::cout << "line 993 maxScore:" << maxScore << " endPosition1:" << endPosition1 << " endPosition2:" << endPosition2 << std::endl;
-
-            endPosition1 += start1; // 0based
-            endPosition2 += start2; // 0based
-
-            int32_t toRemove = -1;
-            bool found = false;
-            for ( int32_t i=0; i< pairedSimilarFragments.size(); ++i) {
-                if ( pairedSimilarFragments[i].getEnd1() == endPosition1+1 && pairedSimilarFragments[i].getEnd2() == endPosition2+1 ){
-                    found = true;
-                    if( start1+1 < pairedSimilarFragments[i].getStart1() && start2+1 < pairedSimilarFragments[i].getStart2() ){
-                        toRemove = i;
-                    }
-                }
-            }
-//            std::cout << "line 808" << std::endl;
-            if( !found or toRemove>=0 ){
-                eValue = kValue * length1d * length2d * exp(-1.0 * lambda * double(maxScore));
-                pvalue = 1.0 - exp(-1.0*eValue);
-
-                PairedSimilarFragment pairedSimilarFragment(start1+1, endPosition1 + 1, start2+1, endPosition2 + 1, maxScore, cigar,
-                                                            pvalue, eValue); // start1， start2, end1 and end2 are 1 based
-                // here the ordinate put into pairedSimilarFragment is 1 based
-                if( toRemove>=0  ){
-                    pairedSimilarFragments[toRemove] = pairedSimilarFragment;
-                }else{
-                    pairedSimilarFragments.push_back(pairedSimilarFragment);
-                }
-            }
-//            std::cout << "line 822" << std::endl;
-        }
-    }
-
-    return pairedSimilarFragments;
-}
-
-
-
-// the forth algorithm
-// using smith-waterman approach to find seeds and using x-drop to extend the seeds
-// extend the x-drop result using a weighted 2-piece gap cost sequence alignment approach
-
-std::vector<PairedSimilarFragment> findSimilarFragmentsForPairedSequence_wighted ( int8_t * seq1, int8_t * seq1_rev_com,
-                                                                                   int8_t * seq2, int8_t * seq2_rev_com, int32_t & length1, int32_t & length2, int32_t & windowsSize,
-                                                                                   const int32_t & mini_cns_score, const int32_t & matrix_boundary_distance,
-                                                                                   const int32_t & _open_gap_penalty1, const int32_t & _extend_gap_penalty1, const int32_t & matchingScore, const int32_t & mismatchingPenalty,
-                                                                                   const Scorei & m, const int32_t & step_size, std::string & seq1_string, std::string & seq2_string,
-                                                                                   const double & pvalues, const double & lambda, const double & kValue, const int32_t & zDrop,
-                                                                                   const int32_t & bandwidth, int32_t & w,  const int32_t & xDrop, Score & score,
-                                                                                   int16_t * weight, int16_t * weight_rev){
-
-    std::vector<PairedSimilarFragment> pairedSimilarFragments;
-    int32_t endPosition1;
-    int32_t endPosition2;
-    int32_t endPosition1_rc;
-    int32_t endPosition2_rc;
-
-    int32_t maxScore;
-
-    int32_t start1;
-    int32_t start2;
-    std::set<StartAlignment> startAlignments;
-    double length1d = double(length1);
-    double length2d = double(length2);
-    double eValue;
-    double pvalue;
-    Matrix T(length1+1, length2 + 1);
-
-
-    std::vector<Seed> x_extend_seeds;
-
-    getAllExtendSeed(seq1, seq1_rev_com, seq2, seq2_rev_com, reinterpret_cast<int32_t &>(length1), length2, windowsSize,
-                     mini_cns_score, matrix_boundary_distance, _open_gap_penalty1, _extend_gap_penalty1,
-                     matchingScore, mismatchingPenalty, m, step_size,
-                     seq1_string, seq2_string, pvalues, lambda, kValue, zDrop, w,
-                     xDrop, x_extend_seeds );
-    for( Seed x_seed :  x_extend_seeds){
-
-        endPosition1 = x_seed.getEnd1();
-        endPosition2 = x_seed.getEnd2();
-        SemiGlobal(seq1_rev_com + (length1 - 1 - endPosition1),
-                   seq2_rev_com + (length2 - endPosition2 - 1),
-                   1 + endPosition1, endPosition2 + 1,
-                   weight_rev + (length1 - 1 - endPosition1), score, maxScore,
-                   endPosition1_rc, endPosition2_rc, false, zDrop, bandwidth, T);
-        start1 = endPosition1 - endPosition1_rc; //0 based
-        start2 = endPosition2 - endPosition2_rc ; // 0 based
-
-        StartAlignment startAlignment(start1, start2);
-        if (startAlignments.find(startAlignment) == startAlignments.end()) {
-
-            startAlignments.insert(startAlignment);
-
-            std::vector<uint32_t> cigar = SemiGlobal(seq1 + start1, seq2 + start2, length1 - start1, length2 - start2,
-                                                     weight + start1, score, maxScore, endPosition1, endPosition2, true, zDrop, bandwidth, T);
-            if( cigar.size() > 0 && endPosition1>0 && endPosition2>0 ){
-                endPosition1 += start1; // 0based
-                endPosition2 += start2; // 0based
-                int32_t toRemove = -1;
-                bool found = false;
-                for ( int32_t i=0; i< pairedSimilarFragments.size(); ++i) {
-                    if ( pairedSimilarFragments[i].getEnd1() == endPosition1+1 && pairedSimilarFragments[i].getEnd2() == endPosition2+1 ){
-                        found = true;
-                        if( start1+1 < pairedSimilarFragments[i].getStart1() && start2+1 < pairedSimilarFragments[i].getStart2() ){
-                            toRemove = i;
-                        }
-                    }
-                }
-
-                if( !found or toRemove>=0 ){
-                    eValue = kValue * length1d * length2d * exp(-1.0 * lambda * double(maxScore));
-                    pvalue = 1.0 - exp(-1.0*eValue);
-
-                    PairedSimilarFragment pairedSimilarFragment(start1+1, endPosition1 + 1, start2+1, endPosition2 + 1, maxScore, cigar,
-                                                                pvalue, eValue); // start1， start2, end1 and end2 are 1 based
-                    // here the ordinate put into pairedSimilarFragment is 1 based
-                    if( toRemove>=0  ){
-                        pairedSimilarFragments[toRemove] = pairedSimilarFragment;
-                    }else{
-                        pairedSimilarFragments.push_back(pairedSimilarFragment);
-                    }
-                }
-            }
-        }
-    }
-    return pairedSimilarFragments;
-}
-
-
-/*
-
-
-
-// TODO
-std::vector<PairedSimilarFragment> mapCNSToGenome ( int8_t * seq1, int8_t * seq1_rev_com,
-                                                                           int8_t * seq2, int8_t * seq2_rev_com, int32_t & length1, int32_t & length2, int32_t & windowsSize,
-                                                                           const int32_t & mini_cns_score, const int32_t & matrix_boundary_distance,
-                                                                           const int32_t & _open_gap_penalty1, const int32_t & _extend_gap_penalty1,
-                                                                           const int32_t & _open_gap_penalty2, const int32_t & _extend_gap_penalty2, const int32_t & matchingScore,
-                                                                           const int32_t & mismatchingPenalty, const Scorei & m, const int32_t & step_size,
-                                                                           std::string & seq1_string, std::string & seq2_string, const double & pvalues,
-                                                                           const double & lambda, const double & kValue, const int32_t & zDrop, const int32_t & bandwidth,
-                                                                           const int32_t & w, const int32_t & xDrop){
-
-    std::vector<Seed> x_extend_seeds;
-
-    getAllExtendSeed(seq1, seq1_rev_com, seq2, seq2_rev_com, length1, length2, windowsSize,
-                     mini_cns_score, matrix_boundary_distance, _open_gap_penalty1, _extend_gap_penalty1,
-                     matchingScore, mismatchingPenalty, m, step_size,
-                     seq1_string, seq2_string, pvalues, lambda, kValue, zDrop, bandwidth, w,
-                     xDrop, x_extend_seeds );
-
-
-
-
-
-    std::vector<PairedSimilarFragment> pairedSimilarFragments;
-    int32_t endPosition1;
-    int32_t endPosition2;
-    int32_t endPosition1_rc;
-    int32_t endPosition2_rc;
-
-    int32_t maxScore;
-
-    int32_t start1;
-    int32_t end1;
-    int32_t start2;
-    int32_t end2;
-    std::set<StartAlignment> startAlignments;
-    double length1d = double(length1);
-    double length2d = double(length2);
-    double eValue;
-    double pvalue;
-
-    for( Seed x_seed :  x_extend_seeds){
-
-        endPosition1 = x_seed.getEnd1();
-        endPosition2 = x_seed.getEnd2();
-
-        SemiGlobal(seq1_rev_com + (length1 - 1 - endPosition1),
-                   seq2_rev_com + (length2 - endPosition2 - 1),
-                   1 + endPosition1, endPosition2 + 1, _open_gap_penalty1, _extend_gap_penalty1, _open_gap_penalty2,
-                   _extend_gap_penalty2, maxScore, endPosition1_rc, endPosition2_rc, m, false, zDrop, bandwidth, T);// this is the reverse alignment
-//        std::cout << "line 779 " << maxScore << std::endl;
-        start1 = endPosition1 - endPosition1_rc; //0 based
-        start2 = endPosition2 - endPosition2_rc ; // 0 based
-
-        StartAlignment startAlignment(start1, start2);
-        if (startAlignments.find(startAlignment) == startAlignments.end()) {
-            startAlignments.insert(startAlignment);
-//            std::cout <<"line 786" << std::endl;
-            std::vector<uint32_t> cigar = SemiGlobal(seq1 + start1, seq2 + start2, length1 - start1,
-                                                     length2 - start2, _open_gap_penalty1, _extend_gap_penalty1,
-                                                     _open_gap_penalty2, _extend_gap_penalty2,
-                                                     maxScore, end1, end2, m, true, zDrop, bandwidth, T);
-            if( cigar.size() > 0  && end1>0 && end2>0) {
-                end1 += start1; // 0based
-                end2 += start2; // 0based
-
-                int32_t toRemove = -1;
-                bool found = false;
-                for (int32_t i = 0; i < pairedSimilarFragments.size(); ++i) {
-                    if (pairedSimilarFragments[i].getEnd1() == end1 + 1 &&
-                        pairedSimilarFragments[i].getEnd2() == end2 + 1) {
-                        found = true;
-                        if (start1 + 1 < pairedSimilarFragments[i].getStart1() &&
-                            start2 + 1 < pairedSimilarFragments[i].getStart2()) {
-                            toRemove = i;
-                        }
-                    }
-                }
-                if (!found or toRemove >= 0) {
-
-                    eValue = kValue * length1d * length2d * exp(-1.0 * lambda * double(maxScore));
-                    pvalue = 1.0 - exp(-1.0 * eValue);
-
-                    PairedSimilarFragment pairedSimilarFragment(start1 + 1, end1 + 1, start2 + 1, end2 + 1, maxScore,
-                                                                cigar,
-                                                                pvalue,
-                                                                eValue); // start1， start2, end1 and end2 are 1 based
-                    // here the ordinate put into pairedSimilarFragment is 1 based
-                    if (toRemove >= 0) {
-                        pairedSimilarFragments[toRemove] = pairedSimilarFragment;
-                    } else {
-                        pairedSimilarFragments.push_back(pairedSimilarFragment);
-                    }
-                }
-            }
-        }
-    }
-
-
-
-
-
-    int32_t maxScore;
-    int32_t endPosition1;
-    std::cout << "mapCNSToGenome line 19, length1:" << length1 << " length2:"<< length2 << std::endl;
-    mapCnsToGenome(seq1, seq2, length1, length2, _open_gap_penalty1, _extend_gap_penalty1,
-                   _open_gap_penalty2, _extend_gap_penalty2,
-                   maxScore, endPosition1, m);
-
-    int32_t length11 = 1 + endPosition1;
-    int32_t  endPosition1_rc;
-    std::cout << "mapCNSToGenome line 23, length11:" << length11 << " length2:"<< length2 << std::endl;
-    mapCnsToGenome(seq1_rev_com+(length1 - 1 - endPosition1), seq2_rev_com, length11, length2, _open_gap_penalty1, _extend_gap_penalty1,
-                   _open_gap_penalty2, _extend_gap_penalty2,
-                   maxScore, endPosition1_rc, m);
-    std::cout << "mapCNSToGenome line 30" << std::endl;
-    int32_t start1 = endPosition1 - endPosition1_rc; //0 based
-    int32_t length21 = endPosition1_rc + 1;
-
-    std::vector<uint32_t> cigar;
-
-    std::cout << "length21:" << length21 << " length2:" << length2 << std::endl;
-//    Matrix T (length21 + 1, length2 + 1);
-//    std::vector<uint32_t> cigar = mapCnsToGenome(seq1+start1, seq2, length21, length2, _open_gap_penalty1, _extend_gap_penalty1,
-//                                                 _open_gap_penalty2, _extend_gap_penalty2,
-//                                                 maxScore, endPosition1, m, T);
-
-
-    double p=0;
-    PairedSimilarFragment pairedSimilarFragment(start1, endPosition1 + 1, 1, length2, maxScore, cigar, p, p);
-    return pairedSimilarFragment;
-}
-*/
