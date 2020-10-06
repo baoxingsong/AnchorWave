@@ -472,3 +472,56 @@ void longestPathQuotav2 (std::vector<OrthologPair2> pairedSimilarFragments, std:
         }
     }while(! done);
 }
+
+
+
+std::vector<PairedSimilarFragment> longestIncreasingSubsequenceLAGAN ( std::vector<PairedSimilarFragment> & pairedSimilarFragments){
+    // then for the seed-to-chain should check the overlap of pairedSimilarFragment
+    int32_t maxSore = pow(pairedSimilarFragments[0].getScore(), 2), bestEnd = 0;
+    int32_t DP[pairedSimilarFragments.size()];
+    int prev[pairedSimilarFragments.size()];
+    DP[0] = pow(pairedSimilarFragments[0].getScore(), 2);
+    prev[0] = -1;
+    for (int i = 1; i < pairedSimilarFragments.size(); ++i) {
+        DP[i] = pow(pairedSimilarFragments[i].getScore(), 2);
+        prev[i] = -1;
+        for (int j = i - 1; j >= 0; --j){
+            if (DP[j] + pow(pairedSimilarFragments[i].getScore(), 2) > DP[i] &&
+                pairedSimilarFragments[j].getEnd2() < pairedSimilarFragments[i].getStart2() &&
+                 pairedSimilarFragments[j].getEnd1() < pairedSimilarFragments[i].getStart1()  ){
+                DP[i] = DP[j] + pow(pairedSimilarFragments[i].getScore(), 2);
+                prev[i] = j;
+            }
+        }
+        if (DP[i] > maxSore){
+            bestEnd = i;
+            maxSore = DP[i];
+        }
+    }
+
+    std::vector<PairedSimilarFragment> sorted_pairedSimilarFragments;
+    int i=bestEnd;
+    sorted_pairedSimilarFragments.push_back(pairedSimilarFragments[i]);
+    int j = prev[i];
+    while( j>=0 ){
+        sorted_pairedSimilarFragments.push_back(pairedSimilarFragments[j]);
+        j=prev[j];
+    }
+
+    std::vector<PairedSimilarFragment> filtered_sorted_pairedSimilarFragments;
+    for( i=sorted_pairedSimilarFragments.size()-1; i>=0; --i ){
+        filtered_sorted_pairedSimilarFragments.push_back(sorted_pairedSimilarFragments[i]);
+    }
+    return filtered_sorted_pairedSimilarFragments;
+}
+std::vector<PairedSimilarFragment> syntenic ( std::vector<PairedSimilarFragment> & pairedSimilarFragments){
+    if( pairedSimilarFragments.size() == 0 ){
+        return pairedSimilarFragments;
+    }
+    std::sort(pairedSimilarFragments.begin(), pairedSimilarFragments.end(), [](PairedSimilarFragment a, PairedSimilarFragment b) {
+        return a.getStart1() < b.getStart1();
+    });
+    return longestIncreasingSubsequenceLAGAN(pairedSimilarFragments);
+}
+
+

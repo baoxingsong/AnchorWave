@@ -10,7 +10,8 @@
 #include "./readFastaFile.h"
 #include "./readGffFileWithEverything.h"
 #include "../myImportandFunction/myImportantFunction.h"
-
+#include "./SequenceCharToUInt8.h"
+#include <iomanip>
 
 void deNovoGenomeVariantCalling( std::map<std::string, std::vector<AlignmentMatch>> & alignmentMatchsMap,
                                  const std::string & refFastaFilePath, const std::string & targetFastaFilePath,

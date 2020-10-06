@@ -310,12 +310,10 @@ int genomeAlignment( int argc, char** argv, std::map<std::string, std::string>& 
                                << alignmentMatchs[rangeIndex-1].getQueryStartPos()-1 << "\t"
                                 << alignmentMatchs[rangeIndex].getStrand() << "\t" <<
                                 blockIndex << std::endl;
-
                     }
                 }
             }
             ofile << "#block end" << std::endl;
-
         }
         ofile.close();
 //        std::cout << "-D:" << inputParser.getCmdOption("-D") << std::endl;
@@ -324,7 +322,6 @@ int genomeAlignment( int argc, char** argv, std::map<std::string, std::string>& 
 //        std::cout << "-d:" << inputParser.getCmdOption("-d") << std::endl;
 //        std::cout << "-totalAnchors:" << totalAnchors << std::endl;
         genomeAlignment(alignmentMatchsMap, referenceGenomeSequence,  targetGenomeSequence, windownWidth, outPutFilePath, outPutAlignmentForEachInterval);
-
         return 0;
     }else{
         std::cerr << usage.str();

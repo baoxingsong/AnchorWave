@@ -32,9 +32,9 @@ int64_t alignSlidingWindow( const std::string& dna_q, const std::string& dna_d,
     // Set penalties
     affine_penalties_t affine_penalties = {
             .match = 0,
-            .mismatch = 4,
+            .mismatch = 5,
             .gap_opening = 6,
-            .gap_extension = 2,
+            .gap_extension = 4,
     };
     mm_allocator_t* const mm_allocator = mm_allocator_new(BUFFER_SIZE_32M);
     try {
@@ -57,65 +57,60 @@ int64_t alignSlidingWindow( const std::string& dna_q, const std::string& dna_d,
             std::string qSeq = getSubsequence(dna_q, queryStart, queryEnd);
             std::string dSeq = getSubsequence(dna_d, databaseStart, databaseEnd);
 
-            if (slidingWindowSize > 1000000) { //1Mb
-                std::cout << "the windows size is too large, it cost too much memories" << std::endl;
-                exit(1);
-            } else {
+            const char *pattern = dSeq.c_str();
+            const char *text = qSeq.c_str();
+            // Init Affine-WFA
+            affine_wavefronts_t *affine_wavefronts = affine_wavefronts_new_complete(
+                    strlen(pattern), strlen(text), &affine_penalties, NULL, mm_allocator);
+            //std::cout << "line 766" << std::endl;
+            // Align
+            affine_wavefronts_align(
+                    affine_wavefronts, pattern, strlen(pattern), text, strlen(text));
+            //std::cout << "line 770" << std::endl;
+            const int score = edit_cigar_score_gap_affine(
+                    &affine_wavefronts->edit_cigar,&affine_penalties);
+            totalScore += score;
+            edit_cigar_t *const edit_cigar = &(affine_wavefronts->edit_cigar);
+            //            std::cout << "line 762" << std::endl;
+            char *const operations = edit_cigar->operations;
 
-                const char *pattern = dSeq.c_str();
-                const char *text = qSeq.c_str();
-                // Init Affine-WFA
-                affine_wavefronts_t *affine_wavefronts = affine_wavefronts_new_complete(
-                        strlen(pattern), strlen(text), &affine_penalties, NULL, mm_allocator);
-                //std::cout << "line 766" << std::endl;
-                // Align
-                affine_wavefronts_align(
-                        affine_wavefronts, pattern, strlen(pattern), text, strlen(text));
-                //std::cout << "line 770" << std::endl;
-                const int score = edit_cigar_score_gap_affine(
-                        &affine_wavefronts->edit_cigar,&affine_penalties);
-                totalScore += score;
-                edit_cigar_t *const edit_cigar = &(affine_wavefronts->edit_cigar);
-                //            std::cout << "line 762" << std::endl;
-                char *const operations = edit_cigar->operations;
-
-                int i, pattern_pos = 0, text_pos = 0;
-                for (i = edit_cigar->begin_offset; i < edit_cigar->end_offset; ++i) {
-                    switch (operations[i]) {
-                        case 'M':
-                            _alignment_q += qSeq[text_pos];
-                            _alignment_d += dSeq[pattern_pos];
-                            ++queryStart;
-                            ++databaseStart;
-                            pattern_pos++;
-                            text_pos++;
-                            break;
-                        case 'X':
-                            _alignment_q += qSeq[text_pos];
-                            _alignment_d += dSeq[pattern_pos];
-                            ++queryStart;
-                            ++databaseStart;
-                            pattern_pos++;
-                            text_pos++;
-                            break;
-                        case 'I':
-                            _alignment_q += qSeq[text_pos];
-                            _alignment_d += '-';
-                            text_pos++;
-                            ++queryStart;
-                            break;
-                        case 'D':
-                            _alignment_q += '-';
-                            _alignment_d += dSeq[pattern_pos];
-                            pattern_pos++;
-                            ++databaseStart;
-                            break;
-                        default:
-                            break;
-                    }
+            int i, pattern_pos = 0, text_pos = 0;
+            for (i = edit_cigar->begin_offset; i < edit_cigar->end_offset; ++i) {
+                switch (operations[i]) {
+                    case 'M':
+                        _alignment_q += qSeq[text_pos];
+                        _alignment_d += dSeq[pattern_pos];
+                        ++queryStart;
+                        ++databaseStart;
+                        pattern_pos++;
+                        text_pos++;
+                        break;
+                    case 'X':
+                        _alignment_q += qSeq[text_pos];
+                        _alignment_d += dSeq[pattern_pos];
+                        ++queryStart;
+                        ++databaseStart;
+                        pattern_pos++;
+                        text_pos++;
+                        break;
+                    case 'I':
+                        _alignment_q += qSeq[text_pos];
+                        _alignment_d += '-';
+                        text_pos++;
+                        ++queryStart;
+                        break;
+                    case 'D':
+                        _alignment_q += '-';
+                        _alignment_d += dSeq[pattern_pos];
+                        pattern_pos++;
+                        ++databaseStart;
+                        break;
+                    default:
+                        break;
                 }
-                affine_wavefronts_delete(affine_wavefronts);
             }
+            affine_wavefronts_delete(affine_wavefronts);
+
         }
     } catch(std::bad_alloc& ex) {
         mm_allocator_delete(mm_allocator);

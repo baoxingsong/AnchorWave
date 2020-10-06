@@ -43,7 +43,6 @@ add_executable(proali
         src/util/nucleotideCodeSubstitutionMatrix.h
         src/util/parameters.cpp
         src/util/parameters.h
-        src/sole.h
         song.cpp
         src/model/Fasta.cpp
         src/model/Fasta.h
@@ -67,6 +66,12 @@ add_executable(proali
         src/model/FirstLastList.h
         src/model/STRAND.h
         src/model/REGION.h
+        src/model/Seed.h
+        src/model/Seed.cpp
+        src/model/PairedSimilarFragment.cpp
+        src/model/PairedSimilarFragment.h
+        src/impl/sequenceAlignment.cpp
+        src/impl/sequenceAlignment.h
         src/impl/impl.h
         src/impl/GetReverseComplementary.cpp
         src/impl/GetReverseComplementary.h
@@ -108,9 +113,14 @@ add_executable(proali
         src/impl/deNovoGenomeVariantCalling.h
         src/model/OrthologPair.cpp
         src/model/OrthologPair.h
+        src/model/Score.cpp
+        src/model/Score.h
         src/impl/geneSyntenic.cpp
+        src/impl/findSimilarFragmentsForPairedSequence.cpp
+        src/impl/findSimilarFragmentsForPairedSequence.h
         src/impl/geneSyntenic.h
-
+        src/impl/SequenceCharToUInt8.cpp
+        src/impl/SequenceCharToUInt8.h
         WFA/system/profiler_counter.c
         WFA/system/profiler_counter.h
         WFA/system/profiler_timer.c
@@ -174,6 +184,4 @@ add_executable(proali
         WFA/benchmark/benchmark_utils.c
         WFA/benchmark/benchmark_utils.h
         )
-
 target_link_libraries(proali gtest gtest_main)
-

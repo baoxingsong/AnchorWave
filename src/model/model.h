@@ -40,4 +40,7 @@ the methods under this folder does not rely on any code from other folders
 #include "AlignmentMatch.h"
 #include "OrthologPair.h"
 #include "Matrix.h"
+#include "PairedSimilarFragment.h"
+#include "Score.h"
+#include "Seed.h"
 #endif

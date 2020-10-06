@@ -6,10 +6,144 @@
 
 
 
+
+void outputLocalAlignment(const int & chrWidth, const std::string & refFileName, const std::string & queryFileName,
+                          std::vector<PairedSimilarFragment> pairedSimilarFragments0 , STRAND & strand,
+                          const int & startRef, const int & startQuery, const std::string & refChr,
+                          const std::string & queryChr, const std::string &refSeq, const std::string &querySeq, std::ofstream & ofile2,
+                          std::map <std::string, Fasta> & refSequences, std::map <std::string, Fasta> & targetSequences ){
+
+    for( int32_t i=0; i<pairedSimilarFragments0.size(); ++i ){
+        if( strand == POSITIVE ){
+
+            int32_t quePos = startQuery + pairedSimilarFragments0[i].getStart2() - 1;
+            int32_t refPos = startRef + pairedSimilarFragments0[i].getStart1() - 1;
+            int32_t refStart = pairedSimilarFragments0[i].getStart1();
+            int32_t queryStart = pairedSimilarFragments0[i].getStart2();
+
+            std::stringstream refAlign;
+            std::stringstream queryAlign;
+
+            std::vector<uint32_t> newCigar;
+            for( int32_t j=0; j<pairedSimilarFragments0[i].getCigar().size(); ++j ){
+                uint32_t cigarLength = pairedSimilarFragments0[i].getCigar()[j]>>4;
+                uint32_t cigarType = pairedSimilarFragments0[i].getCigar()[j]&0xf;
+                if (  cigarType == 0 ){
+                    refAlign <<  refSeq.substr(refStart-1, cigarLength);
+                    queryAlign <<  querySeq.substr(queryStart-1, cigarLength);
+                    refStart += cigarLength;
+                    queryStart += cigarLength;
+                }else if( cigarType == 1 ){
+                    queryAlign <<  querySeq.substr(queryStart-1, cigarLength);
+                    queryStart += cigarLength;
+                    for ( int repeatI = 0; repeatI<cigarLength; ++repeatI ) {
+                        refAlign << "-";
+                    }
+                }else if( cigarType == 2 ){
+                    refAlign <<  refSeq.substr(refStart-1, cigarLength);
+                    refStart += cigarLength;
+                    for ( int repeatI = 0; repeatI<cigarLength; ++repeatI ) {
+                        queryAlign << "-";
+                    }
+                }else{
+                    std::cout << "denovogenomevariancalling cpp line 50 is not working properly, please update the source codce" << std::endl;
+                }
+            }
+
+            ofile2 << "a\tscore=" << pairedSimilarFragments0[i].getScore() << std::endl;
+
+            std::string temp = refAlign.str();
+            temp.erase(std::remove(temp.begin(), temp.end(), '-'), temp.end());
+
+            ofile2 << "s\t" << std::left << std::setw(chrWidth) << refFileName + "." + refChr << "\t" << std::right <<  std::setw(9) << refPos-1 << "\t" << std::setw(9) << temp.size() << "\t+\t" << refSequences[refChr].getSequence().size() << "\t" << refAlign.str() << std::endl;
+
+            temp = queryAlign.str();
+            temp.erase(std::remove(temp.begin(), temp.end(), '-'), temp.end());
+            ofile2 << "s\t" << std::left << std::setw(chrWidth)  << queryFileName + "." + queryChr << "\t" << std::right <<  std::setw(9) << quePos-1 << "\t" << std::setw(9) << temp.size() << "\t+\t" << targetSequences[queryChr].getSequence().size() << "\t" <<  queryAlign.str() << std::endl;
+            ofile2 << std::endl;
+
+
+        } else {
+
+            int32_t quePos = startQuery + querySeq.size() - 1 - pairedSimilarFragments0[i].getEnd2() + 1; // this is the position on the positive strand
+            int32_t refPos = startRef + pairedSimilarFragments0[i].getStart1() - 1;
+            int32_t refStart = pairedSimilarFragments0[i].getStart1();
+            int32_t queryStart = pairedSimilarFragments0[i].getStart2();
+
+            std::stringstream refAlign;
+            std::stringstream queryAlign;
+
+            std::vector<uint32_t> newCigar;
+            for (int32_t j = 0; j < pairedSimilarFragments0[i].getCigar().size(); ++j) {
+                uint32_t cigarLength = pairedSimilarFragments0[i].getCigar()[j] >> 4;
+                uint32_t cigarType = pairedSimilarFragments0[i].getCigar()[j] & 0xf;
+                if (cigarType == 0) {
+                    refAlign << refSeq.substr(refStart - 1, cigarLength);
+                    queryAlign << querySeq.substr(queryStart - 1, cigarLength);
+                    refStart += cigarLength;
+                    queryStart += cigarLength;
+                } else if (cigarType == 1) {
+                    queryAlign << querySeq.substr(queryStart - 1, cigarLength);
+                    queryStart += cigarLength;
+                    for (int repeatI = 0; repeatI < cigarLength; ++repeatI) {
+                        refAlign << "-";
+                    }
+                } else if (cigarType == 2) {
+                    refAlign << refSeq.substr(refStart - 1, cigarLength);
+                    refStart += cigarLength;
+                    for (int repeatI = 0; repeatI < cigarLength; ++repeatI) {
+                        queryAlign << "-";
+                    }
+                } else {
+                    std::cout
+                            << "denovogenomevariancalling cpp line 50 is not working properly, please update the source codce"
+                            << std::endl;
+                }
+            }
+
+            std::string temp = refAlign.str();
+            temp.erase(std::remove(temp.begin(), temp.end(), '-'), temp.end());
+
+            ofile2 << "a\tscore=" << pairedSimilarFragments0[i].getScore() << std::endl;
+            ofile2 << "s\t" << std::left << std::setw(chrWidth) << refFileName + "." + refChr << "\t" << std::right << std::setw(9) << refPos - 1 << "\t" << std::setw(9) << temp.size() << "\t+\t" << refSequences[refChr].getSequence().size() << "\t" << refAlign.str() << std::endl;
+
+            temp = queryAlign.str();
+            temp.erase(std::remove(temp.begin(), temp.end(), '-'), temp.end());
+            ofile2 << "s\t" << std::left << std::setw(chrWidth) << queryFileName + "." + queryChr << "\t" << std::right << std::setw(9) << quePos - 1 << "\t" << std::setw(9) << temp.size() << "\t-\t" << targetSequences[queryChr].getSequence().size() << "\t" << queryAlign.str() << std::endl;
+            ofile2 << std::endl;
+        }
+    }
+}
+
+
+
 void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsMap,
                       const std::string & refFastaFilePath, const std::string & targetFastaFilePath,
                       const size_t & widownWidth, const std::string & outPutFilePath, bool & outPutAlignmentForEachInterval) {
 
+    int32_t seed_window_size = 38;
+    int32_t mini_cns_score = 40;
+    int32_t step_size = 8;
+    int32_t matrix_boundary_distance = 0;
+
+    int32_t matchingScore = 2;
+    int32_t mismatchingPenalty = -3;
+    int32_t openGapPenalty1 = -4;
+    int32_t extendGapPenalty1 = -2;
+
+    double lambda = 0.382291; // for 100kb *100kb sequence alignment, score 53-54 gives a p-value around 0.1
+    double kValue = 0.006662;
+
+    bool onlySyntenic = true;
+    double pvalues = 0.1;
+
+    int32_t w = 10;  //this is the band width for band sequence alignments
+    int32_t xDrop = 20;
+
+    Scorei m(matchingScore, mismatchingPenalty);
+
+
+    bool localAlignmentForIntergenetic = true;
 
 
 
@@ -23,6 +157,17 @@ void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsM
         ofile2 << "##maf version=1 scoring=PROALI" << std::endl;
     }
 
+    std::ofstream ofile3;
+    ofile3.open(outPutFilePath+".local.maf");
+    ofile3 << "##maf version=1 scoring=PROALI" << std::endl;
+
+
+    std::ofstream ofile4;
+    ofile4.open(outPutFilePath+".f.local.maf");
+    ofile4 << "##maf version=1 scoring=PROALI" << std::endl;
+
+
+
     std::map <std::string, Fasta> refSequences;
     readFastaFile(refFastaFilePath, refSequences);
 
@@ -31,7 +176,7 @@ void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsM
     int32_t sizei = alignmentMatchsMap.size();
 
     std::vector<std::string> elems;
-    char delim = '\\';
+    char delim = '/';
     split(refFastaFilePath, delim, elems);
     std::string refFileName = elems.back();
     split(targetFastaFilePath, delim, elems);
@@ -49,6 +194,8 @@ void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsM
         }
     }
 
+    SequenceCharToUInt8 sequenceCharToUInt8;
+
     for(int32_t i=sizei-1; i>=0; --i){
 //        int32_t sizej = alignmentMatchsMap[i].size();
         size_t startRef = alignmentMatchsMap[i][0].getRefStartPos();
@@ -61,7 +208,6 @@ void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsM
         std::string refChr = alignmentMatchsMap[i][0].getRefChr();
         std::string queryChr = alignmentMatchsMap[i][0].getQueryChr();
 //        std::cout << refChr << " align start" << std::endl;
-        int alignmentMatchIndex = 0;
         if(  POSITIVE == strand ){
             int64_t alignmentScore = 0;
             startQuery = alignmentMatchsMap[i][0].getQueryStartPos();
@@ -100,8 +246,6 @@ void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsM
                     std::string refSeq = getSubsequence( refSequences, refChr, startRef, endRef);
                     std::string querySeq = getSubsequence( targetSequences, queryChr, startQuery, endQuery);
 
-                    //                ofile << refSeq.length() << "\t" << querySeq.length() << std::endl;
-
                     std::string _alignment_q;
                     std::string _alignment_d;
                     int64_t thiScore = alignSlidingWindow( querySeq, refSeq, _alignment_q, _alignment_d, widownWidth );
@@ -122,6 +266,34 @@ void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsM
                         ofile2 << "s\t" << std::left << std::setw(chrWidth)  << queryFileName + "." + queryChr << "\t" << std::right <<  std::setw(9) << startQuery-1 << "\t" << std::setw(9) << querySeq.size() << "\t+\t" << targetSequences[queryChr].getSequence().size() << "\t" <<  _alignment_q << std::endl;
                         ofile2 << std::endl;
                     }
+                    if ( localAlignmentForIntergenetic ){
+
+                        int8_t * seq1 = sequenceCharToUInt8.seq_to_int8(refSeq);
+                        int8_t * seq1_rev_com = sequenceCharToUInt8.rev_comp(seq1, refSeq.length());
+                        int32_t length1 = refSeq.length();
+
+
+                        int8_t * seq2 = sequenceCharToUInt8.seq_to_int8(querySeq);
+                        int8_t * seq2_rev_com = sequenceCharToUInt8.rev_comp(seq2, querySeq.length());
+                        int32_t length2 = querySeq.length();
+
+                        std::vector<PairedSimilarFragment> pairedSimilarFragments0 = findSimilarFragmentsForPairedSequence(seq1, seq1_rev_com,
+                                                                                                                           seq2, seq2_rev_com, length1, length2, seed_window_size,
+                                                                                                                           mini_cns_score, matrix_boundary_distance, openGapPenalty1,
+                                                                                                                           extendGapPenalty1, matchingScore,
+                                                                                                                           mismatchingPenalty, m, step_size, refSeq, querySeq,
+                                                                                                                           pvalues, lambda, kValue, w, xDrop);
+
+                        if (onlySyntenic) {
+                            std::vector<PairedSimilarFragment> pairedSimilarFragments = syntenic(pairedSimilarFragments0);
+                            pairedSimilarFragments0 = pairedSimilarFragments;
+                        }
+
+                        outputLocalAlignment(chrWidth, refFileName, queryFileName, pairedSimilarFragments0, strand, startRef, startQuery, refChr, queryChr,refSeq, querySeq, ofile3, refSequences, targetSequences);
+                        outputLocalAlignment(chrWidth, refFileName, queryFileName, pairedSimilarFragments0, strand, startRef, startQuery, refChr, queryChr,refSeq, querySeq, ofile4, refSequences, targetSequences);
+
+                    }
+
                 }
                 {
                     startRef = orthologPair.getRefStartPos();
@@ -130,8 +302,6 @@ void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsM
                     endQuery = orthologPair.getQueryEndPos();
                     std::string refSeq = getSubsequence( refSequences, refChr, startRef, endRef);
                     std::string querySeq = getSubsequence( targetSequences, queryChr, startQuery, endQuery);
-
-//                ofile << refSeq.length() << "\t" << querySeq.length() << std::endl;
 
                     std::string _alignment_q;
                     std::string _alignment_d;
@@ -152,8 +322,40 @@ void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsM
                         ofile2 << "s\t" << std::left << std::setw(chrWidth) << refFileName + "." + refChr << "\t" << std::right <<  std::setw(9) << startRef-1 << "\t" << std::setw(9) << refSeq.size() << "\t+\t" << refSequences[refChr].getSequence().size() << "\t" << _alignment_d << std::endl;
                         ofile2 << "s\t" << std::left << std::setw(chrWidth)  << queryFileName + "." + queryChr << "\t" << std::right <<  std::setw(9) << startQuery-1 << "\t" << std::setw(9) << querySeq.size() << "\t+\t" << targetSequences[queryChr].getSequence().size() << "\t" <<  _alignment_q << std::endl;
                         ofile2 << std::endl;
-                    }
 
+
+                        ofile4 << "a\tscore=" << thiScore << std::endl;
+                        ofile4 << "s\t" << std::left << std::setw(chrWidth) << refFileName + "." + refChr << "\t" << std::right <<  std::setw(9) << startRef-1 << "\t" << std::setw(9) << refSeq.size() << "\t+\t" << refSequences[refChr].getSequence().size() << "\t" << _alignment_d << std::endl;
+                        ofile4 << "s\t" << std::left << std::setw(chrWidth)  << queryFileName + "." + queryChr << "\t" << std::right <<  std::setw(9) << startQuery-1 << "\t" << std::setw(9) << querySeq.size() << "\t+\t" << targetSequences[queryChr].getSequence().size() << "\t" <<  _alignment_q << std::endl;
+                        ofile4 << std::endl;
+                    }
+                    if ( localAlignmentForIntergenetic ){
+
+                        int8_t * seq1 = sequenceCharToUInt8.seq_to_int8(refSeq);
+                        int8_t * seq1_rev_com = sequenceCharToUInt8.rev_comp(seq1, refSeq.length());
+                        int32_t length1 = refSeq.length();
+
+
+                        int8_t * seq2 = sequenceCharToUInt8.seq_to_int8(querySeq);
+                        int8_t * seq2_rev_com = sequenceCharToUInt8.rev_comp(seq2, querySeq.length());
+                        int32_t length2 = querySeq.length();
+
+                        std::vector<PairedSimilarFragment> pairedSimilarFragments0 = findSimilarFragmentsForPairedSequence(seq1, seq1_rev_com,
+                                                                                                                           seq2, seq2_rev_com, length1, length2, seed_window_size,
+                                                                                                                           mini_cns_score, matrix_boundary_distance, openGapPenalty1,
+                                                                                                                           extendGapPenalty1, matchingScore,
+                                                                                                                           mismatchingPenalty, m, step_size, refSeq, querySeq,
+                                                                                                                           pvalues, lambda, kValue, w, xDrop);
+
+                        if (onlySyntenic) {
+                            std::vector<PairedSimilarFragment> pairedSimilarFragments = syntenic(pairedSimilarFragments0);
+                            pairedSimilarFragments0 = pairedSimilarFragments;
+                        }
+
+                        outputLocalAlignment(chrWidth, refFileName, queryFileName, pairedSimilarFragments0, strand, startRef, startQuery, refChr, queryChr,refSeq, querySeq, ofile3, refSequences, targetSequences);
+
+
+                    }
                 }
                 startRef = orthologPair.getRefEndPos()+1;
                 startQuery= orthologPair.getQueryEndPos()+1;
@@ -238,6 +440,33 @@ void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsM
                         ofile2 << "s\t" << std::left << std::setw(chrWidth)  << queryFileName + "." + queryChr << "\t" << std::right <<  std::setw(9) << startQuery-1 << "\t" << std::setw(9) << querySeq.size() << "\t-\t" << targetSequences[queryChr].getSequence().size() << "\t" <<  _alignment_q << std::endl;
                         ofile2 << std::endl;
                     }
+                    if ( localAlignmentForIntergenetic ){
+
+                        int8_t * seq1 = sequenceCharToUInt8.seq_to_int8(refSeq);
+                        int8_t * seq1_rev_com = sequenceCharToUInt8.rev_comp(seq1, refSeq.length());
+                        int32_t length1 = refSeq.length();
+
+
+                        int8_t * seq2 = sequenceCharToUInt8.seq_to_int8(querySeq);
+                        int8_t * seq2_rev_com = sequenceCharToUInt8.rev_comp(seq2, querySeq.length());
+                        int32_t length2 = querySeq.length();
+
+                        std::vector<PairedSimilarFragment> pairedSimilarFragments0 = findSimilarFragmentsForPairedSequence(seq1, seq1_rev_com,
+                                                                                                                           seq2, seq2_rev_com, length1, length2, seed_window_size,
+                                                                                                                           mini_cns_score, matrix_boundary_distance, openGapPenalty1,
+                                                                                                                           extendGapPenalty1, matchingScore,
+                                                                                                                           mismatchingPenalty, m, step_size, refSeq, querySeq,
+                                                                                                                           pvalues, lambda, kValue, w, xDrop);
+
+                        if (onlySyntenic) {
+                            std::vector<PairedSimilarFragment> pairedSimilarFragments = syntenic(pairedSimilarFragments0);
+                            pairedSimilarFragments0 = pairedSimilarFragments;
+                        }
+
+                        outputLocalAlignment(chrWidth, refFileName, queryFileName, pairedSimilarFragments0, strand, startRef, startQuery, refChr, queryChr,refSeq, querySeq, ofile3, refSequences, targetSequences);
+                        outputLocalAlignment(chrWidth, refFileName, queryFileName, pairedSimilarFragments0, strand, startRef, startQuery, refChr, queryChr,refSeq, querySeq, ofile4, refSequences, targetSequences);
+
+                    }
                 }
                 {
                     startRef = orthologPair.getRefStartPos();
@@ -266,6 +495,37 @@ void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsM
                         ofile2 << "s\t" << std::left << std::setw(chrWidth) << refFileName + "." + refChr << "\t" << std::right <<  std::setw(9) << startRef-1 << "\t" << std::setw(9) << refSeq.size() << "\t+\t" << refSequences[refChr].getSequence().size() << "\t" << _alignment_d << std::endl;
                         ofile2 << "s\t" << std::left << std::setw(chrWidth)  << queryFileName + "." + queryChr << "\t" << std::right <<  std::setw(9) << startQuery-1 << "\t" << std::setw(9) << querySeq.size() << "\t-\t" << targetSequences[queryChr].getSequence().size() << "\t" <<  _alignment_q << std::endl;
                         ofile2 << std::endl;
+
+                        ofile4 << "a\tscore=" << thiScore << std::endl;
+                        ofile4 << "s\t" << std::left << std::setw(chrWidth) << refFileName + "." + refChr << "\t" << std::right <<  std::setw(9) << startRef-1 << "\t" << std::setw(9) << refSeq.size() << "\t+\t" << refSequences[refChr].getSequence().size() << "\t" << _alignment_d << std::endl;
+                        ofile4 << "s\t" << std::left << std::setw(chrWidth)  << queryFileName + "." + queryChr << "\t" << std::right <<  std::setw(9) << startQuery-1 << "\t" << std::setw(9) << querySeq.size() << "\t-\t" << targetSequences[queryChr].getSequence().size() << "\t" <<  _alignment_q << std::endl;
+                        ofile4 << std::endl;
+
+                    }
+                    if ( localAlignmentForIntergenetic ){
+
+                        int8_t * seq1 = sequenceCharToUInt8.seq_to_int8(refSeq);
+                        int8_t * seq1_rev_com = sequenceCharToUInt8.rev_comp(seq1, refSeq.length());
+                        int32_t length1 = refSeq.length();
+
+
+                        int8_t * seq2 = sequenceCharToUInt8.seq_to_int8(querySeq);
+                        int8_t * seq2_rev_com = sequenceCharToUInt8.rev_comp(seq2, querySeq.length());
+                        int32_t length2 = querySeq.length();
+
+                        std::vector<PairedSimilarFragment> pairedSimilarFragments0 = findSimilarFragmentsForPairedSequence(seq1, seq1_rev_com,
+                                                                                                                           seq2, seq2_rev_com, length1, length2, seed_window_size,
+                                                                                                                           mini_cns_score, matrix_boundary_distance, openGapPenalty1,
+                                                                                                                           extendGapPenalty1, matchingScore,
+                                                                                                                           mismatchingPenalty, m, step_size, refSeq, querySeq,
+                                                                                                                           pvalues, lambda, kValue, w, xDrop);
+
+                        if (onlySyntenic) {
+                            std::vector<PairedSimilarFragment> pairedSimilarFragments = syntenic(pairedSimilarFragments0);
+                            pairedSimilarFragments0 = pairedSimilarFragments;
+                        }
+
+                        outputLocalAlignment(chrWidth, refFileName, queryFileName, pairedSimilarFragments0, strand, startRef, startQuery, refChr, queryChr,refSeq, querySeq, ofile3, refSequences, targetSequences);
                     }
                 }
                 startRef = orthologPair.getRefEndPos()+1;
@@ -295,6 +555,8 @@ void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsM
     if ( outPutAlignmentForEachInterval){
         ofile2.close();
     }
+    ofile3.close();
+    ofile4.close();
 }
 
 void deNovoGenomeVariantCalling( std::map<std::string, std::vector<AlignmentMatch>> & alignmentMatchsMap,
@@ -314,8 +576,6 @@ void deNovoGenomeVariantCalling( std::map<std::string, std::vector<AlignmentMatc
         outPutFraged = true;
     }
 
-
-
     std::map <std::string, Fasta> refSequences;
     readFastaFile(refFastaFilePath, refSequences);
 
@@ -327,7 +587,7 @@ void deNovoGenomeVariantCalling( std::map<std::string, std::vector<AlignmentMatc
     std::string queryFileName;
     if ( outPutMaf || outPutFraged ){
         std::vector<std::string> elems;
-        char delim = '\\';
+        char delim = '/';
         split(refFastaFilePath, delim, elems);
         refFileName = elems.back();
         split(targetFastaFilePath, delim, elems);
@@ -383,7 +643,6 @@ void deNovoGenomeVariantCalling( std::map<std::string, std::vector<AlignmentMatc
             std::string refChr = it0->second[0].getDatabaseChr();
             std::string queryChr = it0->second[0].getQueryChr();
             std::cout << refChr << " align start" << std::endl;
-    //        int alignmentMatchIndex = 0;
 
             int64_t alignmentScore = 0;
 
@@ -416,8 +675,6 @@ void deNovoGenomeVariantCalling( std::map<std::string, std::vector<AlignmentMatc
 
                     std::string refSeq = getSubsequence(refSequences, refChr, startRef, endRef);
                     std::string querySeq = getSubsequence(targetSequences, queryChr, startQuery, endQuery);
-
-    //                ofile << refSeq.length() << "\t" << querySeq.length() << std::endl;
 
                     std::string _alignment_q;
                     std::string _alignment_d;

@@ -69,46 +69,6 @@ std::string get_parameters(std::string parameter, std::map<std::string, std::str
     return parameters[parameter];
 }
 
-std::string createdTempFolder(std::map<std::string, std::string>& parameters){
-    std::string tempFolder = get_parameters("tempFolder", parameters);
-    struct stat info;
-    bool ifTempFolderCreated = false;
-    while( !ifTempFolderCreated ){
-        if( stat( &tempFolder[0], &info ) != 0 ){
-            std::string command = "mkdir " + tempFolder;
-            system(&command[0]);
-        } else if( info.st_mode & S_IFDIR ){
-            ifTempFolderCreated=true;
-        } else {
-            std::cout << "could not access temp folder: " +  tempFolder << std::endl;
-            exit(2);
-        }
-    }
-    return tempFolder;
-}
-
-std::string createdMsaPreFolder(std::map<std::string, std::string>& parameters){
-    std::string tempFolder = get_parameters("MsaPreFolder", parameters);
-    struct stat info;
-    bool ifTempFolderCreated = false;
-    while( !ifTempFolderCreated ){
-        if( stat( &tempFolder[0], &info ) != 0 ){
-            std::string command = "mkdir " + tempFolder;
-            system(&command[0]);
-        } else if( info.st_mode & S_IFDIR ){
-            ifTempFolderCreated=true;
-        } else {
-            std::cout << "could not access MsaPreFolder folder: " +  tempFolder << std::endl;
-            exit(2);
-        }
-    }
-    return tempFolder;
-}
-
-std::string generateUUID(){
-    return sole::uuid0().str();
-}
-
 std::string exec(const char* cmd) {
     std::array<char, 128> buffer;
     std::string result;
@@ -122,9 +82,6 @@ std::string exec(const char* cmd) {
     return result;
 }
 
-std::string generateUUID(std::string& prefix){
-    return prefix + "." + sole::uuid0().str();
-}
 
 std::string getexepath(char** argv) {
     std::string exeFile = std::string(argv[0]);

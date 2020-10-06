@@ -11,6 +11,7 @@
 #include "TranscriptUpdateInformation.h"
 #include "checkOrfState.h"
 #include <algorithm>
+#include <cmath>
 
 void longestPath (std::vector<AlignmentMatch> & pairedSimilarFragments, std::vector<AlignmentMatch> & sortedOrthologPairs, const bool & keepTandemDuplication);
 void myAlignmentMatchSort( std::vector<AlignmentMatch> & pairedSimilarFragments, const double & score, const double & penalty, const double & scoreThreshold, const bool & keepTandemDuplication);
@@ -23,5 +24,6 @@ void longestPathQuotav2 (std::vector<OrthologPair2> pairedSimilarFragments, std:
         double & INDEL_SCORE, double & GAP_OPEN_PENALTY,
                          double & MIN_ALIGNMENT_SCORE, const int & MAX_DIST_BETWEEN_MATCHES, int & refMaximumTimes, int & queryMaximumTimes,
                          double & calculateIndelDistance );
+std::vector<PairedSimilarFragment> syntenic ( std::vector<PairedSimilarFragment> & pairedSimilarFragments);
 
 #endif //PROALI_LONGESTPATH_H
