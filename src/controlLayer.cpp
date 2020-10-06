@@ -243,9 +243,9 @@ int genomeAlignment( int argc, char** argv, std::map<std::string, std::string>& 
           " -E1 INT     extend gap penalty (default: " << extendGapPenalty1 << ")" << std::endl <<
           " advanced options" << std::endl<<
           " -y  INT     minimum score to report a local sequence alignment (default: "<<scoreThreshold<<")" << std::endl <<
-          " -w  INT     the windows size used to run the smith-waterman algorithm to get the alignment seed (default: "<<seed_window_size<<")" << std::endl <<
+          " -sw  INT     the windows size used to run the smith-waterman algorithm to get the alignment seed (default: "<<seed_window_size<<")" << std::endl <<
           " -c  INT     minimum seeds score to trigger a local alignment extension (default: " << mini_cns_score << ")" << std::endl <<
-          " -s  INT     step size for sliding the smith-waterman seeds alignment window (default: " << step_size << ")" << std::endl <<
+          " -st  INT     step size for sliding the smith-waterman seeds alignment window (default: " << step_size << ")" << std::endl <<
           " -x  INT     x-drop for local alignment (default: " << xDrop << ")" << std::endl <<
           " -u  INT      xextend alignment band width (default: " << w << ")" << std::endl <<
           " -d  DOUBLE  calculateIndelDistance (default: " << calculateIndelDistance << ")"  << std::endl<<
@@ -315,14 +315,14 @@ int genomeAlignment( int argc, char** argv, std::map<std::string, std::string>& 
         }
 
 
-        if( inputParser.cmdOptionExists("-w") ){
-            seed_window_size = std::stoi( inputParser.getCmdOption("-w") );
+        if( inputParser.cmdOptionExists("-sw") ){
+            seed_window_size = std::stoi( inputParser.getCmdOption("-sw") );
         }
         if( inputParser.cmdOptionExists("-c") ){
             mini_cns_score = std::stoi( inputParser.getCmdOption("-c") );
         }
-        if( inputParser.cmdOptionExists("-s") ){
-            step_size = std::stoi( inputParser.getCmdOption("-s") );
+        if( inputParser.cmdOptionExists("-st") ){
+            step_size = std::stoi( inputParser.getCmdOption("-st") );
         }
         if( inputParser.cmdOptionExists("-y") ){
             scoreThreshold = std::stoi( inputParser.getCmdOption("-y") );
