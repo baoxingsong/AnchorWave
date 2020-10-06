@@ -15,7 +15,9 @@
 
 void deNovoGenomeVariantCalling( std::map<std::string, std::vector<AlignmentMatch>> & alignmentMatchsMap,
                                  const std::string & refFastaFilePath, const std::string & targetFastaFilePath,
-                                 const size_t & widownWidth, const std::string & outPutMafFile, const std::string & outPutVcfFile, const std::string & outPutFragedFile);
+                                 const size_t & widownWidth, const std::string & outPutMafFile, const std::string & outPutVcfFile,
+                                 const std::string & outPutFragedFile, const int32_t & matchingScore,
+                                 const  int32_t & mismatchingPenalty, const  int32_t & openGapPenalty1, const int32_t & extendGapPenalty1);
 
 
 void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsMap,

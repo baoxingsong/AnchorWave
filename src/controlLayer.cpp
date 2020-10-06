@@ -68,19 +68,30 @@ int getSequences( int argc, char** argv, std::map<std::string, std::string>& par
 
 int DenoveAssemblyVariantCalling( int argc, char** argv, std::map<std::string, std::string>& parameters ) {
     std::stringstream usage;
+
+    int32_t matchingScore = 2;
+    int32_t mismatchingPenalty = -3;
+    int32_t openGapPenalty1 = -4;
+    int32_t extendGapPenalty1 = -2;
+
+
     usage << "Usage: " << softwareName
           << " genoAli -i refGffFile -r refGenome  -t targetGff -s targetGenome -o output GFF/GTF file " << std::endl <<
           "Options" << std::endl <<
-          " -h        produce help message" << std::endl <<
-          " -i FILE   reference GFF/GTF file" << std::endl <<
-          " -r FILE   reference genome sequence" << std::endl <<
-          " -a FILE   sam file" << std::endl <<
-          " -s FILE   target genome sequence" << std::endl <<
-          " -o FILE   output anchors" << std::endl <<
-          " -m FILE   output file in maf format" << std::endl <<
-          " -f FILE   output sequence alignment for each block in maf format (any block with size larger than window width would be ignored)" << std::endl <<
-          " -v FILE   output variant calling in vcf format" << std::endl <<
-          " -w INT    sequence alignment window width (default: 10000)" << std::endl << std::endl;
+          " -h          produce help message" << std::endl <<
+          " -i  FILE    reference GFF/GTF file" << std::endl <<
+          " -r  FILE    reference genome sequence" << std::endl <<
+          " -a  FILE    sam file" << std::endl <<
+          " -s  FILE    target genome sequence" << std::endl <<
+          " -o  FILE    output anchors" << std::endl <<
+          " -m  FILE    output file in maf format" << std::endl <<
+          " -f  FILE    output sequence alignment for each block in maf format (any block with size larger than window width would be ignored)" << std::endl <<
+          " -v  FILE    output variant calling in vcf format" << std::endl <<
+          " -A  INT     Matching score (default: " << matchingScore << ")" << std::endl <<
+          " -B  INT     Mismatching penalty (default: " << mismatchingPenalty << ")" << std::endl <<
+          " -O1 INT     open gap penalty (default: " << openGapPenalty1 << ")" << std::endl <<
+          " -E1 INT     extend gap penalty (default: " << extendGapPenalty1 << ")" << std::endl <<
+          " -w  INT     sequence alignment window width (default: 10000)" << std::endl << std::endl;
 
     InputParser inputParser(argc, argv);
     if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help")) {
@@ -171,7 +182,8 @@ int DenoveAssemblyVariantCalling( int argc, char** argv, std::map<std::string, s
             ofile.close();
         }
 
-        deNovoGenomeVariantCalling(alignmentMatchsMap, referenceGenomeSequence,  targetGenomeSequence, widownWidth, outPutMafFile, outPutVcfFile, outPutFragedFile);
+        deNovoGenomeVariantCalling(alignmentMatchsMap, referenceGenomeSequence,  targetGenomeSequence, widownWidth, outPutMafFile, outPutVcfFile, outPutFragedFile,
+                matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1);
 
         return 0;
     }else{

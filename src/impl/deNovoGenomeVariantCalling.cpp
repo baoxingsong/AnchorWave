@@ -241,7 +241,7 @@ void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsM
 
                         std::string _alignment_q;
                         std::string _alignment_d;
-                        int64_t thiScore = alignSlidingWindow( querySeq, refSeq, _alignment_q, _alignment_d, widownWidth );
+                        int64_t thiScore = alignSlidingWindow( querySeq, refSeq, _alignment_q, _alignment_d, widownWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1  );
                         alignmentScore += thiScore;
                         refAlign<<_alignment_d;
                         queryAlign<<_alignment_q;
@@ -295,7 +295,7 @@ void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsM
                     }else{
                         std::string _alignment_q;
                         std::string _alignment_d;
-                        int64_t thiScore =alignSlidingWindow( querySeq, refSeq, _alignment_q, _alignment_d, widownWidth );
+                        int64_t thiScore =alignSlidingWindow( querySeq, refSeq, _alignment_q, _alignment_d, widownWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1  );
                         alignmentScore += thiScore;
                         refAlign<<_alignment_d;
                         queryAlign<<_alignment_q;
@@ -409,7 +409,7 @@ void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsM
 
                         std::string _alignment_q;
                         std::string _alignment_d;
-                        int64_t thiScore =alignSlidingWindow( querySeq, refSeq, _alignment_q, _alignment_d, widownWidth );
+                        int64_t thiScore =alignSlidingWindow( querySeq, refSeq, _alignment_q, _alignment_d, widownWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1  );
                         alignmentScore += thiScore;
                         refAlign<<_alignment_d;
                         queryAlign<<_alignment_q;
@@ -461,7 +461,7 @@ void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsM
                     }else{
                         std::string _alignment_q;
                         std::string _alignment_d;
-                        int64_t thiScore = alignSlidingWindow( querySeq, refSeq, _alignment_q, _alignment_d, widownWidth );
+                        int64_t thiScore = alignSlidingWindow( querySeq, refSeq, _alignment_q, _alignment_d, widownWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1 );
                         alignmentScore += thiScore;
                         refAlign<<_alignment_d;
                         queryAlign<<_alignment_q;
@@ -510,7 +510,9 @@ void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsM
 
 void deNovoGenomeVariantCalling( std::map<std::string, std::vector<AlignmentMatch>> & alignmentMatchsMap,
                                  const std::string & refFastaFilePath, const std::string & targetFastaFilePath,
-                                 const size_t & widownWidth, const std::string & outPutMafFile, const std::string & outPutVcfFile, const std::string & outPutFragedFile) {
+                                 const size_t & widownWidth, const std::string & outPutMafFile, const std::string & outPutVcfFile,
+                                 const std::string & outPutFragedFile, const int32_t & matchingScore, const  int32_t & mismatchingPenalty, const  int32_t & openGapPenalty1,
+                                 const int32_t & extendGapPenalty1) {
     bool outPutMaf = false;
     bool outPutVcf = false;
     bool outPutFraged = false;
@@ -627,7 +629,7 @@ void deNovoGenomeVariantCalling( std::map<std::string, std::vector<AlignmentMatc
 
                     std::string _alignment_q;
                     std::string _alignment_d;
-                    int64_t thiScore = alignSlidingWindow(querySeq, refSeq, _alignment_q, _alignment_d, widownWidth);
+                    int64_t thiScore = alignSlidingWindow(querySeq, refSeq, _alignment_q, _alignment_d, widownWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1 );
                     alignmentScore += thiScore;
 
                     refAlign << _alignment_d;
@@ -659,7 +661,7 @@ void deNovoGenomeVariantCalling( std::map<std::string, std::vector<AlignmentMatc
 
                     std::string _alignment_q;
                     std::string _alignment_d;
-                    int64_t thiScore = alignSlidingWindow(querySeq, refSeq, _alignment_q, _alignment_d, widownWidth);
+                    int64_t thiScore = alignSlidingWindow(querySeq, refSeq, _alignment_q, _alignment_d, widownWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1 );
                     alignmentScore += thiScore;
                     refAlign << _alignment_d;
                     queryAlign << _alignment_q;
@@ -713,7 +715,7 @@ void deNovoGenomeVariantCalling( std::map<std::string, std::vector<AlignmentMatc
                 std::string _alignment_q;
                 std::string _alignment_d;
                 //std::cout << refChr << " last line 811" << std::endl << refSeq << std::endl << querySeq << std::endl ;
-                int64_t thiScore = alignSlidingWindow(querySeq, refSeq, _alignment_q, _alignment_d, widownWidth);
+                int64_t thiScore = alignSlidingWindow(querySeq, refSeq, _alignment_q, _alignment_d, widownWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1 );
                 alignmentScore += thiScore;
                 refAlign << _alignment_d;
                 queryAlign << _alignment_q;

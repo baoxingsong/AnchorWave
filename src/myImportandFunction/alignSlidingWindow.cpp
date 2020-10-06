@@ -113,14 +113,6 @@ int64_t alignSlidingWindow( const std::string& dna_q, const std::string& dna_d,
             affine_wavefronts_delete(affine_wavefronts);
 
         }
-    } catch(std::bad_alloc& ex) {
-        mm_allocator_delete(mm_allocator);
-        alignSlidingWindow( dna_q, dna_d, _alignment_q,  _alignment_d, slidingWindowSize/2 );
-        return 0;
-    }catch (std::exception const& e){
-        mm_allocator_delete(mm_allocator);
-        alignSlidingWindow( dna_q, dna_d, _alignment_q,  _alignment_d, slidingWindowSize/2 );
-        return 0;
     }
     catch (...) {
         std::cout << "We caught an exception of an undetermined type\n";
