@@ -259,7 +259,6 @@ void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsM
                             ofile << std::endl;
                         }
                     }
-
                 }
                 {
                     startRef = orthologPair.getRefStartPos();
@@ -331,11 +330,13 @@ void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsM
             temp = queryAlign.str();
             temp.erase(std::remove(temp.begin(), temp.end(), '-'), temp.end());
             //assert(temp.compare(queryGenomerSequence)==0);
-            ofile << "a\tscore=" << alignmentScore << std::endl;
+            if( !outPutAlignmentForEachInterval && !localAlignment  ){
+                ofile << "a\tscore=" << alignmentScore << std::endl;
 
-            ofile << "s\t" << std::left << std::setw(chrWidth) << refFileName + "." + refChr << "\t" << std::right <<  std::setw(9) << alignmentMatchsMap[i][0].getRefStartPos()-1 << "\t" << std::setw(9) << refGenomerSequence.size() << "\t+\t" << refSequences[refChr].getSequence().size() << "\t" << refAlign.str() << std::endl;
-            ofile << "s\t" << std::left << std::setw(chrWidth)  << queryFileName + "." + queryChr << "\t" << std::right <<  std::setw(9) << alignmentMatchsMap[i][0].getQueryStartPos()-1 << "\t" << std::setw(9) << queryGenomerSequence.size() << "\t+\t" << targetSequences[queryChr].getSequence().size() << "\t" <<  queryAlign.str() << std::endl;
-            ofile << std::endl;
+                ofile << "s\t" << std::left << std::setw(chrWidth) << refFileName + "." + refChr << "\t" << std::right <<  std::setw(9) << alignmentMatchsMap[i][0].getRefStartPos()-1 << "\t" << std::setw(9) << refGenomerSequence.size() << "\t+\t" << refSequences[refChr].getSequence().size() << "\t" << refAlign.str() << std::endl;
+                ofile << "s\t" << std::left << std::setw(chrWidth)  << queryFileName + "." + queryChr << "\t" << std::right <<  std::setw(9) << alignmentMatchsMap[i][0].getQueryStartPos()-1 << "\t" << std::setw(9) << queryGenomerSequence.size() << "\t+\t" << targetSequences[queryChr].getSequence().size() << "\t" <<  queryAlign.str() << std::endl;
+                ofile << std::endl;
+            }
         } else {
             int64_t alignmentScore = 0;
             endQuery = alignmentMatchsMap[i][0].getQueryEndPos();

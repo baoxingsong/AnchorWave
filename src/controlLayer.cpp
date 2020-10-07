@@ -243,14 +243,14 @@ int genomeAlignment( int argc, char** argv, std::map<std::string, std::string>& 
           " -E1 INT     extend gap penalty (default: " << extendGapPenalty1 << ")" << std::endl <<
           " advanced options" << std::endl<<
           " -y  INT     minimum score to report a local sequence alignment (default: "<<scoreThreshold<<")" << std::endl <<
-          " -sw  INT     the windows size used to run the smith-waterman algorithm to get the alignment seed (default: "<<seed_window_size<<")" << std::endl <<
+          " -sw  INT    the windows size used to run the smith-waterman algorithm to get the alignment seed (default: "<<seed_window_size<<")" << std::endl <<
           " -c  INT     minimum seeds score to trigger a local alignment extension (default: " << mini_cns_score << ")" << std::endl <<
-          " -st  INT     step size for sliding the smith-waterman seeds alignment window (default: " << step_size << ")" << std::endl <<
+          " -st  INT    step size for sliding the smith-waterman seeds alignment window (default: " << step_size << ")" << std::endl <<
           " -x  INT     x-drop for local alignment (default: " << xDrop << ")" << std::endl <<
-          " -u  INT      xextend alignment band width (default: " << w << ")" << std::endl <<
+          " -u  INT     xextend alignment band width (default: " << w << ")" << std::endl <<
           " -d  DOUBLE  calculateIndelDistance (default: " << calculateIndelDistance << ")"  << std::endl<<
           " -OC DOUBLE  chain open gap penalty (default: " << GAP_OPEN_PENALTY << ")"  << std::endl<<
-          " -EC DOUBLE chain extend gap penalty (default: " << INDEL_SCORE << ")"  << std::endl<<
+          " -EC DOUBLE  chain extend gap penalty (default: " << INDEL_SCORE << ")"  << std::endl<<
           " -I  DOUBLE  minimum chain score (default: " << MIN_ALIGNMENT_SCORE << ")"  << std::endl<<
           " -D  INT     maximum gap size for chain (default: " << MAX_DIST_BETWEEN_MATCHES << ")"  << std::endl<<
           " -f          output alignment for each interval (default: " << outPutAlignmentForEachInterval << ")"  << std::endl<<

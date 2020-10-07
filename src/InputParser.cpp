@@ -59,7 +59,7 @@ void usage( ){
     std::cout << "Program " << progName << std::endl <<
     "Usage: "<<progName<<" <command> [options]"<< std::endl <<
     "Commands:"<< std::endl <<
-        "    gff2seq     get the protein/CDS/gene sequence from GFF/GTF file" << std::endl<<
-        "    genoAli     global alignment and variant calling for whole chromosome" <<  std::endl <<
-        "    proali      whole genome alignment with rearrangements" << std::endl;
+        "    gff2seq     get one CDS sequence for each gene" << std::endl<<
+        "    genoAli     whole chromosome global alignment and variant calling" <<  std::endl <<
+        "    proali      proportional genome alignment" << std::endl;
 }
