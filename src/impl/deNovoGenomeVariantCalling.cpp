@@ -1143,7 +1143,7 @@ void deNovoGenomeVariantCalling( std::map<std::string, std::vector<AlignmentMatc
                     }else{
                         int position = 1;
                         std::string ori(1, refSequences[it0->first].getSequence()[0]);
-                        std::string result = ori + sdiRecordsThisOne[0].getAlternative();
+                        std::string result = sdiRecordsThisOne[0].getAlternative() + ori;
                         ori.erase(std::remove(ori.begin(), ori.end(), '-'), ori.end());
                         result.erase(std::remove(result.begin(), result.end(), '-'), result.end());
                         Variant mapSingleRecord2(it0->first, position, ori, result);
