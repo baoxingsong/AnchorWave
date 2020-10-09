@@ -31,13 +31,22 @@ int64_t alignSlidingWindow( const std::string& dna_q, const std::string& dna_d,
 
     //mm_allocator_t* const mm_allocator = mm_allocator_new(BUFFER_SIZE_32G);
     // Set penalties
+//    affine_penalties_t affine_penalties = {
+//            .match = 0,
+//            .mismatch = -mismatchingPenalty+matchingScore,
+//            .gap_opening = -openGapPenalty1+matchingScore,
+//            .gap_extension = -extendGapPenalty1+matchingScore,
+//    };
+
     affine_penalties_t affine_penalties = {
             .match = 0,
-            .mismatch = -mismatchingPenalty-matchingScore,
-            .gap_opening = -openGapPenalty1-matchingScore,
-            .gap_extension = -extendGapPenalty1-matchingScore,
+            .mismatch = 4,
+            .gap_opening = 6,
+            .gap_extension = 2,
     };
-    mm_allocator_t* const mm_allocator = mm_allocator_new(BUFFER_SIZE_32M);
+
+
+    mm_allocator_t* const mm_allocator = mm_allocator_new(BUFFER_SIZE_64M);
     try {
         while (databaseStart < _length_of_d && queryStart < _length_of_q) {
             databaseEnd = databaseStart + slidingWindowSize;

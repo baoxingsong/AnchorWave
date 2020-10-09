@@ -75,7 +75,6 @@ std::string songStrReplaceAll( std::string& str, const std::string& pattern, con
 
 
 
-
 // orf checking related function end
 
 //translation related begin
