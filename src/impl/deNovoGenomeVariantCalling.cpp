@@ -774,7 +774,6 @@ void deNovoGenomeVariantCalling( std::map<std::string, std::vector<AlignmentMatc
                 omaffile << std::endl;
             }
 
-
             if (outPutVcf) {
                 std::cout << std::endl;
                 std::string queryAlignSeq = queryAlign.str();
@@ -1048,7 +1047,6 @@ void deNovoGenomeVariantCalling( std::map<std::string, std::vector<AlignmentMatc
 
 
 
-
 //                std::cout << "merge nearby indels begin" << std::endl;
                 // merge nearby indels begin
                 ifChanged = true;
@@ -1061,7 +1059,8 @@ void deNovoGenomeVariantCalling( std::map<std::string, std::vector<AlignmentMatc
                     for (int j = 1; j < oldSize; j++) {
                         if (sdiRecordsThisOne[j].getChanginglength() < 0 &&
                                 sdiRecordsThisOne[j].getAlternative().compare("-") == 0 &&
-                                sdiRecordsThisOne[j - 1].getPosition() == (sdiRecordsThisOne[j].getPosition()-1) ){
+                                (sdiRecordsThisOne[j - 1].getPosition() == (sdiRecordsThisOne[j].getPosition()-1) ||
+                                (sdiRecordsThisOne[j - 1].getReference()[0]!='-' && sdiRecordsThisOne[j - 1].getPosition() + sdiRecordsThisOne[j - 1].getReference().size() == sdiRecordsThisOne[j].getPosition() ) ) ){
                             int position = sdiRecordsThisOne[j - 1].getPosition();
                             std::string ori = sdiRecordsThisOne[j - 1].getReference() + sdiRecordsThisOne[j].getReference();
                             std::string result = sdiRecordsThisOne[j - 1].getAlternative() + sdiRecordsThisOne[j].getAlternative();
