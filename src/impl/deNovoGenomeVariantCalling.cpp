@@ -508,6 +508,19 @@ void genomeAlignment( std::vector<std::vector<OrthologPair2>> & alignmentMatchsM
 
 }
 
+
+
+//##ALT=<ID=U,Description="IUPAC code R = T">
+//##ALT=<ID=R,Description="IUPAC code R = A/G">
+//##ALT=<ID=Y,Description="IUPAC code M = C/T">
+//##ALT=<ID=S,Description="IUPAC code R = G/G">
+//##ALT=<ID=W,Description="IUPAC code M = A/T">
+//##ALT=<ID=K,Description="IUPAC code R = G/T">
+//##ALT=<ID=M,Description="IUPAC code M = A/C">
+//##ALT=<ID=B,Description="IUPAC code R = C/G/T">
+//##ALT=<ID=D,Description="IUPAC code M = A/G/T">
+
+
 void deNovoGenomeVariantCalling( std::map<std::string, std::vector<AlignmentMatch>> & alignmentMatchsMap,
                                  const std::string & refFastaFilePath, const std::string & targetFastaFilePath,
                                  const size_t & widownWidth, const std::string & outPutMafFile, const std::string & outPutVcfFile,
@@ -778,6 +791,32 @@ void deNovoGenomeVariantCalling( std::map<std::string, std::vector<AlignmentMatc
                 std::cout << std::endl;
                 std::string queryAlignSeq = queryAlign.str();
                 std::string refAlignSeq = refAlign.str();
+
+                std::replace(refAlignSeq.begin(), refAlignSeq.end(), 'U', 'T');
+                std::replace(refAlignSeq.begin(), refAlignSeq.end(), 'R', 'N');
+                std::replace(refAlignSeq.begin(), refAlignSeq.end(), 'Y', 'N');
+                std::replace(refAlignSeq.begin(), refAlignSeq.end(), 'S', 'N');
+                std::replace(refAlignSeq.begin(), refAlignSeq.end(), 'W', 'N');
+                std::replace(refAlignSeq.begin(), refAlignSeq.end(), 'K', 'N');
+                std::replace(refAlignSeq.begin(), refAlignSeq.end(), 'M', 'N');
+                std::replace(refAlignSeq.begin(), refAlignSeq.end(), 'B', 'N');
+                std::replace(refAlignSeq.begin(), refAlignSeq.end(), 'D', 'N');
+                std::replace(refAlignSeq.begin(), refAlignSeq.end(), 'H', 'N');
+                std::replace(refAlignSeq.begin(), refAlignSeq.end(), 'V', 'N');
+
+                std::replace(queryAlignSeq.begin(), queryAlignSeq.end(), 'U', 'T');
+                std::replace(queryAlignSeq.begin(), queryAlignSeq.end(), 'R', 'N');
+                std::replace(queryAlignSeq.begin(), queryAlignSeq.end(), 'Y', 'N');
+                std::replace(queryAlignSeq.begin(), queryAlignSeq.end(), 'S', 'N');
+                std::replace(queryAlignSeq.begin(), queryAlignSeq.end(), 'W', 'N');
+                std::replace(queryAlignSeq.begin(), queryAlignSeq.end(), 'K', 'N');
+                std::replace(queryAlignSeq.begin(), queryAlignSeq.end(), 'M', 'N');
+                std::replace(queryAlignSeq.begin(), queryAlignSeq.end(), 'B', 'N');
+                std::replace(queryAlignSeq.begin(), queryAlignSeq.end(), 'D', 'N');
+                std::replace(queryAlignSeq.begin(), queryAlignSeq.end(), 'H', 'N');
+                std::replace(queryAlignSeq.begin(), queryAlignSeq.end(), 'V', 'N');
+
+
                 FirstLastList sdiRecords;
                 int refLetterNumber = 0;
                 for (int ai = 0; ai < refAlignSeq.length(); ai++) {
@@ -1481,6 +1520,33 @@ void deNovoGenomeVariantCalling000( std::map<std::string, std::vector<AlignmentM
                 std::cout << std::endl;
                 std::string queryAlignSeq = queryAlign.str();
                 std::string refAlignSeq = refAlign.str();
+
+                std::replace(queryAlignSeq.begin(), queryAlignSeq.end(), 'U', 'T');
+                std::replace(queryAlignSeq.begin(), queryAlignSeq.end(), 'R', 'N');
+                std::replace(queryAlignSeq.begin(), queryAlignSeq.end(), 'Y', 'N');
+                std::replace(queryAlignSeq.begin(), queryAlignSeq.end(), 'S', 'N');
+                std::replace(queryAlignSeq.begin(), queryAlignSeq.end(), 'W', 'N');
+                std::replace(queryAlignSeq.begin(), queryAlignSeq.end(), 'K', 'N');
+                std::replace(queryAlignSeq.begin(), queryAlignSeq.end(), 'M', 'N');
+                std::replace(queryAlignSeq.begin(), queryAlignSeq.end(), 'B', 'N');
+                std::replace(queryAlignSeq.begin(), queryAlignSeq.end(), 'D', 'N');
+                std::replace(queryAlignSeq.begin(), queryAlignSeq.end(), 'H', 'N');
+                std::replace(queryAlignSeq.begin(), queryAlignSeq.end(), 'V', 'N');
+
+//
+//                std::replace(refAlignSeq.begin(), refAlignSeq.end(), 'U', 'T');
+//                std::replace(refAlignSeq.begin(), refAlignSeq.end(), 'R', 'N');
+//                std::replace(refAlignSeq.begin(), refAlignSeq.end(), 'Y', 'N');
+//                std::replace(refAlignSeq.begin(), refAlignSeq.end(), 'S', 'N');
+//                std::replace(refAlignSeq.begin(), refAlignSeq.end(), 'W', 'N');
+//                std::replace(refAlignSeq.begin(), refAlignSeq.end(), 'K', 'N');
+//                std::replace(refAlignSeq.begin(), refAlignSeq.end(), 'M', 'N');
+//                std::replace(refAlignSeq.begin(), refAlignSeq.end(), 'B', 'N');
+//                std::replace(refAlignSeq.begin(), refAlignSeq.end(), 'D', 'N');
+//                std::replace(refAlignSeq.begin(), refAlignSeq.end(), 'H', 'N');
+//                std::replace(refAlignSeq.begin(), refAlignSeq.end(), 'V', 'N');
+
+
                 FirstLastList sdiRecords;
                 int refLetterNumber = 0;
                 for (int ai = 0; ai < refAlignSeq.length(); ai++) {
@@ -1796,7 +1862,7 @@ void deNovoGenomeVariantCalling000( std::map<std::string, std::vector<AlignmentM
 
                 for (std::vector<Variant>::iterator itVariant = sdiRecordsThisOne.begin();
                      itVariant != sdiRecordsThisOne.end(); ++itVariant) {
-                    ovcffile << itVariant->getChromosome() << "\t" << itVariant->getPosition() << "\t" << itVariant->getChromosome() << "_" << itVariant->getPosition() <<"\t"+
+                    ovcffile << itVariant->getChromosome() << "\t" << itVariant->getPosition() << "\t" << itVariant->getChromosome() << "_" << itVariant->getPosition()<< "_" << itVariant->getReference() <<"\t"+
                                                                                                                                                                           itVariant->getReference() << "\t" << itVariant->getAlternative() << "\t50\tPASS" << std::endl;
                 }
             }

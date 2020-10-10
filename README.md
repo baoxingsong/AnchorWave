@@ -1,7 +1,7 @@
 # progli &middot; [![license][license-badge]][license]
 
-Using the alignment of conversed sequence (currently, only CDS being used), progli try to detect conserved collinear blocks between two genomes. Within each collinear block, progli use conserved sequence as anchors and cut long sequence into short fragments and perform global sequence alignment for each block.
-If the block length is longer than a preset window size, the output alignment maybe problematic. While a large window size would cost more memories.
+Using the alignment of conversed sequence (currently, only CDS being used), progli try to detect conserved collinear blocks between two genomes. Within each collinear block, progli use conserved sequence as anchors and cut long sequence into short fragments and perform sequence alignment for each block.
+
 
 
 
@@ -20,21 +20,34 @@ make
 this command will generate an executable file named proali
 
 ### proportional genome alignment 
-data: maize B73 genome sequence and GFF3 annotation file from http://plants.ensembl.org/Zea_mays/Info/Index
-and sorghum genome sequence from https://plants.ensembl.org/Sorghum_bicolor/Info/Index
 
-extract CDS of reference specie and map the to the query genome using minimap2 
+This module use conserved sequence as anchors to identify collinear blocks between two genomes.\
+When comparing two genomes undergone genome duplications (plant genomes in particular), there maybe copy number variations. This program implemented algorithm to identify collinear blocks with proportional coverage. \
+And this implementation perform base pair resolution genome alignment for each collinear block. \
+The output could be end-to-end sequence alignment for each collinear block in maf format. \
+Or alignment for each anchor region and inter anchor region with length shorter than the sequence alignment window width parameter. \
+\
+data: maize B73 genome sequence and GFF3 annotation file from http://plants.ensembl.org/Zea_mays/Info/Index \
+and sorghum genome sequence from https://plants.ensembl.org/Sorghum_bicolor/Info/Index \
+\
+extract CDS of reference specie and map the to the query genome using minimap2 \
 ```
 proali gff2seq -i Zea_mays.AGPv4.34.gff3 -r Zea_mays.AGPv4.dna.toplevel.fa  -o cds.fa
 minimap2 -ax splice -t 90 -a -uf -p 0.4 -C5 Sorghum_bicolor.Sorghum_bicolor_NCBIv3.dna.toplevel.fa ../primary_cds.fasta >cds.sam
 ```
 
+### 
 ```
 proali proali -i Zea_mays.AGPv4.34.gff3 -r Zea_mays.AGPv4.dna.toplevel.fa -a cds.sam -s Sorghum_bicolor.Sorghum_bicolor_NCBIv3.dna.toplevel.fa -w 20000 -R 1 -Q 2 -O 0 -D 32 -o alignment -f
 ```
 
 ### Variant calling for different accessions
-data: Arabidopsis thaliana Col-o reference genome and GFF3 annotation file from https://www.arabidopsis.org/
+This module perform base pair resolution genome alignment for two genomes. A query chromosome sequence would be aligned against the reference chromosome with the same name end-to-end. \
+The output could be end-to-end sequence alignment for the whole chromosome in maf format. \
+Or alignment for each anchor region and inter anchor region with length shorter than the sequence alignment window width. \
+A variant calling result in vcf format also would be created which is derived from end-to-end alignment. \
+\
+data: Arabidopsis thaliana Col-o reference genome and GFF3 annotation file from https://www.arabidopsis.org/\
 Arabidopsis thaliana Ler-0 accession assembly from http://www.pnas.org/content/113/28/E4052
  
 ```
@@ -50,6 +63,8 @@ perform alignmetn and variant calling
 ```
 proali genoAli -i TAIR10_GFF3_genes_no_UM.gff -r tair10.fa -a cds.sam -s ler.fa  -f fragmentedAlignment.maf -v variant.vcf -m alignment -o anchorBlocks.tsv
 ```
+please note: Under the global alignment model, if the block length is longer than a preset window size, the output alignment maybe problematic. While a large window size would cost more memories.
+For the `genoAli` function, global alignment would always be conducted. 
 
 ### Contact
 Bug report? Any question? Any suggestion? Any requirement? Want to cooperate?\
