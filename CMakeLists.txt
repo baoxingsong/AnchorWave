@@ -43,7 +43,7 @@ add_executable(proali
         src/util/nucleotideCodeSubstitutionMatrix.h
         src/util/parameters.cpp
         src/util/parameters.h
-        song.cpp
+        main.cpp
         src/model/Fasta.cpp
         src/model/Fasta.h
         src/model/variant.cpp
@@ -54,18 +54,9 @@ add_executable(proali
         src/model/Gene.h
         src/model/Matrix.cpp
         src/model/Matrix.h
-        src/model/MsaWindow.cpp
-        src/model/MsaWindow.h
-        src/model/MsaSingleRecord.cpp
-        src/model/MsaSingleRecord.h
-        src/model/MsaFileRecord.cpp
-        src/model/MsaFileRecord.h
-        src/model/TwoSeqOfMsaResult.cpp
-        src/model/TwoSeqOfMsaResult.h
         src/model/FirstLastList.cpp
         src/model/FirstLastList.h
         src/model/STRAND.h
-        src/model/REGION.h
         src/model/Seed.h
         src/model/Seed.cpp
         src/model/PairedSimilarFragment.cpp
@@ -80,25 +71,17 @@ add_executable(proali
         src/impl/checkOrfState.cpp
         src/impl/checkOrfState.h
         src/util/util.h
-        src/impl/nA2AA.cpp
-        src/impl/nA2AA.h
         src/impl/getSubsequence.cpp
         src/impl/getSubsequence.h
         src/impl/readGffFile.cpp
         src/impl/readGffFile.h
-        src/impl/coordinateLiftOver.cpp
-        src/impl/coordinateLiftOver.h
         src/impl/getSequencesFromGff.cpp
         src/impl/getSequencesFromGff.h
         src/service/service.h
         src/myImportandFunction/myImportantFunction.h
         src/impl/TranscriptUpdateInformation.cpp
         src/impl/TranscriptUpdateInformation.h
-        src/impl/FileWriteCatch.cpp
-        src/impl/FileWriteCatch.h
         src/tests/util/nucleotideCodeSubstitutionMatrix_test.cpp
-        src/model/Range.cpp src/model/Range.h src/model/AlignmentMatch.cpp
-        src/model/AlignmentMatch.h
         src/service/TransferGffWithNucmerResult.cpp
         src/service/TransferGffWithNucmerResult.h
         src/myImportandFunction/alignSlidingWindow.cpp
@@ -111,8 +94,8 @@ add_executable(proali
         src/tests/impl/readFastaFile_test.cpp
         src/impl/deNovoGenomeVariantCalling.cpp
         src/impl/deNovoGenomeVariantCalling.h
-        src/model/OrthologPair.cpp
-        src/model/OrthologPair.h
+        src/model/AlignmentMatch.cpp
+        src/model/AlignmentMatch.h
         src/model/Score.cpp
         src/model/Score.h
         src/impl/geneSyntenic.cpp

@@ -33,8 +33,8 @@
 #include "./impl/impl.h"
 #include "./myImportandFunction/myImportantFunction.h"
 
-int getSequences(int argc, char** argv, std::map<std::string, std::string>& parameters);
+int gff2seq(int argc, char** argv, std::map<std::string, std::string>& parameters);
 
-int DenoveAssemblyVariantCalling( int argc, char** argv, std::map<std::string, std::string>& parameters );
-int genomeAlignment( int argc, char** argv, std::map<std::string, std::string>& parameters );
+int genomeAlignment(int argc, char** argv, std::map<std::string, std::string>& parameters );
+int proportationalAlignment(int argc, char** argv, std::map<std::string, std::string>& parameters );
 #endif

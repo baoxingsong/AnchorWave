@@ -23,12 +23,9 @@ the methods under this folder only rely on code under model and util
 
 #include "../model/model.h"
 #include "checkOrfState.h"
-#include "coordinateLiftOver.h"
-#include "FileWriteCatch.h"
 #include "GetReverseComplementary.h"
 #include "getSequencesFromGff.h"
 #include "getSubsequence.h"
-#include "nA2AA.h"
 #include "readFastaFile.h"
 #include "readGffFile.h"
 #include "TranscriptUpdateInformation.h"

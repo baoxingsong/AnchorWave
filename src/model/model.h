@@ -24,23 +24,16 @@ the methods under this folder does not rely on any code from other folders
 #ifndef _MODEL_H
 #define _MODEL_H
 
-#include "GenomeBasicFeature.h"
 #include "Fasta.h"
 #include "FirstLastList.h"
 #include "Gene.h"
-#include "MsaFileRecord.h"
-#include "MsaSingleRecord.h"
-#include "MsaWindow.h"
-#include "REGION.h"
 #include "STRAND.h"
 #include "Transcript.h"
-#include "TwoSeqOfMsaResult.h"
 #include "variant.h"
-#include "Range.h"
 #include "AlignmentMatch.h"
-#include "OrthologPair.h"
 #include "Matrix.h"
 #include "PairedSimilarFragment.h"
 #include "Score.h"
 #include "Seed.h"
+#include <regex>
 #endif

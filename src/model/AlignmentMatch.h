@@ -1,92 +1,100 @@
 //
-// Created by song on 8/4/18.
+// Created by Baoxing Song on 2019-03-13.
 //
-//
-// the strand of database is always POSITIVE
-//
-//
-#ifndef ANNOTATIONLIFTOVER_ALIGNMENTMATCH_H
-#define ANNOTATIONLIFTOVER_ALIGNMENTMATCH_H
 
-#include "./Range.h"
+#ifndef PROALI_OrthologPair_H
+#define PROALI_OrthologPair_H
+
+#include <string>
+#include "STRAND.h"
+
+
 class AlignmentMatch {
 private:
-    Range query;
-    Range database;
-    size_t windowSize=0;
+    std::string refChr;
+    std::string queryChr;
+    uint32_t refStartPos; // start reference coordinate
+    uint32_t refEndPos; // end reference coordinate
+    uint32_t queryStartPos; // start position of assembly/query
+    uint32_t queryEndPos; // end position of assembly/query
+    double score; // alignment score using as graph edge
+    STRAND strand; // positive means same strand and positive means different strand
+    int refId;
+    int queryId;
+    std::string referenceGeneName;
+    std::string queryGeneName;
 public:
-    size_t getWindowSize() const;
-
-    void setWindowSize(size_t windowSize);
-
-    AlignmentMatch(const std::string & queryChr, const size_t & queryStart, const size_t & queryEnd, const STRAND & queryStrand,
-            const std::string & databaseChr, const size_t & databaseStart, const size_t & databaseEnd/*, const STRAND & databaseStrand*/ );
-    AlignmentMatch(const std::string & queryChr, const size_t & queryStart, const size_t & queryEnd, const STRAND & queryStrand,
-                   const std::string & databaseChr, const size_t & databaseStart, const size_t & databaseEnd, const size_t & _windowSize);
     AlignmentMatch();
-    AlignmentMatch( const AlignmentMatch & alignmentMatch);
-    const Range &getQuery() const;
-    void setQuery(const Range &query);
-    const Range &getDatabase() const;
-    void setDatabase(const Range &database);
+    AlignmentMatch(const AlignmentMatch & alignmentMatch );
+    AlignmentMatch(const std::string &refChr, const std::string &queryChr, const uint32_t & refStartPos, const uint32_t & refEndPos,
+                   const uint32_t & queryStartPos, const uint32_t & queryEndPos, const double & score,
+                   const STRAND & strand, const int & refId, const int & queryId, const std::string & referenceGeneName,
+                   const std::string & queryGeneName);
+    AlignmentMatch(const std::string &refChr, const std::string &queryChr, const uint32_t & refStartPos, const uint32_t & refEndPos,
+                   const uint32_t & queryStartPos, const uint32_t & queryEndPos, const double & score,
+                   const STRAND & strand, const std::string & referenceGeneName,
+                   const std::string & queryGeneName);
+    AlignmentMatch(const uint32_t & refStartPos, const uint32_t & refEndPos,
+                   const uint32_t & queryStartPos, const uint32_t & queryEndPos, const double & score,
+                   const STRAND & strand) ;
+    const std::string &getRefChr() const;
+    void setRefChr(const std::string &refChr);
+    const std::string &getQueryChr() const;
+    void setQueryChr(const std::string &queryChr);
 
-    const std::string & getQueryChr();
-    void setQueryChr(const std::string & queryChr);
-    const size_t & getQueryStart() const;
-    void setQueryStart(const size_t & queryStart);
-    const size_t & getQueryEnd() const;
-    void setQueryEnd( const size_t & queryEnd );
-    const STRAND & getQueryStrand() const;
-    void setQueryStrand(const STRAND & queryStrand);
-    const std::string & getDatabaseChr() const;
-    void setDatabaseChr(const std::string & databaseChr);
-    const size_t & getDatabaseStart() const;
-    void setDatabaseStart(const size_t & databaseStart);
-    const size_t & getDatabaseEnd() const;
-    void setDatabaseEnd(const size_t & databaseEnd);
-    const size_t & getRefLength() const;
-    const int & getQueryIndex() const;
-    void setQueryIndex( const int & index  ) ;
-    const int & getDatabaseIndex() const;
-    void setDatabaseIndex( const int & index );
+    uint32_t getRefStartPos() const;
+    void setRefStartPos(uint32_t refStartPos);
+    uint32_t getRefEndPos() const;
+    void setRefEndPos(uint32_t refEndPos);
+    uint32_t getQueryStartPos() const;
+    void setQueryStartPos(uint32_t queryStartPos);
+    uint32_t getQueryEndPos() const;
+    void setQueryEndPos(uint32_t queryEndPos);\
+    double getScore() const;
+    void setScore(double score);
+    STRAND getStrand() const;
+    void setStrand(STRAND &strand);
+    int getRefId() const;
+    void setRefId(int refId);
+    int getQueryId() const;
+    void setQueryId(int queryId);
 
-    const std::string &getDatabaseName() const;
-    void setDatabaseName(const std::string &name);
-    const std::string & getQueryName() const;
-    void setQueryName(const std::string &name);
-    /*
-    const STRAND & getDatabaseStrand() const;
-    void setDatabaseStrand(const STRAND & strand);*/
+    const std::string &getReferenceGeneName() const;
 
+    void setReferenceGeneName(const std::string &referenceGeneName);
 
-    bool operator<( const AlignmentMatch& alignmentMatch ) const{
-        if( database.getStart() < alignmentMatch.getDatabaseStart()){
-            return true;
-        }else if(database.getStart() == alignmentMatch.getDatabaseStart() && query.getStart()<alignmentMatch.getQueryStart() ){
-            return true;
-        }
-        return false;
-    }
-    bool operator>(const AlignmentMatch& alignmentMatch )const {
-        if( database.getStart() > alignmentMatch.getDatabaseStart()){
-            return true;
-        }else if(database.getStart() == alignmentMatch.getDatabaseStart() && query.getStart()>alignmentMatch.getQueryStart() ){
-            return true;
-        }
-        return false;
-    }
-    bool operator==(const AlignmentMatch& alignmentMatch ) const{
-        if( database.getStart() == alignmentMatch.getDatabaseStart() &&  query.getStart() == alignmentMatch.getQueryStart()){
-            return true;
-        }
-        return false;
-    }
-    bool operator!=(const AlignmentMatch& alignmentMatch ) const{
-        if( database.getStart() == alignmentMatch.getDatabaseStart()  &&  query.getStart() == alignmentMatch.getQueryStart() ){
+    const std::string &getQueryGeneName() const;
+
+    void setQueryGeneName(const std::string &queryGeneName);
+
+    bool operator<( const AlignmentMatch& OrthologPair2 ) const{
+            if( refStartPos < OrthologPair2.refStartPos){
+                    return true;
+            }else if(refStartPos == OrthologPair2.refStartPos && queryStartPos<OrthologPair2.queryStartPos ){
+                    return true;
+            }
             return false;
+    }
+    bool operator>(const AlignmentMatch& OrthologPair2 )const {
+        if( refStartPos > OrthologPair2.refStartPos){
+            return true;
+        }else if(refStartPos == OrthologPair2.refStartPos && queryStartPos>OrthologPair2.queryStartPos ){
+            return true;
+        }
+        return false;
+    }
+    bool operator==(const AlignmentMatch& OrthologPair2 ) const{
+        if( refStartPos == OrthologPair2.refStartPos && queryStartPos==OrthologPair2.queryStartPos ){
+                return true;
+        }
+        return false;
+    }
+    bool operator!=(const AlignmentMatch& OrthologPair2 ) const{
+        if( refStartPos == OrthologPair2.refStartPos && queryStartPos==OrthologPair2.queryStartPos ){
+                return false;
         }
         return true;
     }
 };
 
-#endif //ANNOTATIONLIFTOVER_ALIGNMENTMATCH_H
+#endif //PROALI_OrthologPair_H

@@ -13,15 +13,16 @@
 #include <algorithm>
 #include <cmath>
 
-void longestPath (std::vector<AlignmentMatch> & pairedSimilarFragments, std::vector<AlignmentMatch> & sortedOrthologPairs, const bool & keepTandemDuplication);
-void myAlignmentMatchSort( std::vector<AlignmentMatch> & pairedSimilarFragments, const double & score, const double & penalty, const double & scoreThreshold, const bool & keepTandemDuplication);
+void longestPath (std::vector<AlignmentMatch> & pairedSimilarFragments, std::vector<AlignmentMatch> & sortedOrthologPairs, const bool & keepTandemDuplication, double & scoreThreshold);
+
+void myAlignmentMatchSort(std::vector<AlignmentMatch> & pairedSimilarFragments,  const double & penalty, const double & scoreThreshold, const bool & keepTandemDuplication, const bool & considerInversion);
 
 
-void myOrthologPairsSortQueryQuota( std::vector<OrthologPair2> & pairedSimilarFragments);
-void myOrthologPairsSortQuota( std::vector<OrthologPair2> & pairedSimilarFragments);
+void myOrthologPairsSortQueryQuota( std::vector<AlignmentMatch> & pairedSimilarFragments);
+void myOrthologPairsSortQuota( std::vector<AlignmentMatch> & pairedSimilarFragments);
 
-void longestPathQuotav2 (std::vector<OrthologPair2> pairedSimilarFragments, std::vector<std::vector<OrthologPair2>> & sortedOrthologPairChains,
-        double & INDEL_SCORE, double & GAP_OPEN_PENALTY,
+void longestPathQuotav2 (std::vector<AlignmentMatch> pairedSimilarFragments, std::vector<std::vector<AlignmentMatch>> & sortedOrthologPairChains,
+                         double & INDEL_SCORE, double & GAP_OPEN_PENALTY,
                          double & MIN_ALIGNMENT_SCORE, const int & MAX_DIST_BETWEEN_MATCHES, int & refMaximumTimes, int & queryMaximumTimes,
                          double & calculateIndelDistance );
 std::vector<PairedSimilarFragment> syntenic ( std::vector<PairedSimilarFragment> & pairedSimilarFragments);

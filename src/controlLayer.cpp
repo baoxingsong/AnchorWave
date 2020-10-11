@@ -27,15 +27,16 @@
 std::string softwareName = "proali";
 
 
-int getSequences( int argc, char** argv, std::map<std::string, std::string>& parameters ){
+int gff2seq(int argc, char** argv, std::map<std::string, std::string>& parameters ){
     std::stringstream usage;
     usage << "Usage: "<<softwareName<<" gff2seq -i inputGffFile -r inputGenome -o outputCdsSequences " << std::endl<<
           "Options" << std::endl <<
           " -h        produce help message" << std::endl <<
           " -i FILE   reference genome in GFF/GTF format" << std::endl <<
           " -r FILE   genome sequence in fasta format" << std::endl <<
-          " -m INT    minimum intron size for a functional ORF (default:5)" << std::endl <<
-          " -o FILE   output file of the longest CDS for each gene" << std::endl << std::endl;
+          " -o FILE   output file of the longest CDS for each gene" << std::endl <<
+          " -m INT    minimum intron size for a functional ORF (default:5)" << std::endl << std::endl;
+
     InputParser inputParser (argc, argv);
     if(inputParser.cmdOptionExists("-h") ||inputParser.cmdOptionExists("--help")  ){
         std::cerr << usage.str();
@@ -64,9 +65,7 @@ int getSequences( int argc, char** argv, std::map<std::string, std::string>& par
 }
 
 
-
-
-int DenoveAssemblyVariantCalling( int argc, char** argv, std::map<std::string, std::string>& parameters ) {
+int genomeAlignment(int argc, char** argv, std::map<std::string, std::string>& parameters ) {
     std::stringstream usage;
 
     int32_t matchingScore = 2;
@@ -74,6 +73,9 @@ int DenoveAssemblyVariantCalling( int argc, char** argv, std::map<std::string, s
     int32_t openGapPenalty1 = -4;
     int32_t extendGapPenalty1 = -2;
 
+    double inversion_PENALTY = -1;
+    double MIN_ALIGNMENT_SCORE = 3;
+    bool considerInversion = false;
 
     usage << "Usage: " << softwareName
           << " genoAli -i refGffFile -r refGenome  -t targetGff -s targetGenome -o output GFF/GTF file " << std::endl <<
@@ -86,11 +88,14 @@ int DenoveAssemblyVariantCalling( int argc, char** argv, std::map<std::string, s
           " -o  FILE    output anchors" << std::endl <<
           " -m  FILE    output file in maf format" << std::endl <<
           " -f  FILE    output sequence alignment for each block in maf format (any block with size larger than window width would be ignored)" << std::endl <<
-          " -v  FILE    output variant calling in vcf format" << std::endl <<
+          " -v  FILE    output variant calling in vcf format (conflict with -IV)" << std::endl <<
           " -A  INT     Matching score (default: " << matchingScore << ")" << std::endl <<
           " -B  INT     Mismatching penalty (default: " << mismatchingPenalty << ")" << std::endl <<
           " -O1 INT     open gap penalty (default: " << openGapPenalty1 << ")" << std::endl <<
           " -E1 INT     extend gap penalty (default: " << extendGapPenalty1 << ")" << std::endl <<
+          " -IV         whether call inversions (default: false)"  << std::endl<<
+          " -IC DOUBLE  penlty to have a non-linear match in inversion region (default: " << inversion_PENALTY << ")"  << std::endl<<
+          " -I  DOUBLE  minimum score to keep an inversion (default: " << MIN_ALIGNMENT_SCORE << ")"  << std::endl<<
           " -w  INT     sequence alignment window width (default: 10000)" << std::endl << std::endl;
 
     InputParser inputParser(argc, argv);
@@ -99,8 +104,10 @@ int DenoveAssemblyVariantCalling( int argc, char** argv, std::map<std::string, s
     } else if (inputParser.cmdOptionExists("-i") && inputParser.cmdOptionExists("-r") &&
                inputParser.cmdOptionExists("-a") && inputParser.cmdOptionExists("-s") &&
              (inputParser.cmdOptionExists("-m") || inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-v")  || inputParser.cmdOptionExists("-o")  ) ) {
+
         std::string refGffFilePath = inputParser.getCmdOption("-i");
         std::string referenceGenomeSequence = inputParser.getCmdOption("-r");
+        std::string samFilePath=inputParser.getCmdOption("-a");
         std::string targetGenomeSequence = inputParser.getCmdOption("-s");
 
         std::string outPutMafFile="";
@@ -108,25 +115,57 @@ int DenoveAssemblyVariantCalling( int argc, char** argv, std::map<std::string, s
             outPutMafFile = inputParser.getCmdOption("-m");
         }
 
-        std::string outPutVcfFile = "";
-        if (inputParser.cmdOptionExists("-v") ){
-            outPutVcfFile = inputParser.getCmdOption("-v");
-        }
-
         std::string outPutFragedFile;
         if ( inputParser.cmdOptionExists("-f") ){
             outPutFragedFile = inputParser.getCmdOption("-f");
         }
 
-        std::string samFilePath=inputParser.getCmdOption("-a");
+        std::string outPutVcfFile = "";
+        if (inputParser.cmdOptionExists("-v") ){
+            outPutVcfFile = inputParser.getCmdOption("-v");
+        }
+
+        if( inputParser.cmdOptionExists("-A") ){
+            matchingScore = std::stoi( inputParser.getCmdOption("-A") );
+        }
+        if( inputParser.cmdOptionExists("-B") ){
+            mismatchingPenalty = std::stoi( inputParser.getCmdOption("-B") );
+        }
+        if( inputParser.cmdOptionExists("-O1") ){
+            openGapPenalty1 = std::stoi( inputParser.getCmdOption("-O1") );
+        }
+        if( inputParser.cmdOptionExists("-E1") ){
+            extendGapPenalty1 = std::stoi( inputParser.getCmdOption("-E1") );
+        }
 
         size_t widownWidth = 10000;
         if( inputParser.cmdOptionExists("-w") ){
             widownWidth = std::stoi( inputParser.getCmdOption("-w") );
         }
 
+        if( inputParser.cmdOptionExists("-I")){
+            MIN_ALIGNMENT_SCORE = std::stod(inputParser.getCmdOption("-I"));
+        }
+        if( MIN_ALIGNMENT_SCORE <= 1 ){
+            std::cout << "minimum score to keep an inversion is not larger than 1, maybe output weired inversions. please change it" << std::endl;
+            return 1;
+        }
+        if( inputParser.cmdOptionExists("-IC")){
+            inversion_PENALTY = std::stod(inputParser.getCmdOption("-IC"));
+        }
+        if( inputParser.cmdOptionExists("-IV")){
+            considerInversion = true;
+        }
+
         std::map<std::string, std::vector<AlignmentMatch>> alignmentMatchsMap;
-        setupAnchorsWithSpliceAlignmentResult( refGffFilePath, samFilePath, alignmentMatchsMap);
+        if (considerInversion){
+            if (inputParser.cmdOptionExists("-v") ){
+                std::cout << "-v and -IV are conflict with each other" << std::endl;
+                return 1;
+            }
+        }
+
+        setupAnchorsWithSpliceAlignmentResult( refGffFilePath, samFilePath, alignmentMatchsMap, inversion_PENALTY,  MIN_ALIGNMENT_SCORE, considerInversion);
 
         if( inputParser.cmdOptionExists("-o") ) {
             std::ofstream ofile;
@@ -135,55 +174,62 @@ int DenoveAssemblyVariantCalling( int argc, char** argv, std::map<std::string, s
             ofile << "refChr" << "\t"
                   << "referenceStart" << "\t"
                   << "referenceEnd" << "\t"
-                  << "queryStart" << "\t"
                   << "queryChr" << "\t"
                   << "queryStart" << "\t"
                   << "queryEnd" << "\t"
+                  << "strand" << "\t"
+                  << "gene" << "\t"
                   << "blockIndex" << std::endl;
 
-            for ( std::map<std::string, std::vector<AlignmentMatch>>::iterator it = alignmentMatchsMap.begin(); it!=alignmentMatchsMap.end(); ++it ) {
+            for (std::map<std::string, std::vector<AlignmentMatch>>::iterator it = alignmentMatchsMap.begin(); it != alignmentMatchsMap.end(); ++it ) {
                 ofile << "#block begin" << std::endl;
                 blockIndex++;
-
                 for (int rangeIndex = 0; rangeIndex <  it->second.size(); ++rangeIndex) {
-                    ofile << it->second[rangeIndex].getDatabaseChr() << "\t"
-                          << it->second[rangeIndex].getDatabaseStart() << "\t"
-                          << it->second[rangeIndex].getDatabaseEnd() << "\t"
-                          << it->second[rangeIndex].getQueryChr() << "\t"
-                          << it->second[rangeIndex].getQueryStart() << "\t"
-                          << it->second[rangeIndex].getQueryEnd() << "\t"
-                          << it->second[rangeIndex].getQueryStrand() << "\t"
-                          << it->second[rangeIndex].getDatabaseName() << "\t" <<
-                          blockIndex << std::endl;
                     if (rangeIndex > 0) {
-                        if (it->second[rangeIndex].getQueryStrand() == POSITIVE) {
-                            ofile << it->second[rangeIndex].getDatabaseChr() << "\t"
-                                   << it->second[rangeIndex - 1].getDatabaseEnd() + 1 << "\t"
-                                   << it->second[rangeIndex].getDatabaseStart() - 1 << "\t"
+                        if (it->second[rangeIndex].getStrand() == POSITIVE && it->second[rangeIndex-1].getStrand()== POSITIVE ) {
+                            ofile << it->second[rangeIndex].getRefChr() << "\t"
+                                   << it->second[rangeIndex - 1].getRefEndPos() + 1 << "\t"
+                                   << it->second[rangeIndex].getRefStartPos() - 1 << "\t"
                                    << it->second[rangeIndex].getQueryChr() << "\t"
-                                   << it->second[rangeIndex - 1].getQueryEnd() + 1 << "\t"
-                                   << it->second[rangeIndex].getQueryStart() - 1 << "\t"
+                                   << it->second[rangeIndex - 1].getQueryEndPos() + 1 << "\t"
+                                   << it->second[rangeIndex].getQueryStartPos() - 1 << "\t"
+                                    << "+" << "\t"
                                     << "intergenetic" << "\t" <<
                                                                         blockIndex << std::endl;
-                        } else {
-                            ofile << it->second[rangeIndex].getDatabaseChr() << "\t"
-                                   << it->second[rangeIndex - 1].getDatabaseEnd() + 1 << "\t"
-                                   << it->second[rangeIndex].getDatabaseStart() - 1 << "\t"
+                        } else if (it->second[rangeIndex].getStrand() == NEGATIVE && it->second[rangeIndex-1].getStrand()== NEGATIVE ) {
+                            ofile << it->second[rangeIndex].getRefChr() << "\t"
+                                   << it->second[rangeIndex - 1].getRefEndPos() + 1 << "\t"
+                                   << it->second[rangeIndex].getRefStartPos() - 1 << "\t"
                                    << it->second[rangeIndex].getQueryChr() << "\t"
-                                   << it->second[rangeIndex].getQueryEnd() + 1 << "\t"
-                                   << it->second[rangeIndex - 1].getQueryStart() - 1 << "\t"
+                                   << it->second[rangeIndex].getQueryEndPos() + 1 << "\t"
+                                   << it->second[rangeIndex - 1].getQueryStartPos() - 1 << "\t"
+                                    << "-" << "\t"
                                     << "intergenetic" << "\t" <<
                                     blockIndex << std::endl;
                         }
                     }
+                    std::string thisStrand = "+";
+                    if( it->second[rangeIndex].getStrand() == NEGATIVE ){
+                        thisStrand = "-";
+                    }
+                    ofile << it->second[rangeIndex].getRefChr() << "\t"
+                          << it->second[rangeIndex].getRefStartPos() << "\t"
+                          << it->second[rangeIndex].getRefEndPos() << "\t"
+                          << it->second[rangeIndex].getQueryChr() << "\t"
+                          << it->second[rangeIndex].getQueryStartPos() << "\t"
+                          << it->second[rangeIndex].getQueryEndPos() << "\t"
+                          << thisStrand << "\t"
+                          << it->second[rangeIndex].getReferenceGeneName() << "\t" <<
+                          blockIndex << std::endl;
                 }
                 ofile << "#block end" << std::endl;
             }
             ofile.close();
         }
 
-        deNovoGenomeVariantCalling(alignmentMatchsMap, referenceGenomeSequence,  targetGenomeSequence, widownWidth, outPutMafFile, outPutVcfFile, outPutFragedFile,
-                matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1);
+        genomeAlignmentAndVariantCalling(alignmentMatchsMap, referenceGenomeSequence, targetGenomeSequence, widownWidth,
+                                         outPutMafFile, outPutVcfFile, outPutFragedFile,
+                                         matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1);
 
         return 0;
     }else{
@@ -192,10 +238,7 @@ int DenoveAssemblyVariantCalling( int argc, char** argv, std::map<std::string, s
     return 0;
 }
 
-
-
-
-int genomeAlignment( int argc, char** argv, std::map<std::string, std::string>& parameters ) {
+int proportationalAlignment(int argc, char** argv, std::map<std::string, std::string>& parameters ) {
     std::stringstream usage;
     int windownWidth = 15000;
     double calculateIndelDistance = 3;
@@ -208,12 +251,10 @@ int genomeAlignment( int argc, char** argv, std::map<std::string, std::string>& 
     bool outPutAlignmentForEachInterval = false;
     bool localAlignment = false;
 
-
     int32_t matchingScore = 2;
     int32_t mismatchingPenalty = -3;
     int32_t openGapPenalty1 = -4;
     int32_t extendGapPenalty1 = -2;
-
 
     int32_t seed_window_size = 38;
     int32_t mini_cns_score = 40;
@@ -253,8 +294,8 @@ int genomeAlignment( int argc, char** argv, std::map<std::string, std::string>& 
           " -EC DOUBLE  chain extend gap penalty (default: " << INDEL_SCORE << ")"  << std::endl<<
           " -I  DOUBLE  minimum chain score (default: " << MIN_ALIGNMENT_SCORE << ")"  << std::endl<<
           " -D  INT     maximum gap size for chain (default: " << MAX_DIST_BETWEEN_MATCHES << ")"  << std::endl<<
-          " -f          output alignment for each interval (default: " << outPutAlignmentForEachInterval << ")"  << std::endl<<
-          " -l          perform local alignment for each interval (default: " << localAlignment << ")"  << std::endl<<
+          " -f          output alignment for each interval (default: false)"  << std::endl<<
+          " -l          perform local alignment for each interval (default: false)"  << std::endl<<
           std::endl;
 
     InputParser inputParser(argc, argv);
@@ -300,7 +341,6 @@ int genomeAlignment( int argc, char** argv, std::map<std::string, std::string>& 
             localAlignment = true;
         }
 
-
         if( inputParser.cmdOptionExists("-A") ){
             matchingScore = std::stoi( inputParser.getCmdOption("-A") );
         }
@@ -313,7 +353,6 @@ int genomeAlignment( int argc, char** argv, std::map<std::string, std::string>& 
         if( inputParser.cmdOptionExists("-E1") ){
             extendGapPenalty1 = std::stoi( inputParser.getCmdOption("-E1") );
         }
-
 
         if( inputParser.cmdOptionExists("-sw") ){
             seed_window_size = std::stoi( inputParser.getCmdOption("-sw") );
@@ -339,8 +378,7 @@ int genomeAlignment( int argc, char** argv, std::map<std::string, std::string>& 
             return 1;
         }
 
-
-        std::vector<std::vector<OrthologPair2>> alignmentMatchsMap;
+        std::vector<std::vector<AlignmentMatch>> alignmentMatchsMap;
 
         setupAnchorsWithSpliceAlignmentResultQuota( refGffFilePath, samFilePath, alignmentMatchsMap, INDEL_SCORE, GAP_OPEN_PENALTY, MIN_ALIGNMENT_SCORE,
                                                     MAX_DIST_BETWEEN_MATCHES, refMaximumTimes, queryMaximumTimes,
@@ -360,11 +398,37 @@ int genomeAlignment( int argc, char** argv, std::map<std::string, std::string>& 
 
         size_t  totalAnchors = 0;
         int blockIndex = 0;
-        for ( std::vector<OrthologPair2> alignmentMatchs : alignmentMatchsMap ){
+        for ( std::vector<AlignmentMatch> alignmentMatchs : alignmentMatchsMap ){
             ofile << "#block begin" << std::endl;
             totalAnchors += alignmentMatchs.size();
             blockIndex++;
             for( int rangeIndex = 0; rangeIndex <alignmentMatchs.size();  ++rangeIndex){
+
+                std::string thisStrand = "+";
+                if( alignmentMatchs[rangeIndex].getStrand() == NEGATIVE ){
+                    thisStrand = "-";
+                }
+                if (  rangeIndex >0 ){
+                    if( alignmentMatchs[rangeIndex].getStrand() == POSITIVE &&  alignmentMatchs[rangeIndex-1].getStrand() == POSITIVE ){
+                        ofile << alignmentMatchs[rangeIndex].getRefChr() << "\t"
+                               << alignmentMatchs[rangeIndex-1].getRefEndPos()+1 << "\t"
+                               << alignmentMatchs[rangeIndex].getRefStartPos() - 1 << "\t"
+                               << alignmentMatchs[rangeIndex].getQueryChr() << "\t"
+                               << alignmentMatchs[rangeIndex-1].getQueryEndPos()+1 << "\t"
+                               << alignmentMatchs[rangeIndex].getQueryStartPos()-1 << "\t"
+                                << "+" << "\t" <<
+                                blockIndex << std::endl;
+                    }else if( alignmentMatchs[rangeIndex].getStrand() == NEGATIVE &&  alignmentMatchs[rangeIndex-1].getStrand() == NEGATIVE ) {
+                        ofile << alignmentMatchs[rangeIndex].getRefChr() << "\t"
+                               << alignmentMatchs[rangeIndex-1].getRefEndPos()+1 << "\t"
+                               << alignmentMatchs[rangeIndex].getRefStartPos() - 1 << "\t"
+                               << alignmentMatchs[rangeIndex].getQueryChr() << "\t"
+                               << alignmentMatchs[rangeIndex].getQueryEndPos() +1 << "\t"
+                               << alignmentMatchs[rangeIndex-1].getQueryStartPos()-1 << "\t"
+                                << "-" << "\t" <<
+                                blockIndex << std::endl;
+                    }
+                }
                 ofile << alignmentMatchs[rangeIndex].getRefChr() << "\t"
                       << alignmentMatchs[rangeIndex].getRefStartPos() << "\t"
                       << alignmentMatchs[rangeIndex].getRefEndPos() << "\t"
@@ -373,34 +437,11 @@ int genomeAlignment( int argc, char** argv, std::map<std::string, std::string>& 
                       << alignmentMatchs[rangeIndex].getQueryEndPos() << "\t"
                       << alignmentMatchs[rangeIndex].getStrand() << "\t"
                       << alignmentMatchs[rangeIndex].getReferenceGeneName() << "\t" <<
-                        blockIndex << std::endl;
-
-                if (  rangeIndex >0 ){
-                    if( alignmentMatchs[rangeIndex].getStrand() == POSITIVE ){
-                        ofile << alignmentMatchs[rangeIndex].getRefChr() << "\t"
-                               << alignmentMatchs[rangeIndex-1].getRefEndPos()+1 << "\t"
-                               << alignmentMatchs[rangeIndex].getRefStartPos() - 1 << "\t"
-                               << alignmentMatchs[rangeIndex].getQueryChr() << "\t"
-                               << alignmentMatchs[rangeIndex-1].getQueryEndPos()+1 << "\t"
-                               << alignmentMatchs[rangeIndex].getQueryStartPos()-1 << "\t"
-                                << alignmentMatchs[rangeIndex].getStrand() << "\t" <<
-                                blockIndex << std::endl;
-                    }else{
-                        ofile << alignmentMatchs[rangeIndex].getRefChr() << "\t"
-                               << alignmentMatchs[rangeIndex-1].getRefEndPos()+1 << "\t"
-                               << alignmentMatchs[rangeIndex].getRefStartPos() - 1 << "\t"
-                               << alignmentMatchs[rangeIndex].getQueryChr() << "\t"
-                               << alignmentMatchs[rangeIndex].getQueryEndPos() +1 << "\t"
-                               << alignmentMatchs[rangeIndex-1].getQueryStartPos()-1 << "\t"
-                                << alignmentMatchs[rangeIndex].getStrand() << "\t" <<
-                                blockIndex << std::endl;
-                    }
-                }
+                      blockIndex << std::endl;
             }
             ofile << "#block end" << std::endl;
         }
         ofile.close();
-
 
         genomeAlignment(alignmentMatchsMap, referenceGenomeSequence,  targetGenomeSequence, windownWidth, outPutFilePath, outPutAlignmentForEachInterval,localAlignment,
                         matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, seed_window_size, mini_cns_score, step_size, matrix_boundary_distance, scoreThreshold, w, xDrop);

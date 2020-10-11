@@ -19,14 +19,14 @@
  * This longest alignment is designed as a local alignment model
  * And a lot of ideas were borrowed from the DAGchainder method
  * */
-void myOrthologPairsSortQuota( std::vector<OrthologPair2> & pairedSimilarFragments){
-    std::sort(pairedSimilarFragments.begin(), pairedSimilarFragments.end(), [](OrthologPair2 a, OrthologPair2 b) {
+void myOrthologPairsSortQuota( std::vector<AlignmentMatch> & pairedSimilarFragments){
+    std::sort(pairedSimilarFragments.begin(), pairedSimilarFragments.end(), [](AlignmentMatch a, AlignmentMatch b) {
         return a < b;
     });
 }
 
-void myOrthologPairsSortQueryQuota( std::vector<OrthologPair2> & pairedSimilarFragments){
-    std::sort(pairedSimilarFragments.begin(), pairedSimilarFragments.end(), [](OrthologPair2 a, OrthologPair2 b) {
+void myOrthologPairsSortQueryQuota( std::vector<AlignmentMatch> & pairedSimilarFragments){
+    std::sort(pairedSimilarFragments.begin(), pairedSimilarFragments.end(), [](AlignmentMatch a, AlignmentMatch b) {
         return a.getQueryStartPos() < b.getQueryStartPos();
     });
 }
@@ -40,9 +40,6 @@ struct Path{
 
 
 
-
-
-
 /**
  * this function try to keep those genes in the syntenic region using a longest path algorithm
  * which is a kind of global alignment method
@@ -52,31 +49,35 @@ struct Path{
  *
  */
 // this function put the forward entries in the increasing order and put the reversion entries in a decrease order
-void myAlignmentMatchSort( std::vector<AlignmentMatch> & pairedSimilarFragments, const double & score, const double & penalty, const double & scoreThreshold, const bool & keepTandemDuplication){
+void myAlignmentMatchSort(std::vector<AlignmentMatch> & pairedSimilarFragments, const double & penalty, const double & scoreThreshold, const bool & keepTandemDuplication, const bool & considerInversion){
     std::sort(pairedSimilarFragments.begin(), pairedSimilarFragments.end(), [](AlignmentMatch a, AlignmentMatch b) {
-        return a < b;
+        return a.getRefStartPos() < b.getRefStartPos();
     });
+    if (!considerInversion){
+        return;
+    }
+
     // the following part is for reversion
     int startIndex=0;
     int endIndex=0;
     double maxScore=0;
     double currentScore=0;
     for( int idx=0;  idx<pairedSimilarFragments.size(); ++idx){
-        if( NEGATIVE == pairedSimilarFragments[idx].getQueryStrand() ){  // reverse strand  we need to do something special for inversion
+        if( NEGATIVE == pairedSimilarFragments[idx].getStrand() ){  // reverse strand  we need to do something special for inversion
             // look for all following pairs that are reverse strand,
             // ie get all reverse strand entries in this group of reverse strands
             for( int jdx=idx; jdx< pairedSimilarFragments.size(); ++jdx ){
-                if( NEGATIVE == pairedSimilarFragments[jdx].getQueryStrand() ) {
+                if( NEGATIVE == pairedSimilarFragments[jdx].getStrand() ) {
                     if( idx == jdx ){ // the first one.
-                        currentScore+=score;
+                        currentScore+=pairedSimilarFragments[jdx].getScore();
                     }else{ // for the reverse alignments, check the strand of the previous alignment
                         // If both current and previous are reverse strand, and
                         // if previous assembly start is greater than current assembly start, increase score.
                         //  else, apply penalty (they are out of order)
-                        if ( pairedSimilarFragments[jdx-1].getQueryStart() > pairedSimilarFragments[jdx].getQueryStart() ){ // GOOD INVERSION
-                            currentScore+=score;
-                        }else if(keepTandemDuplication && pairedSimilarFragments[jdx-1].getDatabaseStart() == pairedSimilarFragments[jdx].getDatabaseStart() ){ // tandem duplication
-                            currentScore+=score;
+                        if ( pairedSimilarFragments[jdx-1].getQueryStartPos() > pairedSimilarFragments[jdx].getQueryStartPos() ){ // GOOD INVERSION
+                            currentScore+=pairedSimilarFragments[jdx].getScore();
+                        }else if(keepTandemDuplication && pairedSimilarFragments[jdx-1].getReferenceGeneName() == pairedSimilarFragments[jdx].getReferenceGeneName() ){ // tandem duplication
+                            currentScore+=pairedSimilarFragments[jdx].getScore();
                         }else{
                             currentScore+=penalty; // GIVE PENALTY
                         }
@@ -105,19 +106,19 @@ void myAlignmentMatchSort( std::vector<AlignmentMatch> & pairedSimilarFragments,
                 currentScore = 0.0;
                 // loop to find start index of elements we want to flip
                 for( int jdx=endIndex; jdx>=idx; --jdx ){
-                    if( NEGATIVE == pairedSimilarFragments[jdx].getQueryStrand() ) {
+                    if( NEGATIVE == pairedSimilarFragments[jdx].getStrand() ) {
                         if( jdx>idx ){
                             // Verify the reverse alignments are in order to each other.  If not,
                             // apply penalty.  This doesn't prevent overlaps, which will be dealt with later.
-                            if ( pairedSimilarFragments[jdx-1].getQueryStart() > pairedSimilarFragments[jdx].getQueryStart() ){
-                                currentScore+=score;
-                            }else if( keepTandemDuplication && pairedSimilarFragments[jdx-1].getDatabaseStart() == pairedSimilarFragments[jdx].getDatabaseStart() ){ // tandem duplication
-                                currentScore+=score;
+                            if ( pairedSimilarFragments[jdx-1].getQueryStartPos() > pairedSimilarFragments[jdx].getQueryStartPos() ){
+                                currentScore+=pairedSimilarFragments[jdx].getScore();
+                            }else if( keepTandemDuplication && pairedSimilarFragments[jdx-1].getReferenceGeneName() == pairedSimilarFragments[jdx].getReferenceGeneName() ){ // tandem duplication
+                                currentScore+=pairedSimilarFragments[jdx].getScore();
                             }else{
                                 currentScore+=penalty; // GIVE PENALTY
                             }
                         }else{
-                            currentScore+=score;
+                            currentScore+=pairedSimilarFragments[jdx].getScore();
                         }
                     }else{
                         currentScore+=penalty; // GIVE PENALTY
@@ -147,8 +148,8 @@ void myAlignmentMatchSort( std::vector<AlignmentMatch> & pairedSimilarFragments,
                         for (int j = 1; j < length; ++j) {
                             // If a single reference position has multiple assembly alignments mapping to it,
                             // swap the order until the assembly positions are all increasing.
-                            if (pairedSimilarFragments[startIndex + j - 1].getDatabaseStart() == pairedSimilarFragments[startIndex + j].getDatabaseStart() &&
-                                pairedSimilarFragments[startIndex + j - 1].getQueryStart() > pairedSimilarFragments[startIndex + j].getQueryStart() ) {
+                            if (pairedSimilarFragments[startIndex + j - 1].getReferenceGeneName() == pairedSimilarFragments[startIndex + j].getReferenceGeneName() &&
+                                pairedSimilarFragments[startIndex + j - 1].getQueryStartPos() > pairedSimilarFragments[startIndex + j].getQueryStartPos() ) {
                                 thereAreReverseAlignments = true;
                                 AlignmentMatch temp = pairedSimilarFragments[startIndex + j];
                                 pairedSimilarFragments[startIndex + j]=pairedSimilarFragments[startIndex + j - 1];
@@ -171,12 +172,12 @@ void myAlignmentMatchSort( std::vector<AlignmentMatch> & pairedSimilarFragments,
 
 
 
-void longestPath (std::vector<AlignmentMatch> & pairedSimilarFragments, std::vector<AlignmentMatch> & sortedOrthologPairs, const bool & keepTandemDuplication){
+void longestPath (std::vector<AlignmentMatch> & pairedSimilarFragments, std::vector<AlignmentMatch> & sortedOrthologPairs, const bool & keepTandemDuplication, double & scoreThreshold){
     double maxSore = 0;
     int bestEnd = 0;
     double scoreArray [pairedSimilarFragments.size()]; // arrays of scores
     int prev [pairedSimilarFragments.size()];  // index of previous node in longest path
-    scoreArray[0] = pairedSimilarFragments[0].getWindowSize();
+    scoreArray[0] = pairedSimilarFragments[0].getScore();
     prev[0] = -1;
 
     if (scoreArray[0] > maxSore){
@@ -185,7 +186,7 @@ void longestPath (std::vector<AlignmentMatch> & pairedSimilarFragments, std::vec
     }
 
     for (int idx = 1; idx < pairedSimilarFragments.size(); ++idx) {
-        scoreArray[idx] = pairedSimilarFragments[idx].getWindowSize();
+        scoreArray[idx] = pairedSimilarFragments[idx].getScore();
         prev[idx] = -1;
         for (int jdx = idx - 1; jdx >= 0; --jdx) {// checking all previous nodes
             // Because we swapped asm/query start position so that inversions were all increasing,
@@ -193,15 +194,9 @@ void longestPath (std::vector<AlignmentMatch> & pairedSimilarFragments, std::vec
             // This gets rid of the noise, while preserving the inversions on
             // the diagonal
             // Are only looking at positions previous to our current "idx" position
-            // windowSize is a score, it is not well named
-            if ( (scoreArray[jdx] + pairedSimilarFragments[idx].getWindowSize()) > scoreArray[idx] &&
-                 pairedSimilarFragments[jdx].getQueryStart() < pairedSimilarFragments[idx].getQueryStart()){
-                scoreArray[idx] = scoreArray[jdx] + pairedSimilarFragments[idx].getWindowSize();
-                prev[idx] = jdx;
-            }else if ( (scoreArray[jdx] + pairedSimilarFragments[idx].getWindowSize()) > scoreArray[idx] &&
-                       pairedSimilarFragments[jdx].getQueryStart() == pairedSimilarFragments[idx].getQueryStart()
-                       && keepTandemDuplication) {
-                scoreArray[idx] = scoreArray[jdx] + pairedSimilarFragments[idx].getWindowSize();
+            if ( (scoreArray[jdx] + pairedSimilarFragments[idx].getScore()) > scoreArray[idx] &&
+                 pairedSimilarFragments[jdx].getQueryStartPos() < pairedSimilarFragments[idx].getQueryStartPos()){
+                scoreArray[idx] = scoreArray[jdx] + pairedSimilarFragments[idx].getScore();
                 prev[idx] = jdx;
             }
         }
@@ -219,6 +214,28 @@ void longestPath (std::vector<AlignmentMatch> & pairedSimilarFragments, std::vec
     }
     // Reversing the order
     std::reverse(std::begin(sortedOrthologPairs), std::end(sortedOrthologPairs));
+    std::vector<int> toRemoveIndex;
+    std::vector<int> thisRoundOfInversions;
+    double score=0;
+    for( int i=0; i<sortedOrthologPairs.size(); ++i ){
+        if( sortedOrthologPairs[i].getStrand() == NEGATIVE ){
+            score += sortedOrthologPairs[i].getScore();
+            thisRoundOfInversions.push_back(i);
+        }else{
+            if( score > scoreThreshold ){
+                thisRoundOfInversions.clear();
+            }else{
+                for( int j : thisRoundOfInversions  ){
+                    toRemoveIndex.push_back(j);
+                }
+                thisRoundOfInversions.clear();
+            }
+            score = 0;
+        }
+    }
+    for ( int j=toRemoveIndex.size()-1; j>=0; --j){
+        sortedOrthologPairs.erase(sortedOrthologPairs.begin() + toRemoveIndex[j]);
+    }
 }
 
 
@@ -230,8 +247,8 @@ void longestPath (std::vector<AlignmentMatch> & pairedSimilarFragments, std::vec
 
 
 // since we will change pairedSimilarFragments, so do not use reference C++ data type here
-void longestPathQuotav2 (std::vector<OrthologPair2> pairedSimilarFragments, std::vector<std::vector<OrthologPair2>> & sortedOrthologPairChains,
-        double & INDEL_SCORE, double & GAP_OPEN_PENALTY,
+void longestPathQuotav2 (std::vector<AlignmentMatch> pairedSimilarFragments, std::vector<std::vector<AlignmentMatch>> & sortedOrthologPairChains,
+                         double & INDEL_SCORE, double & GAP_OPEN_PENALTY,
                          double & MIN_ALIGNMENT_SCORE, const int & MAX_DIST_BETWEEN_MATCHES, int & refMaximumTimes, int & queryMaximumTimes,
                          double & calculateIndelDistance ){
 
@@ -380,7 +397,7 @@ void longestPathQuotav2 (std::vector<OrthologPair2> pairedSimilarFragments, std:
                     ans.push_back(j);
                 }
 
-                std::vector<OrthologPair2> chain;
+                std::vector<AlignmentMatch> chain;
                 sortedOrthologPairChains.push_back(chain);
                 reverse(ans.begin(), ans.end());
                 int s=ans.size();
@@ -392,7 +409,7 @@ void longestPathQuotav2 (std::vector<OrthologPair2> pairedSimilarFragments, std:
 
                 for( j=0; j<s; j++ ) {
                     prev[ans[j]] = -2;
-                    OrthologPair2 orthologPair2 = pairedSimilarFragments[ans[j]];
+                    AlignmentMatch orthologPair2 = pairedSimilarFragments[ans[j]];
                     sortedOrthologPairChains[sortedOrthologPairChains.size() - 1].push_back(orthologPair2);
 
                     chainRefStart = chainRefStart < orthologPair2.getRefStartPos()? chainRefStart : orthologPair2.getRefStartPos();
@@ -475,6 +492,10 @@ void longestPathQuotav2 (std::vector<OrthologPair2> pairedSimilarFragments, std:
 
 
 
+
+
+
+// longestIncreasingSubsequenceLAGAN and syntenic is used to filter local sequence alignemnt result, so that no fragments would overlap
 std::vector<PairedSimilarFragment> longestIncreasingSubsequenceLAGAN ( std::vector<PairedSimilarFragment> & pairedSimilarFragments){
     // then for the seed-to-chain should check the overlap of pairedSimilarFragment
     int32_t maxSore = pow(pairedSimilarFragments[0].getScore(), 2), bestEnd = 0;
@@ -523,5 +544,3 @@ std::vector<PairedSimilarFragment> syntenic ( std::vector<PairedSimilarFragment>
     });
     return longestIncreasingSubsequenceLAGAN(pairedSimilarFragments);
 }
-
-

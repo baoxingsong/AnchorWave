@@ -9,7 +9,6 @@
 #include "../util/util.h"
 #include "readGffFile.h"
 #include "readFastaFile.h"
-#include "nA2AA.h"
 #include "checkOrfState.h"
 #include "TranscriptUpdateInformation.h"
 

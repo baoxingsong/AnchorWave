@@ -41,11 +41,12 @@ minimap2 -ax splice -t 90 -a -uf -p 0.4 -C5 Sorghum_bicolor.Sorghum_bicolor_NCBI
 proali proali -i Zea_mays.AGPv4.34.gff3 -r Zea_mays.AGPv4.dna.toplevel.fa -a cds.sam -s Sorghum_bicolor.Sorghum_bicolor_NCBIv3.dna.toplevel.fa -w 20000 -R 1 -Q 2 -O 0 -D 32 -o alignment -f
 ```
 
-### Variant calling for different accessions
-This module perform base pair resolution genome alignment for two genomes. A query chromosome sequence would be aligned against the reference chromosome with the same name end-to-end. \
+### genome alignment without rearrangement
+This module perform base pair resolution sequence alignment for two genomes. A query chromosome sequence would be aligned against the reference chromosome with the same name end-to-end. \
+Inversions \
 The output could be end-to-end sequence alignment for the whole chromosome in maf format. \
 Or alignment for each anchor region and inter anchor region with length shorter than the sequence alignment window width. \
-A variant calling result in vcf format also would be created which is derived from end-to-end alignment. \
+A variant calling result in vcf format could be created which is derived from end-to-end alignment. \
 \
 data: Arabidopsis thaliana Col-o reference genome and GFF3 annotation file from https://www.arabidopsis.org/\
 Arabidopsis thaliana Ler-0 accession assembly from http://www.pnas.org/content/113/28/E4052
