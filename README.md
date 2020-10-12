@@ -1,9 +1,8 @@
 # progli &middot; [![license][license-badge]][license]
 
-Using the alignment of conversed sequence (currently, only CDS being used), progli try to detect conserved collinear blocks between two genomes. Within each collinear block, progli use conserved sequence as anchors and cut long sequence into short fragments and perform sequence alignment for each block.
+Using the alignment of conversed sequence (currently, only CDS being used), progli try to detect conserved collinear blocks between two genomes. Within each collinear block, progli use conserved sequence as anchors to cut long sequence into short fragments and perform sequence alignment for each fragment.
 
-
-
+##### The code is under active development and have not been well tested yet.
 
 ## Install
 ### Dependencies
@@ -23,14 +22,15 @@ this command will generate an executable file named proali
 
 This module use conserved sequence as anchors to identify collinear blocks between two genomes.\
 When comparing two genomes undergone genome duplications (plant genomes in particular), there maybe copy number variations. This program implemented algorithm to identify collinear blocks with proportional coverage. \
-And this implementation perform base pair resolution genome alignment for each collinear block. \
+And this implementation perform base pair resolution genome alignment for each collinear block using local sequence alignment approach or global alignment approach. \
 The output could be end-to-end sequence alignment for each collinear block in maf format. \
 Or alignment for each anchor region and inter anchor region with length shorter than the sequence alignment window width parameter. \
 \
 data: maize B73 genome sequence and GFF3 annotation file from http://plants.ensembl.org/Zea_mays/Info/Index \
 and sorghum genome sequence from https://plants.ensembl.org/Sorghum_bicolor/Info/Index \
 \
-extract CDS of reference specie and map the to the query genome using minimap2 \
+extract CDS of reference specie and map the to the query genome using minimap2 
+
 ```
 proali gff2seq -i Zea_mays.AGPv4.34.gff3 -r Zea_mays.AGPv4.dna.toplevel.fa  -o cds.fa
 minimap2 -ax splice -t 90 -a -uf -p 0.4 -C5 Sorghum_bicolor.Sorghum_bicolor_NCBIv3.dna.toplevel.fa ../primary_cds.fasta >cds.sam

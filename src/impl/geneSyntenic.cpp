@@ -289,7 +289,7 @@ void longestPathQuotav2 (std::vector<AlignmentMatch> pairedSimilarFragments, std
                             int query_del = pairedSimilarFragments[idx].getQueryId() - pairedSimilarFragments[jdx].getQueryId()-1;
                             assert(ref_del>=0);
                             assert(query_del>=0);
-                            double distance = ( ( (ref_del+query_del) + abs(ref_del-query_del) ) /  (2.5));
+                            double distance = ( ( (ref_del+query_del) + abs(ref_del-query_del) ) /  (calculateIndelDistance));
 
                             if ( abs(ref_del) > MAX_DIST_BETWEEN_MATCHES && abs(query_del) > MAX_DIST_BETWEEN_MATCHES) {
                                 // if this position is too large then the last node of j could not be i and the chain restart from j
@@ -454,7 +454,6 @@ void longestPathQuotav2 (std::vector<AlignmentMatch> pairedSimilarFragments, std
                         }
                     }
                 }
-
 
                 for( int ii=0; ii<n; ii++ ) { // this is to avoid nested chain
                     if ( pairedSimilarFragments[ii].getQueryChr() ==pairedSimilarFragments[ans[0]].getQueryChr() && (
