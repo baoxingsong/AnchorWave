@@ -6,15 +6,15 @@
 #include "CheckAndUpdateTranscriptsEnds.h"
 
 void getSequences(const std::string& gffFile, const std::string& genomeFile,
-                  const std::string& outputCdsSequences, std::map<std::string, std::string>& parameters, const int & minIntron){
+                  const std::string& outputCdsSequences, std::map<std::string, std::string>& parameters, const int & minExon){
     std::string regex = get_parameters("cdsParentRegex", parameters);
     NucleotideCodeSubstitutionMatrix nucleotideCodeSubstitutionMatrix(parameters);
 
     std::map<std::string, std::vector<Transcript> > transcriptHashSet;
-    readGffFile (gffFile, transcriptHashSet, regex);
+    readGffFile (gffFile, transcriptHashSet, regex, minExon);
     std::map<std::string, Fasta> genome;
     readFastaFile(genomeFile, genome);
-    CheckAndUpdateTranscriptsEnds( transcriptHashSet, genome, nucleotideCodeSubstitutionMatrix, minIntron);
+    CheckAndUpdateTranscriptsEnds( transcriptHashSet, genome, nucleotideCodeSubstitutionMatrix, minExon);
 
     std::map<std::string, std::string > transcript_to_gene_map;
 
@@ -30,11 +30,11 @@ void getSequences(const std::string& gffFile, const std::string& genomeFile,
             for ( std::vector<Transcript>::iterator it2=it1->second.begin(); it2!=it1->second.end(); ++it2 ) {
                 if( transcript_to_gene_map.find((*it2).getName()) != transcript_to_gene_map.end() && usedGenes.find( transcript_to_gene_map[(*it2).getName()] ) == usedGenes.end() ){
                     TranscriptUpdateCdsInformation((*it2), genome);
-                    checkOrfState((*it2), genome, nucleotideCodeSubstitutionMatrix, minIntron);
+                    //checkOrfState((*it2), genome, nucleotideCodeSubstitutionMatrix, minExon);
                     std::string cdsSequence = (*it2).getCdsSequence();
-                    oCfile << ">" << (*it2).getName() << " metaInformation:" << (*it2).getMetaInformation() << std::endl;
+                    oCfile << ">" << (*it2).getName() << " " << transcript_to_gene_map[(*it2).getName()] << std::endl;
                     oCfile << (*it2).getCdsSequence() << std::endl;
-                    usedGenes.insert((*it2).getName());
+                    usedGenes.insert( transcript_to_gene_map[(*it2).getName()] );
                 }
             }
         }

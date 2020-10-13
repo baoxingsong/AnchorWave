@@ -30,8 +30,10 @@ Or alignment for each anchor region and inter anchor region with length shorter 
 data: maize B73 genome sequence and GFF3 annotation file from http://plants.ensembl.org/Zea_mays/Info/Index \
 and sorghum genome sequence from https://plants.ensembl.org/Sorghum_bicolor/Info/Index \
 \
-extract CDS of reference specie and map the to the query genome using minimap2 
-
+extract CDS of reference specie and map the to the query genome using minimap2 \
+If for a gene, there are multiple transcripts, only one transcript would be used. \
+The gff2seq output the concatenated CDS for transcript being used. \
+Since minimap2 could not deal with short CDS very well, and that impacts the identification of anchor positions on the query genome. Those short CDS would be ignored. (-m parameter)
 ```
 proali gff2seq -i Zea_mays.AGPv4.34.gff3 -r Zea_mays.AGPv4.dna.toplevel.fa  -o cds.fa
 minimap2 -ax splice -t 90 -a -uf -p 0.4 -C5 Sorghum_bicolor.Sorghum_bicolor_NCBIv3.dna.toplevel.fa ../primary_cds.fasta >cds.sam

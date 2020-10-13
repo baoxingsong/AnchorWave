@@ -13,7 +13,8 @@ TEST(readGffFileWithEveryThing, c1){ // just to make sure that every line has be
     std::map<std::string, std::vector<std::string> > geneNameMap;
     std::map<std::string, Gene > geneHashMap;
     std::map<std::string, Transcript> transcriptHashMap;
-    readGffFileWithEveryThing(gffFilePath, geneNameMap, geneHashMap, transcriptHashMap);
+    int minExon = 20;
+    readGffFileWithEveryThing(gffFilePath, geneNameMap, geneHashMap, transcriptHashMap, minExon);
     ASSERT_EQ(0, 0);
 }
 TEST(readGffFileWithEveryThing, c2){// just to make sure that every line has been analysed
@@ -21,7 +22,8 @@ TEST(readGffFileWithEveryThing, c2){// just to make sure that every line has bee
     std::map<std::string, std::vector<std::string> > geneNameMap;
     std::map<std::string, Gene > geneHashMap;
     std::map<std::string, Transcript> transcriptHashMap;
-    readGffFileWithEveryThing(gffFilePath, geneNameMap, geneHashMap, transcriptHashMap);
+    int minExon = 20;
+    readGffFileWithEveryThing(gffFilePath, geneNameMap, geneHashMap, transcriptHashMap, minExon);
 
     for( std::map<std::string, std::vector<std::string> >::iterator it=geneNameMap.begin(); it != geneNameMap.end(); ++it ){
         for( std::vector<std::string>::iterator it2=it->second.begin(); it2 != it->second.end(); ++it2 ){
@@ -39,6 +41,7 @@ TEST(readGffFileWithEveryThing, c3){// just to make sure that every line has bee
     std::map<std::string, std::vector<std::string> > geneNameMap;
     std::map<std::string, Gene > geneHashMap;
     std::map<std::string, Transcript> transcriptHashMap;
-    readGffFileWithEveryThing(gffFilePath, geneNameMap, geneHashMap, transcriptHashMap);
+    int minExon = 20;
+    readGffFileWithEveryThing(gffFilePath, geneNameMap, geneHashMap, transcriptHashMap, minExon);
     ASSERT_EQ(0, 0);
 }

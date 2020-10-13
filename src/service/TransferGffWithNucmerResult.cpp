@@ -172,7 +172,8 @@ void readSam(std::vector<AlignmentMatch> & alignmentMatchsMapT, std::ifstream & 
 }
 
 
-void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, const std::string & samFile, std::map<std::string, std::vector<AlignmentMatch>> & alignmentMatchsMap, double & inversion_PENALTY, double & MIN_ALIGNMENT_SCORE, bool & considerInversion){
+void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, const std::string & samFile, std::map<std::string, std::vector<AlignmentMatch>> & alignmentMatchsMap,
+        double & inversion_PENALTY, double & MIN_ALIGNMENT_SCORE, bool & considerInversion, const int & minExon){
     std::ifstream infile(samFile);
     if( ! infile.good()){
         std::cerr << "error in opening sam file " << samFile << std::endl;
@@ -182,7 +183,7 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
     std::map<std::string, std::vector<std::string> > geneNameMap; // key is chromosome and value is gene names
     std::map<std::string, Gene> geneHashMap;  // key is gene name, value is a gene structure
     std::map<std::string, Transcript> transcriptHashMap; // key is transcript name, value is a transcript structure
-    readGffFileWithEveryThing(gffFilePath, geneNameMap, geneHashMap, transcriptHashMap);
+    readGffFileWithEveryThing(gffFilePath, geneNameMap, geneHashMap, transcriptHashMap, minExon);
 
     std::vector<AlignmentMatch> alignmentMatchsMapT0;
 
@@ -232,7 +233,7 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
 void setupAnchorsWithSpliceAlignmentResultQuota( const std::string & gffFilePath, const std::string & samFile, std::vector<std::vector<AlignmentMatch>> & alignmentMatchsMap,
                                                  double & INDEL_SCORE, double & GAP_OPEN_PENALTY, double & MIN_ALIGNMENT_SCORE,
                                                  int & MAX_DIST_BETWEEN_MATCHES, int & refMaximumTimes, int & queryMaximumTimes,
-                                                  double & calculateIndelDistance){
+                                                  double & calculateIndelDistance, const int & minExon){
     std::ifstream infile(samFile);
     if( ! infile.good()){
         std::cerr << "error in opening sam file " << samFile << std::endl;
@@ -242,7 +243,7 @@ void setupAnchorsWithSpliceAlignmentResultQuota( const std::string & gffFilePath
     std::map<std::string, std::vector<std::string> > geneNameMap; // key is chromosome and value is gene names
     std::map<std::string, Gene> geneHashMap;  // key is gene name, value is a gene structure
     std::map<std::string, Transcript> transcriptHashMap; // key is transcript name, value is a transcript structure
-    readGffFileWithEveryThing(gffFilePath, geneNameMap, geneHashMap, transcriptHashMap);
+    readGffFileWithEveryThing(gffFilePath, geneNameMap, geneHashMap, transcriptHashMap, minExon);
 
     std::vector<AlignmentMatch> alignmentMatchsMapT;
 

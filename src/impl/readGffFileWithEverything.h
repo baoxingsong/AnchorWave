@@ -10,13 +10,13 @@
 
 void readGffFileWithEveryThing (const std::string& filePath, std::map<std::string, std::vector<std::string> > & geneNameMap,
                                 std::map<std::string, Gene > & geneHashMap,
-                                std::map<std::string, Transcript> & transcriptHashMap);
+                                std::map<std::string, Transcript> & transcriptHashMap, const int & minExon);
 void readGffFileWithEveryThing (const std::string& filePath, std::map<std::string, std::vector<std::string> > & geneNameMap,
                                 std::map<std::string, Gene > & geneHashMap,
                                 std::map<std::string, Transcript> & transcriptHashMap,
                                 std::set<std::string> & cdsParentRegex, std::set<std::string> & transcriptParentRegex,
                                 std::set<std::string> & transcriptIdRegex, std::set<std::string> & geneIdRegex, std::set<std::string> & transcriptNickNames,
-                                std::set<std::string> & geneNickNames, std::set<std::string> & ignoreTypes);
+                                std::set<std::string> & geneNickNames, std::set<std::string> & ignoreTypes, const int & minExon);
 
 
 

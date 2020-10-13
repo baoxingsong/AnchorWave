@@ -4,17 +4,18 @@
 
 #include "readGffFile.h"
 
-void readGffFile (const std::string& filePath, std::map<std::string, std::vector<Transcript> >& transcriptHashSet){
+void readGffFile (const std::string& filePath, std::map<std::string, std::vector<Transcript> >& transcriptHashSet, const int & minExon){
     std::string cdsParentRegex="([\\s\\S]*)Parent=([\\s\\S]*?)[;,][\\s\\S]*$";
-    readGffFile (filePath, transcriptHashSet, cdsParentRegex);
+    readGffFile (filePath, transcriptHashSet, cdsParentRegex, minExon);
 }
 
 void get_transcript_to_gene_map_from_gff (const std::string& filePath, std::map<std::string, std::string >& transcript_to_gene_map){
 
     std::set<std::string> transcriptParentRegex;
-    transcriptParentRegex.insert("Parent=([\\s\\S]*?)[;,]");
-    transcriptParentRegex.insert("gene_id\\s*\"([\\s\\S]*?)\"[;,]");
-    transcriptParentRegex.insert("Parent=([-_0-9:a-zA-Z.]*?)$");
+    transcriptParentRegex.insert("ID=(\\S+?);Parent=(\\S+?);");
+//    transcriptParentRegex.insert("Parent=([\\s\\S]*?)[;,]");
+//    transcriptParentRegex.insert("gene_id\\s*\"([\\s\\S]*?)\"[;,]");
+//    transcriptParentRegex.insert("Parent=([-_0-9:a-zA-Z.]*?)$");
     std::vector<std::regex> regTranscriptParents;
     for( std::string transcript : transcriptParentRegex ){
         std::regex regTranscript(transcript);
@@ -35,13 +36,14 @@ void get_transcript_to_gene_map_from_gff (const std::string& filePath, std::map<
             } else {
                 std::string transcript_id = match[1];
                 std::string gene_id = match[2];
+//                std::cout << transcript_id << "\t" << gene_id << std::endl;
                 transcript_to_gene_map[transcript_id] = gene_id;
             }
         }
     }
 }
 
-void readGffFile (const std::string& filePath, std::map<std::string, std::vector<Transcript> >& transcriptHashSet, const std::string& cdsParentRegex){
+void readGffFile (const std::string& filePath, std::map<std::string, std::vector<Transcript> >& transcriptHashSet, const std::string& cdsParentRegex, const int & minExon){
     std::map<std::string, Transcript> transcriptHashMap;
     std::ifstream infile(filePath);
     if( ! infile.good()){
@@ -63,22 +65,24 @@ void readGffFile (const std::string& filePath, std::map<std::string, std::vector
                 start = end;
                 end = temp;
             }
-            std::string information = match[9];
-            if(transcriptHashMap.find(information) != transcriptHashMap.end() ){
-            }else{
-                std::string chromosomeName = match[1];
-                STRAND strand;
-                if( match[6].compare("-") == 0){
-                    strand = NEGATIVE;
+            if( (end-start+1) >= minExon ){
+                std::string information = match[9];
+                if(transcriptHashMap.find(information) != transcriptHashMap.end() ){
                 }else{
-                    strand = POSITIVE;
+                    std::string chromosomeName = match[1];
+                    STRAND strand;
+                    if( match[6].compare("-") == 0){
+                        strand = NEGATIVE;
+                    }else{
+                        strand = POSITIVE;
+                    }
+                    Transcript transcript1 (information, chromosomeName, strand);
+                    transcriptHashMap[information] = transcript1;
                 }
-                Transcript transcript1 (information, chromosomeName, strand);
-                transcriptHashMap[information] = transcript1;
+                GenomeBasicFeature cds(start, end);
+                //cds.setTranscript(transcriptHashMap[information]);
+                transcriptHashMap[information].addCds(cds);
             }
-            GenomeBasicFeature cds(start, end);
-            //cds.setTranscript(transcriptHashMap[information]);
-            transcriptHashMap[information].addCds(cds);
         }
     }
     for (std::map<std::string, Transcript>::iterator it=transcriptHashMap.begin(); it!=transcriptHashMap.end(); ++it){

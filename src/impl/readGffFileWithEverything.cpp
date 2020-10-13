@@ -1,11 +1,13 @@
 //
 // Created by Baoxing song on 08.08.18.
+// this function here does not read real GFF correctly, it ignores short CDS.
+// It is designed to do so.
 //
 
 #include "readGffFileWithEverything.h"
 void readGffFileWithEveryThing (const std::string& filePath, std::map<std::string, std::vector<std::string> > & geneNameMap,
                                 std::map<std::string, Gene > & geneHashMap,
-                                std::map<std::string, Transcript> & transcriptHashMap){
+                                std::map<std::string, Transcript> & transcriptHashMap, const int & minExon){
     std::set<std::string> cdsParentRegex;
     std::set<std::string> transcriptParentRegex;
     std::set<std::string> transcriptIdRegex;
@@ -93,7 +95,8 @@ void readGffFileWithEveryThing (const std::string& filePath, std::map<std::strin
     ignoreTypes.insert("contig");
     ignoreTypes.insert("miRNA_gene");
     readGffFileWithEveryThing (filePath, geneNameMap, geneHashMap, transcriptHashMap,
-                               cdsParentRegex, transcriptParentRegex, transcriptIdRegex, geneIdRegex, transcriptNickNames, geneNickNames, ignoreTypes);
+                               cdsParentRegex, transcriptParentRegex, transcriptIdRegex, geneIdRegex,
+                               transcriptNickNames, geneNickNames, ignoreTypes, minExon);
 }
 
 void readGffFileWithEveryThing (const std::string& filePath, std::map<std::string, std::vector<std::string> > & geneNameMap,
@@ -101,7 +104,7 @@ void readGffFileWithEveryThing (const std::string& filePath, std::map<std::strin
                                 std::map<std::string, Transcript> & transcriptHashMap,
         std::set<std::string> & cdsParentRegex, std::set<std::string> & transcriptParentRegex,
         std::set<std::string> & transcriptIdRegex, std::set<std::string> & geneIdRegex, std::set<std::string> & transcriptNickNames,
-        std::set<std::string> & geneNickNames, std::set<std::string> & ignoreTypes){
+        std::set<std::string> & geneNickNames, std::set<std::string> & ignoreTypes, const int & minExon){
     std::ifstream infile(filePath);
     if( ! infile.good()){
         std::cerr << "error in opening GFF/GTF file " << filePath << std::endl;
@@ -239,7 +242,7 @@ void readGffFileWithEveryThing (const std::string& filePath, std::map<std::strin
                                 << "the transcript record does not fellow the regular expression provided for finding gene ID, please check"
                                 << std::endl << line << std::endl;
                     }
-                } else if (elemetns[2].compare("CDS") == 0) {
+                } else if (elemetns[2].compare("CDS") == 0 && (end-start+1) >= minExon ) {
                     //                std::cout << "line 188" << std::endl;
                     matched = false;
                     for (std::regex regCdsParent : regCdsParents) {

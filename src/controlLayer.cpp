@@ -35,7 +35,7 @@ int gff2seq(int argc, char** argv, std::map<std::string, std::string>& parameter
           " -i FILE   reference genome in GFF/GTF format" << std::endl <<
           " -r FILE   genome sequence in fasta format" << std::endl <<
           " -o FILE   output file of the longest CDS for each gene" << std::endl <<
-          " -m INT    minimum intron size for a functional ORF (default:5)" << std::endl << std::endl;
+          " -m INT    minimum exon to output (default: 20)" << std::endl <<std::endl;
 
     InputParser inputParser (argc, argv);
     if(inputParser.cmdOptionExists("-h") ||inputParser.cmdOptionExists("--help")  ){
@@ -45,18 +45,14 @@ int gff2seq(int argc, char** argv, std::map<std::string, std::string>& parameter
         std::string genome = inputParser.getCmdOption("-r");
         std::string outputCdsSequences = inputParser.getCmdOption("-o");
 
-        int minIntron;
+        int minExon;
         if( inputParser.cmdOptionExists("-m") ){
-            minIntron = std::stoi( inputParser.getCmdOption("-m") );
+            minExon = std::stoi( inputParser.getCmdOption("-m") );
         }else{
-            minIntron=5;
+            minExon=20;
         }
 
-        if( minIntron < 5 ){
-            std::cerr << "the intron size should be 5 at minimum" << std::endl;
-            exit(1);
-        }
-        getSequences( inputGffFile, genome, outputCdsSequences, parameters, minIntron);
+        getSequences( inputGffFile, genome, outputCdsSequences, parameters, minExon);
         return 0;
     }else{
         std::cerr << usage.str();
@@ -85,10 +81,11 @@ int genomeAlignment(int argc, char** argv, std::map<std::string, std::string>& p
           " -r  FILE    reference genome sequence" << std::endl <<
           " -a  FILE    sam file" << std::endl <<
           " -s  FILE    target genome sequence" << std::endl <<
-          " -o  FILE    output anchors" << std::endl <<
-          " -m  FILE    output file in maf format" << std::endl <<
+          " -n  FILE    output anchors" << std::endl <<
+          " -o  FILE    output file in maf format" << std::endl <<
           " -f  FILE    output sequence alignment for each block in maf format (any block with size larger than window width would be ignored)" << std::endl <<
           " -v  FILE    output variant calling in vcf format (conflict with -IV)" << std::endl <<
+          " -m  INT     minimum exon to use (default: 20, should be identical with the setting of gff2seq function)"
           " -A  INT     Matching score (default: " << matchingScore << ")" << std::endl <<
           " -B  INT     Mismatching penalty (default: " << mismatchingPenalty << ")" << std::endl <<
           " -O1 INT     open gap penalty (default: " << openGapPenalty1 << ")" << std::endl <<
@@ -103,7 +100,7 @@ int genomeAlignment(int argc, char** argv, std::map<std::string, std::string>& p
         std::cerr << usage.str();
     } else if (inputParser.cmdOptionExists("-i") && inputParser.cmdOptionExists("-r") &&
                inputParser.cmdOptionExists("-a") && inputParser.cmdOptionExists("-s") &&
-             (inputParser.cmdOptionExists("-m") || inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-v")  || inputParser.cmdOptionExists("-o")  ) ) {
+             (inputParser.cmdOptionExists("-n") || inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-v")  || inputParser.cmdOptionExists("-o")  ) ) {
 
         std::string refGffFilePath = inputParser.getCmdOption("-i");
         std::string referenceGenomeSequence = inputParser.getCmdOption("-r");
@@ -111,8 +108,8 @@ int genomeAlignment(int argc, char** argv, std::map<std::string, std::string>& p
         std::string targetGenomeSequence = inputParser.getCmdOption("-s");
 
         std::string outPutMafFile="";
-        if (inputParser.cmdOptionExists("-m") ){
-            outPutMafFile = inputParser.getCmdOption("-m");
+        if (inputParser.cmdOptionExists("-o") ){
+            outPutMafFile = inputParser.getCmdOption("-o");
         }
 
         std::string outPutFragedFile;
@@ -164,12 +161,18 @@ int genomeAlignment(int argc, char** argv, std::map<std::string, std::string>& p
                 return 1;
             }
         }
+        int minExon;
+        if( inputParser.cmdOptionExists("-m") ){
+            minExon = std::stoi( inputParser.getCmdOption("-m") );
+        }else{
+            minExon=20;
+        }
 
-        setupAnchorsWithSpliceAlignmentResult( refGffFilePath, samFilePath, alignmentMatchsMap, inversion_PENALTY,  MIN_ALIGNMENT_SCORE, considerInversion);
+        setupAnchorsWithSpliceAlignmentResult( refGffFilePath, samFilePath, alignmentMatchsMap, inversion_PENALTY,  MIN_ALIGNMENT_SCORE, considerInversion, minExon);
 
-        if( inputParser.cmdOptionExists("-o") ) {
+        if( inputParser.cmdOptionExists("-n") ) {
             std::ofstream ofile;
-            ofile.open(inputParser.getCmdOption("-o"));
+            ofile.open(inputParser.getCmdOption("-n"));
             int blockIndex = 0;
             ofile << "refChr" << "\t"
                   << "referenceStart" << "\t"
@@ -282,6 +285,7 @@ int proportationalAlignment(int argc, char** argv, std::map<std::string, std::st
           " -B  INT     Mismatching penalty (default: " << mismatchingPenalty << ")" << std::endl <<
           " -O1 INT     open gap penalty (default: " << openGapPenalty1 << ")" << std::endl <<
           " -E1 INT     extend gap penalty (default: " << extendGapPenalty1 << ")" << std::endl <<
+          " -m  INT     minimum exon to use (default: 20, should be identical with the setting of gff2seq function)"
           " advanced options" << std::endl<<
           " -y  INT     minimum score to report a local sequence alignment (default: "<<scoreThreshold<<")" << std::endl <<
           " -sw  INT    the windows size used to run the smith-waterman algorithm to get the alignment seed (default: "<<seed_window_size<<")" << std::endl <<
@@ -377,12 +381,18 @@ int proportationalAlignment(int argc, char** argv, std::map<std::string, std::st
             std::cout << "please do not perform local alignment and global alignment for each interval at the same time" << std::endl;
             return 1;
         }
+        int minExon;
+        if( inputParser.cmdOptionExists("-m") ){
+            minExon = std::stoi( inputParser.getCmdOption("-m") );
+        }else{
+            minExon=20;
+        }
 
         std::vector<std::vector<AlignmentMatch>> alignmentMatchsMap;
 
         setupAnchorsWithSpliceAlignmentResultQuota( refGffFilePath, samFilePath, alignmentMatchsMap, INDEL_SCORE, GAP_OPEN_PENALTY, MIN_ALIGNMENT_SCORE,
                                                     MAX_DIST_BETWEEN_MATCHES, refMaximumTimes, queryMaximumTimes,
-                                                    calculateIndelDistance);
+                                                    calculateIndelDistance, minExon);
 
         std::ofstream ofile;
         ofile.open(outPutFilePath + ".forPlotQuota");

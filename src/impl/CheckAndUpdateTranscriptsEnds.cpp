@@ -62,12 +62,12 @@ void CheckAndUpdateTranscriptsEnds(std::map<std::string, std::vector<Transcript>
             if( it1->getIfOrfShift() && it1->getMetaInformation().find("notEndWithStopCodon")!=std::string::npos ){
                 ++caseNumber;
             }
-            if( checkedNumber >= 100 ){
+            if( checkedNumber >= 10000 ){
                 break;
             }
         }
     }
-    if( caseNumber > 95 ){
+    if( caseNumber > 9500 ){
         for( std::map<std::string, std::vector<Transcript>>::iterator it = transcriptHashSet.begin();
              it != transcriptHashSet.end(); ++it){
             for( std::vector<Transcript>::iterator it1=it->second.begin(); it1!=it->second.end(); ++it1 ){
