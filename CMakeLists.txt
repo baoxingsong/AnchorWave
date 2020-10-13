@@ -109,20 +109,7 @@ add_executable(proali
         WFA/system/profiler_timer.c
         WFA/system/profiler_timer.h
         WFA/benchmark/benchmark_edit.h
-        WFA/benchmark/benchmark_gap_affine.c
-        WFA/benchmark/benchmark_gap_affine.h
-        WFA/benchmark/benchmark_gap_lineal.c
-        WFA/benchmark/benchmark_gap_lineal.h
-        WFA/benchmark/benchmark_utils.c
-        WFA/benchmark/benchmark_utils.h
-        WFA/utils/commons.c
-        WFA/utils/commons.h
-        WFA/utils/dna_text.c
-        WFA/utils/dna_text.h
-        WFA/utils/string_padded.c
-        WFA/utils/string_padded.h
-        WFA/utils/vector.c
-        WFA/utils/vector.h
+
         WFA/system/mm_allocator.c
         WFA/system/mm_allocator.h
         WFA/gap_affine/affine_penalties.c
