@@ -390,11 +390,12 @@ int proportationalAlignment(int argc, char** argv, std::map<std::string, std::st
         ofile << "refChr" << "\t"
               << "referenceStart" << "\t"
               << "referenceEnd" << "\t"
-              << "queryStart" << "\t"
               << "queryChr" << "\t"
               << "queryStart" << "\t"
               << "queryEnd" << "\t"
-              << "blockIndex" <<"\t geneId" << std::endl;
+              << "strand" << "\t"
+              << "gene" << "\t"
+              << "blockIndex" << std::endl;
 
         size_t  totalAnchors = 0;
         int blockIndex = 0;
@@ -417,6 +418,7 @@ int proportationalAlignment(int argc, char** argv, std::map<std::string, std::st
                                << alignmentMatchs[rangeIndex-1].getQueryEndPos()+1 << "\t"
                                << alignmentMatchs[rangeIndex].getQueryStartPos()-1 << "\t"
                                 << "+" << "\t" <<
+                                "intergenetic" << "\t" <<
                                 blockIndex << std::endl;
                     }else if( alignmentMatchs[rangeIndex].getStrand() == NEGATIVE &&  alignmentMatchs[rangeIndex-1].getStrand() == NEGATIVE ) {
                         ofile << alignmentMatchs[rangeIndex].getRefChr() << "\t"
@@ -426,6 +428,7 @@ int proportationalAlignment(int argc, char** argv, std::map<std::string, std::st
                                << alignmentMatchs[rangeIndex].getQueryEndPos() +1 << "\t"
                                << alignmentMatchs[rangeIndex-1].getQueryStartPos()-1 << "\t"
                                 << "-" << "\t" <<
+                                "intergenetic" << "\t" <<
                                 blockIndex << std::endl;
                     }
                 }
@@ -435,7 +438,7 @@ int proportationalAlignment(int argc, char** argv, std::map<std::string, std::st
                       << alignmentMatchs[rangeIndex].getQueryChr() << "\t"
                       << alignmentMatchs[rangeIndex].getQueryStartPos() << "\t"
                       << alignmentMatchs[rangeIndex].getQueryEndPos() << "\t"
-                      << alignmentMatchs[rangeIndex].getStrand() << "\t"
+                      << thisStrand << "\t"
                       << alignmentMatchs[rangeIndex].getReferenceGeneName() << "\t" <<
                       blockIndex << std::endl;
             }

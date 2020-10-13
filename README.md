@@ -8,7 +8,8 @@ Using the alignment of conversed sequence (currently, only CDS being used), prog
 ### Dependencies
 GNU GCC >=6.0 \
 Cmake >= 3.0 \
-minimap2
+[minimap2](https://github.com/lh3/minimap2)
+
 ```
 git clone https://github.com/baoxingsong/proali.git
 cd proali
@@ -41,7 +42,7 @@ minimap2 -ax splice -t 90 -a -uf -p 0.4 -C5 Sorghum_bicolor.Sorghum_bicolor_NCBI
 proali proali -i Zea_mays.AGPv4.34.gff3 -r Zea_mays.AGPv4.dna.toplevel.fa -a cds.sam -s Sorghum_bicolor.Sorghum_bicolor_NCBIv3.dna.toplevel.fa -w 20000 -R 1 -Q 2 -O 0 -D 32 -o alignment -f
 ```
 
-### genome alignment without rearrangement
+### genome alignment without relocation rearrangement (works with inversions)
 This module perform base pair resolution sequence alignment for two genomes. A query chromosome sequence would be aligned against the reference chromosome with the same name end-to-end. \
 Inversions \
 The output could be end-to-end sequence alignment for the whole chromosome in maf format. \
