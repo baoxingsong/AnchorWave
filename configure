@@ -1,0 +1,20 @@
+#this file has all the parameter which would not be assigned from command line for all the functions
+#If you don't know the meaning of every one, while want to know weather a certain parameter important for the function you are running.
+#You could just remove this parameter and run the interesting function. If the removed function does mater for the interesting function, the software would give waring message and stop.
+# parameters for gene structure realignment scoring begin
+
+#regular to parse reference gff file. Get the map from transcript id to gene id
+transcript_to_gene_regex_reference_gff  [\s\S]*?CDS[\s\S]*?Parent=((\S*?)\.\d+)
+#regular to parse additional gff file. Get the map from transcript id to gene id
+transcript_to_gene_regex_novo_gff   transcript[\s\S]*?ID=(\S*?);Parent=(\S+)
+#regular to parse reference gff file. Get the map from CDS records to transcript id
+#it seems C++ have problem with \w and \d
+cdsParentRegex  ([\s\S]*)Parent=([abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.:_-]+)
+#regular to parse additional gff file. Get the map from CDS records to transcript id
+novo_cdsParentRegex [\s\S]*?ID=([\s\S]*?);Parent=([\s\S]*?)$
+# regular expression to get the file name of gff file. The file name would be used as the prefix for temp files
+temp_file_regex  [\s\S]*[(\\)(\/)]([\s\S]*)
+maxintronlength   30000
+minintronlength   10
+MsaPreFolder    ./MsaPreFolder
+
