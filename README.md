@@ -3,7 +3,7 @@
 AnchorWave (Anchored Wavefront Alignment) identifies collinear regions via conserved anchors (full-length CDS and full-length exon have been implemented currently) and breaks collinear regions into shorter fragments, i.e., anchor and inter-anchor intervals. By performing sensitive sequence alignment for each shorter interval via a 2-piece affine gap cost strategy and merging them together, AnchorWave generates a whole-genome alignment for each collinear block. AnchorWave implements commands to guide collinear block identification with or without chromosomal rearrangements and provides options to use known polyploidy levels or whole-genome duplications to inform alignment.
 ## Principle of the AnchorWave process
 <p align="center">
-<img src="./doc/workflow.png" width="450px" background-color="#ffffff" />
+<img src="./doc/workflow.png" width="800px" background-color="#ffffff" />
 </p>
 AnchorWave takes the reference genome sequence and gene annotation as input and extracts reference full-length coding sequences (CDS) to use as anchors. We use minimap2 to lift over the position of reference full-length CDS to the query genome (step 1). AnchorWave then identifies collinear anchors using one of three user-specified algorithm options (step 2) and uses the [WFA](https://github.com/smarco/WFA) algorithm to perform alignment for each anchor and inter anchor interval (step 4). Some anchor/inter-anchor regions cannot be aligned using our standard approach due to high memory and computational time costs. For these, AnchorWave either identifies novel anchors within long inter-anchor regions (step 3), or for those that cannot be split by novel anchors, aligns using the ksw_extd2_sse function implemented in minimap2 or a reimplemented sliding window approach (step 4). AnchorWave concatenates base pair sequence alignment for each anchor and inter-anchor region and outputs the alignment in MAF format (step 5).
 
@@ -13,11 +13,11 @@ Table of Contents
     1. [Dependencies](#Dependencies)
     2. [Compile](#Compile)
 2. [Usage](#Usage)
-    1. [Lift over the reference CDS coordinates to the query genome](#Lift over the reference CDS coordinates to the query genome (command 1-3))
-    2. [Genome alignment without chromosomal rearrangement](#Genome alignment without chromosomal rearrangement (an option of command 4))
-    3. [Genome alignment without translocation rearrangement while with inversions](#Genome alignment without translocation rearrangement while with inversions (an option of command 4))
-    4. [Genome alignment with relocation variation, chromosome fusion or whole genome duplication](#Genome alignment with relocation variation, chromosome fusion or whole genome duplication (an option of command 4))
-3. [Tips for following analysis](#Tips for following analysis)
+    1. [Lift over the reference CDS coordinates to the query genome](#lift-over-the-reference-cds-coordinates-to-the-query-genome-command-1-3)
+    2. [Genome alignment without chromosomal rearrangement](#genome-alignment-without-chromosomal-rearrangement-an-option-of-command-4)
+    3. [Genome alignment without translocation rearrangement while with inversions](#genome-alignment-without-translocation-rearrangement-while-with-inversions-an-option-of-command-4)
+    4. [Genome alignment with relocation variation, chromosome fusion or whole genome duplication](#genome-alignment-with-relocation-variation-chromosome-fusion-or-whole-genome-duplication-an-option-of-command-4)
+3. [Tips for following analysis](#tips-for-following-analysis)
 4. [Guidelines](#Guidelines)
 5. [FAQ](#FAQ)
 6. [Contact](#Contact)
