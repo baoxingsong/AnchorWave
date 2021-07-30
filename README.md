@@ -25,7 +25,7 @@ Table of Contents
 8. [Citation](#Citation)
 ## Install
 ### Dependencies
-GNU GCC >=6.0  
+GNU GCC >=7.0  
 Cmake >= 3.0  
 [minimap2](https://github.com/lh3/minimap2)
 ### Compile
@@ -36,6 +36,8 @@ cmake ./
 make
 ```
 You will get an executable file named ```anchorwave ```. If you would like to move ```anchorwave``` to a new place, please always put ```configure``` and ```anchorwave``` into the same folder.
+The code has been tested under Ubuntu 20.2 and CentOS 7 with intel/AMD CPU. It should work well on other REDHAT or Debian based Linux Distributions.
+
 ## Usage
 In general, totally four commands are need to run through the whole pipeline.  
 1) extract CDS  
