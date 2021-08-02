@@ -12,8 +12,8 @@ set(CMAKE_CXX_STANDARD 14)
 
 find_package(ZLIB)
 
-set(CMAKE_CXX_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -I ./ -std=gnu++14 -pthread")
-set(CMAKE_C_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -I ./ -pthread")
+set(CMAKE_CXX_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -I ./ -std=gnu++14 -pthread -lrt")
+set(CMAKE_C_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -I ./ -pthread -lrt")
 #for google unit test
 add_subdirectory(./googletest/googletest)
 include_directories(googletest/googletest/include googletest/googletest)
