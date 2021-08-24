@@ -223,7 +223,7 @@ minimap2 -x splice -t 6 -k 12 -a -p 0.4 -N 20 Sorghum_bicolor.Sorghum_bicolor_NC
 minimap2 -x splice -t 6 -k 12 -a -p 0.4 -N 20 Zea_mays.AGPv4.dna.toplevel.fa cds.fa > ref.sam
 /usr/bin/time anchorwave proali -i Zea_mays.AGPv4.34.gff3 -as cds.fa -r Zea_mays.AGPv4.dna.toplevel.fa -a cds.sam -ar ref.sam \
   -s Sorghum_bicolor.Sorghum_bicolor_NCBIv3.dna.toplevel.fa -n anchors -e 2 -R 1 -Q 2 \
-  -o alignment.maf -f alignment.f.maf -w 120000 -fa 80000 -fa2 120000 -fa3 80000 > log 2>&1
+  -o alignment.maf -f alignment.f.maf -w 38000 -fa3 200000 > log 2>&1
 ```
 
 
