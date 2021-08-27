@@ -1113,7 +1113,7 @@ int64_t alignSlidingWindow( std::string& align_ref2, std::string& align_query, c
             SR1.pop();
         }
     }else{
-        std::cout << "line 1116" << std::endl;
+//        std::cout << "line 1116" << std::endl;
         while( databaseStart<=_length_of_d && queryStart<=_length_of_q){
             databaseEnd=databaseStart+slidingWindowSize;
             queryEnd=queryStart+slidingWindowSize;
@@ -1123,13 +1123,13 @@ int64_t alignSlidingWindow( std::string& align_ref2, std::string& align_query, c
             if( queryEnd>_length_of_q ){
                 queryEnd=_length_of_q;
             }
-            std::cout << dna_query.size() << "\t" << queryStart << "\t" << queryEnd << std::endl;
-            std::cout << dna_ref2.size() << "\t" << queryStart << "\t" << queryEnd << std::endl;
-            std::cout << dna_ref1.size() << "\t" << databaseStart << "\t" << databaseEnd << std::endl;
+//            std::cout << dna_query.size() << "\t" << queryStart << "\t" << queryEnd << std::endl;
+//            std::cout << dna_ref2.size() << "\t" << queryStart << "\t" << queryEnd << std::endl;
+//            std::cout << dna_ref1.size() << "\t" << databaseStart << "\t" << databaseEnd << std::endl;
             std::string qSeq = getSubsequence(dna_query, queryStart, queryEnd );
             std::string d2Seq = getSubsequence(dna_ref2, queryStart, queryEnd );
             std::string d1Seq = getSubsequence(dna_ref1, databaseStart, databaseEnd );
-            std::cout << "line 1129" << std::endl;
+//            std::cout << "line 1129" << std::endl;
             std::stack<char> SQ;
             std::stack<char> SR1;
             std::stack<char> SR2;
@@ -1342,10 +1342,13 @@ int64_t alignSlidingWindow_minimap2( const std::string& dna_q, const std::string
 //    std::cout << "line 369" << std::endl;
 //    void *km = 0;
 #ifdef __AVX512BW__
+    std::cout << "using AVX512" << std::endl;
     ksw_extd2_avx512(0, ql, qs, tl, ts, 5, mat, -openGapPenalty1, -extendGapPenalty1, -openGapPenalty2, -extendGapPenalty2, slidingWindowSize, -1, 0, 0, & ez);
 #elif __AVX2__
+    std::cout << "using AVX2" << std::endl;
     ksw_extd2_avx2(0, ql, qs, tl, ts, 5, mat, -openGapPenalty1, -extendGapPenalty1, -openGapPenalty2, -extendGapPenalty2, slidingWindowSize, -1, 0, 0, & ez);
 #else
+    std::cout << "using SSE4" << std::endl;
     ksw_extd2_sse(0, ql, qs, tl, ts, 5, mat, -openGapPenalty1, -extendGapPenalty1, -openGapPenalty2, -extendGapPenalty2, slidingWindowSize, -1, 0, 0, & ez);
 #endif
   //  std::cout << "line 371" << std::endl;

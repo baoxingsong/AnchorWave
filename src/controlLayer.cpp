@@ -372,7 +372,7 @@ int genomeAlignment(int argc, char** argv, std::map<std::string, std::string>& p
             for ( int i=1; i<argc; ++i ){
                 wholeCommand = wholeCommand + " " + argv[i];
             }
-            std::cout << "control line 375" << std::endl;
+//            std::cout << "control line 375" << std::endl;
             std::ofstream ofile;
             ofile.open(inputParser.getCmdOption("-n"));
             ofile << "#" << PROGRAMNAME << " " << wholeCommand << std::endl;
