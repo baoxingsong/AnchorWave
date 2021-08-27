@@ -14,8 +14,8 @@ find_package(ZLIB)
 
 #
 
-set(CMAKE_CXX_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -msse4.1 -msse4.2 -I ./ -std=gnu++14 -pthread") # the -mavx* is for GNU compiler and xCORE* are for intel compiler
-set(CMAKE_C_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -msse4.1 -msse4.2 -I ./ -pthread")
+set(CMAKE_CXX_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -mavx2 -msse4.1 -msse4.2 -I ./ -std=gnu++14 -pthread") # the -mavx* is for GNU compiler and xCORE* are for intel compiler
+set(CMAKE_C_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -mavx2 -msse4.1 -msse4.2 -I ./ -pthread")
 #for google unit test
 add_subdirectory(./googletest/googletest)
 include_directories(googletest/googletest/include googletest/googletest)

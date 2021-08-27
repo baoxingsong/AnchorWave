@@ -412,6 +412,7 @@ void readSam(std::vector<AlignmentMatch> & alignmentMatchsMapT, std::ifstream & 
                             }
                         }
                     }
+//                    std::cout << chromosomePosition << "\t" << transcriptHashMap[elems[0]].getPStart() << "\t" << transcriptHashMap[elems[0]].getPEnd() << "\t" << elems[0] << std::endl;
                     assert( chromosomePosition==transcriptHashMap[elems[0]].getPEnd());
                 }else{
                     int32_t cdsPosition = 0;
@@ -599,7 +600,7 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
     if( exonModel ){
 
     }else{
-        CheckAndUpdateTranscriptsEnds(transcriptHashSet, referenceGenome, nucleotideCodeSubstitutionMatrix);
+        //CheckAndUpdateTranscriptsEnds(transcriptHashSet, referenceGenome, nucleotideCodeSubstitutionMatrix);
     }
     std::map<std::string, Transcript> transcriptHashMap; // key is transcript name, value is a transcript structure
     for( std::map<std::string, std::vector<Transcript> >::iterator it = transcriptHashSet.begin(); it!=transcriptHashSet.end(); ++it ){
@@ -771,8 +772,8 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
                         if ( (refSeq.size() * querySeq.size() > wfaSize3 * wfaSize3) &&
                             (refSeq.size() > k && querySeq.size() > k) && blackList.find(startRef)==blackList.end() ) {
 
-//                            std::cout << "line 667" << std::endl;
- //                           std::cout << refSeq << "\t" << querySeq << std::endl;
+//                            std::cout << "line 774" << std::endl;
+//                            std::cout << refSeq << "\t" << querySeq << std::endl;
                             mm_idxopt_t iopt;
                             mm_mapopt_t mopt;
                             mm_verbose = 2; // disable message output to stderr
@@ -863,6 +864,7 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
                             delete(reference_seq_array);
                             delete(query_seq_array);
                         }
+//                        std::cout << "line 866" << std::endl;
                     }
                 } else if (lastStrand == NEGATIVE && alignmentMatch.getStrand() == NEGATIVE
 //                        && lastAlignmentMatch.getRefEndPos() < alignmentMatch.getRefStartPos()
@@ -885,7 +887,8 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
                             (refSeq.size() > k && querySeq.size() > k)  && blackList.find(startRef)==blackList.end()) {
                             mm_idxopt_t iopt;
                             mm_mapopt_t mopt;
-
+//                            std::cout << "line 888" << std::endl;
+//                            std::cout << refSeq << std::endl << querySeq << std::endl;
                             mm_verbose = 2; // disable message output to stderr
                             mm_set_opt(0, &iopt, &mopt);
                             //mopt.flag &= ~ MM_F_CIGAR; // DO NOT perform alignment
@@ -986,6 +989,7 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
                 }
                 lastStrand = alignmentMatch.getStrand();
             }
+//            std::cout << "line 991" << std::endl;
             if (!hasInversion) {
                 endRef = referenceGenome[refChr].length();
                 endQuery = queryGenome[queryChr].length();
@@ -1003,10 +1007,10 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
 
                     if (  (refSeq.size() * querySeq.size() > wfaSize3 * wfaSize3) &&
                         (refSeq.size() > k && querySeq.size() > k)  && blackList.find(startRef)==blackList.end() ) {
-//                        std::cout << "line 858" << std::endl;
                         mm_idxopt_t iopt;
                         mm_mapopt_t mopt;
-//                        std::cout << refSeq << std::endl << querySeq << std::endl << std::endl;
+//                        std::cout << "line 1008" << std::endl;
+//                        std::cout << refSeq << std::endl << querySeq << std::endl;
                         mm_verbose = 2; // disable message output to stderr
                         mm_set_opt(0, &iopt, &mopt);
                         //mopt.flag &= ~ MM_F_CIGAR; // DO NOT perform alignment
@@ -1100,16 +1104,18 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
                         mm_idx_destroy(mi);
                         delete(reference_seq_array);
                         delete(query_seq_array);
+//                        std::cout << "line 1103" << std::endl;
                     }
                 }
             }
+//            std::cout << "line 1110" << std::endl;
             for( AlignmentMatch alignmentMatch : temp2 ){
                 temp.push_back(alignmentMatch);
             }
 //            myAlignmentMatchSort(temp, inversion_PENALTY, MIN_ALIGNMENT_SCORE, keepTandemDuplication, considerInversion);
         }
-
-        {
+//        std::cout << "line 1116" << std::endl;
+        if (temp.size() > 0) {
             myAlignmentMatchSort(temp, inversion_PENALTY, MIN_ALIGNMENT_SCORE, keepTandemDuplication, considerInversion);
 //            for (unsigned long i = 0; i < temp.size(); ++i) {
 //                std::string thisStrand = "+";
@@ -1153,7 +1159,9 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
             }
         }
     }
+//    std::cout << "line 1161" << std::endl;
     infile.close();
+//    std::cout << "control line 1163" << std::endl;
 }
 
 
@@ -1216,7 +1224,7 @@ void setupAnchorsWithSpliceAlignmentResultQuota_v0( const std::string & gffFileP
     }
 
 
-    CheckAndUpdateTranscriptsEnds(transcriptHashSet, referenceGenome, nucleotideCodeSubstitutionMatrix);
+    //CheckAndUpdateTranscriptsEnds(transcriptHashSet, referenceGenome, nucleotideCodeSubstitutionMatrix);
     std::map<std::string, Transcript> transcriptHashMap; // key is transcript name, value is a transcript structure
     for (std::map<std::string, std::vector<Transcript> >::iterator it = transcriptHashSet.begin();
          it != transcriptHashSet.end(); ++it) {
@@ -1910,7 +1918,7 @@ void setupAnchorsWithSpliceAlignmentResultQuota( const std::string & gffFilePath
     if (exonModel) {
 
     } else {
-        CheckAndUpdateTranscriptsEnds(transcriptHashSet, referenceGenome, nucleotideCodeSubstitutionMatrix);
+        //CheckAndUpdateTranscriptsEnds(transcriptHashSet, referenceGenome, nucleotideCodeSubstitutionMatrix);
     }
     std::map<std::string, Transcript> transcriptHashMap; // key is transcript name, value is a transcript structure
     for (std::map<std::string, std::vector<Transcript> >::iterator it = transcriptHashSet.begin();

@@ -52,6 +52,10 @@ int64_t alignSlidingWindow(  std::string& dna_q,  std::string& dna_d, std::strin
                              const int32_t & mismatchingPenalty, const  int32_t & openGapPenalty1, const int32_t & extendGapPenalty1, const int32_t & openGapPenalty2, const int32_t & extendGapPenalty2,
                              const int32_t & min_wavefront_length, const int32_t & max_distance_threshold, const Scorei & m);
 
+int64_t alignSlidingWindow( std::string& align_ref2, std::string& align_query, const std::string& dna_ref1,
+                            std::string & align_ref1, const int64_t & slidingWindowSize,
+                            const int32_t & matchingScore, const int32_t & mismatchingPenalty, const int32_t & openGapPenalty1,
+                            const int32_t & extendGapPenalty1, const int32_t & openGapPenalty2, const int32_t & extendGapPenalty2);
 
 
 //int64_t alignSlidingWindow(  std::string& dna_q,  std::string& dna_d, std::string & _alignment_q, std::string & _alignment_d,

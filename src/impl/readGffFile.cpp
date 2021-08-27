@@ -12,7 +12,9 @@ void readGffFile (const std::string& filePath, std::map<std::string, std::vector
 void get_transcript_to_gene_map_from_gff (const std::string& filePath, std::map<std::string, std::string >& transcript_to_gene_map){
 
     std::set<std::string> transcriptParentRegex;
-    transcriptParentRegex.insert("ID=(\\S+?);Parent=(\\S+?);");
+    transcriptParentRegex.insert("ID=(\\S+?);.*Parent=(\\S+?);");
+    transcriptParentRegex.insert("ID=(\\S+?);.*Parent=(\\S+?)$");
+    transcriptParentRegex.insert("ID=(\\S+?);.*geneID=(\\S+?)$");
 //    transcriptParentRegex.insert("Parent=([\\s\\S]*?)[;,]");
 //    transcriptParentRegex.insert("gene_id\\s*\"([\\s\\S]*?)\"[;,]");
 //    transcriptParentRegex.insert("Parent=([-_0-9:a-zA-Z.]*?)$");
@@ -40,6 +42,14 @@ void get_transcript_to_gene_map_from_gff (const std::string& filePath, std::map<
                 transcript_to_gene_map[transcript_id] = gene_id;
             }
         }
+        std::regex reg("Parent=(\\S+?);ID=(\\S+?);");
+        regex_search(line, match, reg);
+        if (match.empty() || line[0] == '#') {
+        } else {
+            std::string transcript_id = match[2];
+            std::string gene_id = match[1];
+            transcript_to_gene_map[transcript_id] = gene_id;
+        }
     }
 }
 
@@ -58,6 +68,7 @@ void readGffFile (const std::string& filePath, std::map<std::string, std::vector
 
         if( match.empty() || line[0]=='#' || line.size()<9){
         }else{
+//            std::cout << line << std::endl;
             int start = stoi(match[3]);
             int end = stoi(match[4]);
             if(start>end){
@@ -144,6 +155,7 @@ void readGffFile_exon (const std::string& filePath, std::map<std::string, std::v
             }
         }
     }
+    infile.close();
     for (std::map<std::string, Transcript>::iterator it=transcriptHashMap.begin(); it!=transcriptHashMap.end(); ++it){
         if(transcriptHashSet.find(it->second.getChromeSomeName()) == transcriptHashSet.end() ){
             transcriptHashSet[it->second.getChromeSomeName()]=std::vector<Transcript>();

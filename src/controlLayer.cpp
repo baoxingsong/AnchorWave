@@ -68,11 +68,11 @@ int genomeAlignment(int argc, char** argv, std::map<std::string, std::string>& p
     std::stringstream usage;
 
     int32_t matchingScore = 0;
-    int32_t mismatchingPenalty = -2;
-    int32_t openGapPenalty1 = -3;
+    int32_t mismatchingPenalty = -6;
+    int32_t openGapPenalty1 = -8;
     int32_t extendGapPenalty1 = -2;
 
-    int32_t openGapPenalty2 = -80;
+    int32_t openGapPenalty2 = -75;
     int32_t extendGapPenalty2 = -1;
 
     int minExon=20;
@@ -360,14 +360,19 @@ int genomeAlignment(int argc, char** argv, std::map<std::string, std::string>& p
                 inversion_PENALTY,  MIN_ALIGNMENT_SCORE, considerInversion, minExon, windownWidth, minimumSimilarity, minimumSimilarity2, parameters, referenceGenome,
                 queryGenome, expectedCopies, maximumSimilarity, referenceSamFilePath, wfaSize3, searchForNewAnchors, exonModel
                 /*, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, k, mw, H*/);
+//        std::cout << "control line 363" << std::endl;
         for (std::map<std::string, std::vector<AlignmentMatch>>::iterator it = alignmentMatchsMap.begin(); it != alignmentMatchsMap.end(); ++it ) {
+   //         std::cout << "control line 365\t" << it->first << "\t" << it->first.size() << std::endl;
             myAlignmentMatchSort( it->second, inversion_PENALTY,  MIN_ALIGNMENT_SCORE, false, false);
+  //          std::cout << "control line 367" << std::endl;
         }
+    //    std::cout << "control line 369" << std::endl;
         if( inputParser.cmdOptionExists("-n") ) {
             std::string wholeCommand=argv[0];
             for ( int i=1; i<argc; ++i ){
                 wholeCommand = wholeCommand + " " + argv[i];
             }
+            std::cout << "control line 375" << std::endl;
             std::ofstream ofile;
             ofile.open(inputParser.getCmdOption("-n"));
             ofile << "#" << PROGRAMNAME << " " << wholeCommand << std::endl;
@@ -481,8 +486,8 @@ int proportationalAlignment(int argc, char** argv, std::map<std::string, std::st
 
 
     int32_t matchingScore = 0;
-    int32_t mismatchingPenalty = -2;
-    int32_t openGapPenalty1 = -3;
+    int32_t mismatchingPenalty = -4;
+    int32_t openGapPenalty1 = -4;
     int32_t extendGapPenalty1 = -2;
 
     int32_t openGapPenalty2 = -80;
@@ -913,6 +918,149 @@ int proportationalAlignment(int argc, char** argv, std::map<std::string, std::st
 
 
 
+
+int tripleAncestral(int argc, char ** argv, std::map<std::string, std::string> & parameters ) {
+
+    int32_t matchingScore = 0;
+    int32_t mismatchingPenalty = -4;
+    int32_t openGapPenalty1 = -4;
+    int32_t extendGapPenalty1 = -2;
+
+    int32_t openGapPenalty2 = -80;
+    int32_t extendGapPenalty2 = -1;
+
+    int64_t windownWidth = 30000;
+
+    int32_t wfaSize = 15000;
+
+    int32_t min_wavefront_length = 20;
+    int32_t max_distance_threshold = 100;
+
+    int miniInsertionSize = 15;
+    int maxDistance = 25;
+
+    std::stringstream usage;
+    usage << "Usage: " << PROGRAMNAME
+          << " proali triAnc -r1 ref1Genome -r2 ref2Genome -r1r2 r1r2.maf -r1q r1q.maf -r2q r2q.maf -o ancestor.fa " << std::endl <<
+          "Options" << std::endl <<
+          " -h           produce help message" << std::endl <<
+          " -r1   FILE   reference 1 genome sequence" << std::endl <<
+          " -r2   FILE   reference 2 genome sequence" << std::endl <<
+          " -r1r2 FILE   reference 1 to reference 2 alignment (output from the genoAli or proali command)" << std::endl <<
+          " -r1q  FILE   reference 1 to query alignment (output from the genoAli or proali command)" << std::endl <<
+          " -r2q  FILE   reference 2 to query alignment (output from the genoAli or proali command)" << std::endl <<
+          " -o    FILE   output file in FASTA format" << std::endl <<
+          " Following parameters are for realign insertions" << std::endl<<
+          " -n   INT     minimum insertion size for realignment (default: " << miniInsertionSize << ")" << std::endl <<
+          " -m   INT     maximum distance for neighbour insertions to merge together for realignment (default: " << maxDistance << ")" << std::endl <<
+          " -w   INT     sequence alignment window width (default: " << windownWidth << ")" << std::endl <<
+          " -B   INT     mismatching penalty (default: " << mismatchingPenalty << ")" << std::endl <<
+          " -O1  INT     open gap penalty (default: " << openGapPenalty1 << ")" << std::endl <<
+          " -E1  INT     extend gap penalty (default: " << extendGapPenalty1 << ")" << std::endl <<
+          " -O2  INT     open gap penalty 2 (default: " << openGapPenalty2 << ")" << std::endl <<
+          " -E2  INT     extend gap penalty 2 (default: " << extendGapPenalty2 << ")" << std::endl << std::endl;
+
+    InputParser inputParser(argc, argv);
+    if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help")) {
+        std::cerr << usage.str();
+    } else if (inputParser.cmdOptionExists("-r1") && inputParser.cmdOptionExists("-r2") &&
+               inputParser.cmdOptionExists("-r1r2") && inputParser.cmdOptionExists("-r1q") &&
+               inputParser.cmdOptionExists("-r2q") )  {
+
+        std::string reference1GenomeSequence = inputParser.getCmdOption("-r1");
+        std::string reference2GenomeSequence = inputParser.getCmdOption("-r2");
+        std::string ref1Ref2Maf = inputParser.getCmdOption("-r1r2");
+        std::string ref1QueryMaf = inputParser.getCmdOption("-r1q");
+        std::string ref2QueryMaf = inputParser.getCmdOption("-r2q");
+        std::string outPutFile = inputParser.getCmdOption("-o");
+        if( inputParser.cmdOptionExists("-n") ){
+            miniInsertionSize = std::stoi( inputParser.getCmdOption("-n") );
+            if( miniInsertionSize<=0 ){
+                std::cout << "parameter of -n should be a positive value" << std::endl;
+                return 1;
+            }
+        }
+
+        if( inputParser.cmdOptionExists("-m") ){
+            maxDistance = std::stoi( inputParser.getCmdOption("-m") );
+            if( maxDistance<=0 ){
+                std::cout << "parameter of -m should be a positive value" << std::endl;
+                return 1;
+            }
+        }
+
+        if( inputParser.cmdOptionExists("-w")){
+            windownWidth = std::stoi(inputParser.getCmdOption("-w"));
+        }
+        if( inputParser.cmdOptionExists("-B") ){
+            mismatchingPenalty = std::stoi( inputParser.getCmdOption("-B") );
+            if( mismatchingPenalty>=0 ){
+                std::cout << "parameter of B should be a negative value" << std::endl;
+                return 1;
+            }
+        }
+        if( inputParser.cmdOptionExists("-O1") ){
+            openGapPenalty1 = std::stoi( inputParser.getCmdOption("-O1") );
+            if( openGapPenalty1>=0 ){
+                std::cout << "parameter of O1 should be a negative value" << std::endl;
+                return 1;
+            }
+        }
+        if( inputParser.cmdOptionExists("-E1") ){
+            extendGapPenalty1 = std::stoi( inputParser.getCmdOption("-E1") );
+            if( extendGapPenalty1>=0 ){
+                std::cout << "parameter of E1 should be a negative value" << std::endl;
+                return 1;
+            }
+        }
+        if( inputParser.cmdOptionExists("-O2") ){
+            openGapPenalty2 = std::stoi( inputParser.getCmdOption("-O2") );
+            if( openGapPenalty2>=0 ){
+                std::cout << "parameter of O1 should be a negative value" << std::endl;
+                return 1;
+            }
+        }
+        if( inputParser.cmdOptionExists("-E2") ){
+            extendGapPenalty2 = std::stoi( inputParser.getCmdOption("-E2") );
+            if( extendGapPenalty2 > 0 ){
+                std::cout << "parameter of E1 should be a negative value" << std::endl;
+                return 1;
+            }
+        }
+
+        std::vector<BlocksForMsa> ref1Ref2BlocksForMsas;
+        readMafForMsa( ref1Ref2Maf, ref1Ref2BlocksForMsas );
+
+        std::vector<BlocksForMsa> ref1QueryBlocksForMsas;
+        readMafForMsa( ref1QueryMaf, ref1QueryBlocksForMsas );
+
+        std::vector<BlocksForMsa> ref2QueryBlocksForMsas;
+        readMafForMsa( ref2QueryMaf, ref2QueryBlocksForMsas );
+
+        std::map<std::string, std::string> reference1Genome;
+        readFastaFile(reference1GenomeSequence, reference1Genome);
+
+        std::map<std::string, std::string> reference2Genome;
+        readFastaFile(reference2GenomeSequence, reference2Genome);
+
+        ancestorInversion( ref1Ref2BlocksForMsas, ref1QueryBlocksForMsas, ref2QueryBlocksForMsas);
+        ancestorLink( ref1Ref2BlocksForMsas, ref1QueryBlocksForMsas, ref2QueryBlocksForMsas); //for this dataset, there is relocation, so no need to run this runction
+
+        generateMsa( ref1Ref2BlocksForMsas, ref1QueryBlocksForMsas, ref2QueryBlocksForMsas, reference1Genome, reference2Genome,
+                     matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1,
+                     openGapPenalty2, extendGapPenalty2, windownWidth, wfaSize,
+                     min_wavefront_length, max_distance_threshold, miniInsertionSize, maxDistance );
+        outputAncestral( ref1Ref2BlocksForMsas, ref1QueryBlocksForMsas, ref2QueryBlocksForMsas, reference1Genome, reference2Genome, outPutFile);
+
+        return 0;
+    }else{
+        std::cerr << usage.str();
+    }
+    return 0;
+}
+
+
+
 // the following functions were developped for evaluation aim. some of them have hard codes and or output file might have compatible problems with other applications
 int maf2vcf(int argc, char** argv, std::map<std::string, std::string>& parameters ) {
     std::stringstream usage;
@@ -920,9 +1068,9 @@ int maf2vcf(int argc, char** argv, std::map<std::string, std::string>& parameter
           << " maf2vcf -r refGenome -m mafFile -o output " << std::endl <<
           "Options" << std::endl <<
           " -h           produce help message" << std::endl <<
-          " -o   FILE    outpui file" << std::endl <<
+          " -o   FILE    output file" << std::endl <<
           " -r   FILE    reference genome sequence" << std::endl <<
-          " -m   FILE    maf input file" << std::endl <<
+          " -m   FILE    input file in maf format" << std::endl <<
           std::endl;
 
     InputParser inputParser(argc, argv);
@@ -934,6 +1082,38 @@ int maf2vcf(int argc, char** argv, std::map<std::string, std::string>& parameter
         std::string outputovcffile = inputParser.getCmdOption("-o");
         std::string mafFile = inputParser.getCmdOption("-m");
         mafTovcf( mafFile, fastaFilePath,  outputovcffile );
+    }else{
+        std::cerr << usage.str();
+    }
+    return 0;
+}
+
+int sam2vcf(int argc, char** argv, std::map<std::string, std::string>& parameters ) {
+    std::stringstream usage;
+    int32_t range = 30;
+    usage << "Usage: " << PROGRAMNAME
+          << " maf2vcf -r refGenome -m mafFile -o output " << std::endl <<
+          "Options" << std::endl <<
+          " -h           produce help message" << std::endl <<
+          " -s   FILE    input file in sam format" << std::endl <<
+          " -r   FILE    reference genome sequence" << std::endl <<
+          " -q   FILE    query genome sequence" << std::endl <<
+          " -d   INT     range of interval to output (default: "<< range << ")" << std::endl <<
+          " -o   FILE    output file" << std::endl << std::endl;
+
+    InputParser inputParser(argc, argv);
+    if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help")) {
+        std::cerr << usage.str();
+    } else if (inputParser.cmdOptionExists("-r") && inputParser.cmdOptionExists("-s") &&
+               inputParser.cmdOptionExists("-o") && inputParser.cmdOptionExists("-q") ) {
+        std::string refGenomeFile = inputParser.getCmdOption("-r");
+        std::string queryGenomeFile = inputParser.getCmdOption("-q");
+        std::string outputovcffile = inputParser.getCmdOption("-o");
+        if( inputParser.cmdOptionExists("-d") ) {
+            range = std::stoi(inputParser.getCmdOption("-d"));
+        }
+        std::string samFile = inputParser.getCmdOption("-s");
+        samToVcf( samFile, refGenomeFile, queryGenomeFile, range, outputovcffile );
     }else{
         std::cerr << usage.str();
     }
