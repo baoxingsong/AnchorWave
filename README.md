@@ -27,9 +27,9 @@ Table of Contents
 ### Dependencies
 GNU GCC >=7.0  
 Cmake >= 3.0  
-[minimap2](https://github.com/lh3/minimap2)
-Operating System: Linux
-Architecture: x86_64 CPUs with SSE2
+[minimap2](https://github.com/lh3/minimap2)  
+Operating System: Linux  
+Architecture: x86_64 CPUs with SSE2  
 
 ### Compile
 ```
