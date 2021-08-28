@@ -17,3 +17,4 @@
 *.a
 *.o
 /googletest/googletest/CMakeFiles/
+/.idea
