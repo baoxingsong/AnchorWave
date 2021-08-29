@@ -1342,13 +1342,13 @@ int64_t alignSlidingWindow_minimap2( const std::string& dna_q, const std::string
 //    std::cout << "line 369" << std::endl;
 //    void *km = 0;
 #ifdef __AVX512BW__
-    std::cout << "using AVX512" << std::endl;
+//    std::cout << "using AVX512" << std::endl;
     ksw_extd2_avx512(0, ql, qs, tl, ts, 5, mat, -openGapPenalty1, -extendGapPenalty1, -openGapPenalty2, -extendGapPenalty2, slidingWindowSize, -1, 0, 0, & ez);
 #elif __AVX2__
-    std::cout << "using AVX2" << std::endl;
+//    std::cout << "using AVX2" << std::endl;
     ksw_extd2_avx2(0, ql, qs, tl, ts, 5, mat, -openGapPenalty1, -extendGapPenalty1, -openGapPenalty2, -extendGapPenalty2, slidingWindowSize, -1, 0, 0, & ez);
 #else
-    std::cout << "using SSE4" << std::endl;
+//    std::cout << "using SSE" << std::endl;
     ksw_extd2_sse(0, ql, qs, tl, ts, 5, mat, -openGapPenalty1, -extendGapPenalty1, -openGapPenalty2, -extendGapPenalty2, slidingWindowSize, -1, 0, 0, & ez);
 #endif
   //  std::cout << "line 371" << std::endl;
