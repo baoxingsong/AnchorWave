@@ -37,28 +37,30 @@ void readSam(std::vector<AlignmentMatch> & alignmentMatchsMapT, std::ifstream & 
             char seperator = ' ';
             char seperator2 = ',';
             split(line, seperator, elements);
-            for(int i=0; i<elements.size(); ++i) {
-                std::string element = elements[i];
-                if( element == "-k" and (i+1)< elements.size()){
-                    k = std::stoi(elements[i+1]);
-                    w = 0.666*k;
-                }
-                if( element == "-A" and (i+1)< elements.size()){
-                    matchingScore = std::stoi(elements[i+1]);
-                }
-                if( element == "-B" and (i+1)< elements.size()){
-                    mismatchingPenalty = std::stoi(elements[i+1]);
-                }
-                if( element == "-O" and (i+1)< elements.size()){
-                    split(elements[i+1], seperator2, elements2);
-                    openGapPenalty1 = std::stoi(elements2[0]);
-                }
-                if( element == "-E" and (i+1)< elements.size()){
-                    split(elements[i+1], seperator2, elements2);
-                    extendGapPenalty1 = std::stoi(elements2[0]);
-                }
-                if( element == "-H" ){
-                    H = true;
+            if( elements[1] == "ID:minimap2" ) {
+                for (int i = 0; i < elements.size(); ++i) {
+                    std::string element = elements[i];
+                    if (element == "-k" and (i + 1) < elements.size()) {
+                        k = std::stoi(elements[i + 1]);
+                        w = 0.666 * k;
+                    }
+                    if (element == "-A" and (i + 1) < elements.size()) {
+                        matchingScore = std::stoi(elements[i + 1]);
+                    }
+                    if (element == "-B" and (i + 1) < elements.size()) {
+                        mismatchingPenalty = std::stoi(elements[i + 1]);
+                    }
+                    if (element == "-O" and (i + 1) < elements.size()) {
+                        split(elements[i + 1], seperator2, elements2);
+                        openGapPenalty1 = std::stoi(elements2[0]);
+                    }
+                    if (element == "-E" and (i + 1) < elements.size()) {
+                        split(elements[i + 1], seperator2, elements2);
+                        extendGapPenalty1 = std::stoi(elements2[0]);
+                    }
+                    if (element == "-H") {
+                        H = true;
+                    }
                 }
             }
         }
@@ -300,34 +302,37 @@ void readSam(std::vector<AlignmentMatch> & alignmentMatchsMapT, std::ifstream & 
     std::map<std::string, std::map<std::string, std::vector<double>>> geneScores; //fist key is gene name, second key is chr value is a vector of similarity
 
     while (std::getline(infile, line)){ // no matter the transcript in on forward strand or reverse strand, it should do not matter
-        if( line.substr(0, 3) == "@PG" ){
-            std::vector<std::string>elements;
-            std::vector<std::string>elements2;
+//        std::cout << line << std::endl;
+        if( line.substr(0, 3) == "@PG" ) {
+            std::vector<std::string> elements;
+            std::vector<std::string> elements2;
             char seperator = ' ';
             char seperator2 = ',';
             split(line, seperator, elements);
-            for(int i=0; i<elements.size(); ++i) {
-                std::string element = elements[i];
-                if( element == "-k" and (i+1)< elements.size()){
-                    k = std::stoi(elements[i+1]);
-                    w = 0.666*k;
-                }
-                if( element == "-A" and (i+1)< elements.size()){
-                    matchingScore = std::stoi(elements[i+1]);
-                }
-                if( element == "-B" and (i+1)< elements.size()){
-                    mismatchingPenalty = std::stoi(elements[i+1]);
-                }
-                if( element == "-O" and (i+1)< elements.size()){
-                    split(elements[i+1], seperator2, elements2);
-                    openGapPenalty1 = std::stoi(elements2[0]);
-                }
-                if( element == "-E" and (i+1)< elements.size()){
-                    split(elements[i+1], seperator2, elements2);
-                    extendGapPenalty1 = std::stoi(elements2[0]);
-                }
-                if( element == "-H" ){
-                    H = true;
+            if( elements[1] == "ID:minimap2" ){
+                for (int i = 0; i < elements.size(); ++i) {
+                    std::string element = elements[i];
+                    if (element == "-k" and (i + 1) < elements.size()) {
+                        k = std::stoi(elements[i + 1]);
+                        w = 0.666 * k;
+                    }
+                    if (element == "-A" and (i + 1) < elements.size()) {
+                        matchingScore = std::stoi(elements[i + 1]);
+                    }
+                    if (element == "-B" and (i + 1) < elements.size()) {
+                        mismatchingPenalty = std::stoi(elements[i + 1]);
+                    }
+                    if (element == "-O" and (i + 1) < elements.size()) {
+                        split(elements[i + 1], seperator2, elements2);
+                        openGapPenalty1 = std::stoi(elements2[0]);
+                    }
+                    if (element == "-E" and (i + 1) < elements.size()) {
+                        split(elements[i + 1], seperator2, elements2);
+                        extendGapPenalty1 = std::stoi(elements2[0]);
+                    }
+                    if (element == "-H") {
+                        H = true;
+                    }
                 }
             }
         }
@@ -456,6 +461,7 @@ void readSam(std::vector<AlignmentMatch> & alignmentMatchsMapT, std::ifstream & 
 
                 if( lastChr.find(elems[0]) !=  lastChr.end() && lastChr[elems[0]] == queryChr && min((std::abs(lastPosition[elems[0]] - queryEnd)), std::abs(lastPosition[elems[0]] - queryStart) ) <  std::abs (transcriptHashMap[elems[0]].getPStart()- transcriptHashMap[elems[0]].getPEnd() ) ){
                     blackGeneList.insert(elems[0]);
+                    std::cout << "putting " << elems[0] << " into black list" << std::endl;
                 } // remove those genes generated weired alignment
 
                 lastChr[elems[0]] = queryChr;
@@ -619,8 +625,10 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
             exit (1);
         }
         std::vector<AlignmentMatch> alignmentMatchsMapT0;
+        std::cout << "reading reference sam begin" << std::endl;
         readSam( alignmentMatchsMapT0, infileReferencSam, transcriptHashMap, expectedCopies, minimumSimilarity, maximumSimilarity, blackGeneList,
                  matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, k, H, w);
+        std::cout << "reading reference sam done" << std::endl;
         std::map<std::string, std::vector<AlignmentMatch>> alignmentMatchsMapT;
         for( AlignmentMatch orthologPair2 : alignmentMatchsMapT0 ){
             if(  alignmentMatchsMapT.find(orthologPair2.getRefChr()) == alignmentMatchsMapT.end() ){
@@ -659,11 +667,11 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
 
 
     std::vector<AlignmentMatch> alignmentMatchsMapT0;
-    std::cout << "reading sam begin" << std::endl;
+    //std::cout << "reading sam begin" << std::endl;
 
     readSam(alignmentMatchsMapT0, infile, transcriptHashMap, expectedCopies, minimumSimilarity, maximumSimilarity, blackGeneList, cdsSequenceFile,
             matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, k, H, w, queryGenome);
-    std::cout << "reading sam done" << std::endl;
+    //std::cout << "reading sam done" << std::endl;
     std::map<std::string, std::vector<AlignmentMatch>> alignmentMatchsMapT;
     for( AlignmentMatch orthologPair2 : alignmentMatchsMapT0 ){
         if(  alignmentMatchsMapT.find(orthologPair2.getRefChr()) == alignmentMatchsMapT.end() ){

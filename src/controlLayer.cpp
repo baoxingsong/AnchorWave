@@ -85,8 +85,8 @@ int genomeAlignment(int argc, char** argv, std::map<std::string, std::string>& p
     bool considerInversion = false;
     int32_t wfaSize = 15000;
     int32_t wfaSize2 = 50000;
-    int32_t wfaSize3 = 100000; // if the inter-anchor length is shorter than this value, stop trying to find new anchors
-    int64_t windownWidth = 30000;
+    int32_t wfaSize3 = 200000; // if the inter-anchor length is shorter than this value, stop trying to find new anchors
+    int64_t windownWidth = 38000;
     int expectedCopies = 1;
     double maximumSimilarity = 0.6; // the maximum simalarity between secondary hist the primary hit. If the second hit is too similary with primary hit, that is unwanted duplications
 
@@ -151,8 +151,8 @@ int genomeAlignment(int argc, char** argv, std::map<std::string, std::string>& p
 //          " -wl  INT     min wavefront length (default: "<< min_wavefront_length << ")" << std::endl <<
 //          " -wd  INT     max distance threshold (default: "<< max_distance_threshold << ")" << std::endl <<
 //          "              -wl and -wd are parameters for WFA-Adaptive"  << std::endl <<
-          " -ns          do not search for new anchors (default: false)" << std::endl << std::endl<<
-          " -x           use exon records instead of CDS from the GFF file" << std::endl <<
+          " -ns          do not search for new anchors (default: false)" << std::endl <<
+          " -x           use exon records instead of CDS from the GFF file (should be identical with the setting of gff2seq function)" << std::endl <<
 //          " Following parameters are for minimap2 library, useful to identify novel anchors when -ns is not set" << std::endl<<
 //          " -H	         Use homopolymer-compressed (HPC) minimizers. An HPC sequence is constructed by contracting homopolymer runs to a single base. An HPC minimizer is a minimizer on the HPC sequence." << std::endl<<
 //          " -k   INT	 Minimizer k-mer length (default: "<<k<<")" << std::endl<<
@@ -221,19 +221,19 @@ int genomeAlignment(int argc, char** argv, std::map<std::string, std::string>& p
             referenceSamFilePath = inputParser.getCmdOption("-ar");
         }
 
-        if( inputParser.cmdOptionExists("-fa") ){
-            wfaSize = std::stoi( inputParser.getCmdOption("-fa") );
-        }
-        if( inputParser.cmdOptionExists("-fa2")){
-            wfaSize2 = std::stoi(inputParser.getCmdOption("-fa2"));
-        }
+//        if( inputParser.cmdOptionExists("-fa") ){
+//            wfaSize = std::stoi( inputParser.getCmdOption("-fa") );
+//        }
+//        if( inputParser.cmdOptionExists("-fa2")){
+//            wfaSize2 = std::stoi(inputParser.getCmdOption("-fa2"));
+//        }
         if( inputParser.cmdOptionExists("-fa3")){
             wfaSize3 = std::stoi(inputParser.getCmdOption("-fa3"));
         }
-        if ( wfaSize2 < wfaSize ){
-            std::cout << "fa2 should be larger than fa" << std::endl;
-            return 1;
-        }
+//        if ( wfaSize2 < wfaSize ){
+//            std::cout << "fa2 should be larger than fa" << std::endl;
+//            return 1;
+//        }
 
 //
 //        if( inputParser.cmdOptionExists("-A") ){
@@ -503,8 +503,8 @@ int proportationalAlignment(int argc, char** argv, std::map<std::string, std::st
 
     int32_t wfaSize = 15000;
     int32_t wfaSize2 = 50000;
-    int32_t wfaSize3 = 10000; // if the inter-anchor length is shorter than this value, stop trying to find new anchors
-    int64_t windownWidth = 30000;
+    int32_t wfaSize3 = 200000; // if the inter-anchor length is shorter than this value, stop trying to find new anchors
+    int64_t windownWidth = 38000;
     int expectedCopies = 1;
     double maximumSimilarity = 0.6;
     int32_t min_wavefront_length = 20;
@@ -539,7 +539,7 @@ int proportationalAlignment(int argc, char** argv, std::map<std::string, std::st
     bool exonModel = false;
     std::stringstream usage;
     usage << "Usage: " << PROGRAMNAME
-          << " proali -i refGffFile -r refGenome -a cds.sam -as cds.fa -ar ref.sam -s targetGenome -n outputAnchorFile -o output.maf -f output.fragmentation.maf " << std::endl <<
+          << " proali -i refGffFile -r refGenome -a cds.sam -as cds.fa -ar ref.sam -s targetGenome -n outputAnchorFile -o output.maf -f output.fragmentation.maf -R 1 -Q 1" << std::endl <<
           "Options" << std::endl <<
           " -h           produce help message" << std::endl <<
           " -i   FILE    reference GFF/GTF file" << std::endl <<
@@ -561,8 +561,8 @@ int proportationalAlignment(int argc, char** argv, std::map<std::string, std::st
 //          " -wl  INT     min wavefront length (default: "<< min_wavefront_length << ")" << std::endl <<
 //          " -wd  INT     max distance threshold (default: "<< max_distance_threshold << ")" << std::endl <<
 //          "              -wl and -wd are parameters for WFA-Adaptive"  << std::endl <<
-          " -R   INT     reference genome maximum alignment coverage (default: " << refMaximumTimes << ")" << std::endl<<
-          " -Q   INT     query genome maximum alignment coverage (default: " << queryMaximumTimes << ")"  << std::endl<<
+          " -R   INT     reference genome maximum alignment coverage " << std::endl<<
+          " -Q   INT     query genome maximum alignment coverage "  << std::endl<<
 //          " -A   INT     matching score (default: " << matchingScore << ")" << std::endl <<
           " -B   INT     mismatching penalty (default: " << mismatchingPenalty << ")" << std::endl <<
           " -O1  INT     open gap penalty (default: " << openGapPenalty1 << ")" << std::endl <<
@@ -584,7 +584,7 @@ int proportationalAlignment(int argc, char** argv, std::map<std::string, std::st
           " -I   DOUBLE  minimum chain score (default: " << MIN_ALIGNMENT_SCORE << ")"  << std::endl<<
           " -D   INT     maximum gap size for chain (default: " << MAX_DIST_BETWEEN_MATCHES << ")"  << std::endl<<
           " -ns          do not search for new anchors (default: false)" << std::endl <<
-          " -x           use exon records instead of CDS from the GFF file" << std::endl <<
+          " -x           use exon records instead of CDS from the GFF file (should be identical with the setting of gff2seq function)" << std::endl <<
 //          " -ua          use alignment score to identify collinear blocks (default: false)" << std::endl <<
 //          "              by default, we use proportion of sequence similarity as score to identify collinear block." << std::endl <<
 //          "              if this parameter is set true, we use the sequence alignment score instead.  " << std::endl << std::endl<<
@@ -635,19 +635,19 @@ int proportationalAlignment(int argc, char** argv, std::map<std::string, std::st
 //            outPutLocalalignmentFile = inputParser.getCmdOption("-l");
 //        }
 
-        if( inputParser.cmdOptionExists("-fa")){
-            wfaSize = std::stoi(inputParser.getCmdOption("-fa"));
-        }
-        if( inputParser.cmdOptionExists("-fa2")){
-            wfaSize2 = std::stoi(inputParser.getCmdOption("-fa2"));
-        }
+//        if( inputParser.cmdOptionExists("-fa")){
+//            wfaSize = std::stoi(inputParser.getCmdOption("-fa"));
+//        }
+//        if( inputParser.cmdOptionExists("-fa2")){
+//            wfaSize2 = std::stoi(inputParser.getCmdOption("-fa2"));
+//        }
         if( inputParser.cmdOptionExists("-fa3")){
             wfaSize3 = std::stoi(inputParser.getCmdOption("-fa3"));
         }
-        if ( wfaSize2 < wfaSize ){
-            std::cout << "fa2 should be larger than fa" << std::endl;
-            return 1;
-        }
+//        if ( wfaSize2 < wfaSize ){
+//            std::cout << "fa2 should be larger than fa" << std::endl;
+//            return 1;
+//        }
         if( inputParser.cmdOptionExists("-w")){
             windownWidth = std::stoi(inputParser.getCmdOption("-w"));
         }
@@ -659,9 +659,15 @@ int proportationalAlignment(int argc, char** argv, std::map<std::string, std::st
         }
         if( inputParser.cmdOptionExists("-R")){
             refMaximumTimes = std::stoi(inputParser.getCmdOption("-R"));
+        }else{
+            std::cerr << "parameter -R is required" << std::endl;
+            std::cerr << usage.str();
         }
         if( inputParser.cmdOptionExists("-Q")){
             queryMaximumTimes = std::stoi(inputParser.getCmdOption("-Q"));
+        }else{
+            std::cerr << "parameter -Q is required" << std::endl;
+            std::cerr << usage.str();
         }
 //
 //        if( inputParser.cmdOptionExists("-A") ){
