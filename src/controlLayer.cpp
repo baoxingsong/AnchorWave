@@ -1255,12 +1255,12 @@ int ali( int argc, char** argv, std::map<std::string, std::string>& parameters )
 
     std::stringstream usage;
     usage << "Usage: " << PROGRAMNAME
-          << " proali -i refGffFile -r refGenome -a cds.sam -as cds.fa -ar ref.sam -s targetGenome -n outputAnchorFile -o output.maf -f output.fragmentation.maf -R 1 -Q 1"
+          << " ali -r refSeq.fa -s querySeq.fa"
           << std::endl <<
           "Options" << std::endl <<
           " -h           produce help message" << std::endl <<
-          " -r   FILE    reference genome sequence" << std::endl <<
-          " -s   FILE    target genome sequence" << std::endl <<
+          " -r   FILE    reference sequence (single sequence in FASTA format)" << std::endl <<
+          " -s   FILE    target sequence (single sequence in FASTA format)" << std::endl <<
           " -w   INT     sequence alignment window width (default: " << windowWidth << ")" << std::endl <<
           " -B   INT     mismatching penalty (default: " << mismatchingPenalty << ")" << std::endl <<
           " -O1  INT     open gap penalty (default: " << openGapPenalty1 << ")" << std::endl <<
