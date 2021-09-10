@@ -1240,3 +1240,129 @@ int sdiToMaf (int argc, char** argv, std::map<std::string, std::string>& paramet
     }
     return 0;
 }
+
+
+int ali( int argc, char** argv, std::map<std::string, std::string>& parameters ) {
+
+    int32_t matchingScore = 0;
+    int32_t mismatchingPenalty = -6;
+    int32_t openGapPenalty1 = -8;
+    int32_t extendGapPenalty1 = -2;
+
+    int32_t openGapPenalty2 = -75;
+    int32_t extendGapPenalty2 = -1;
+    int64_t windowWidth = 38000;
+
+    std::stringstream usage;
+    usage << "Usage: " << PROGRAMNAME
+          << " proali -i refGffFile -r refGenome -a cds.sam -as cds.fa -ar ref.sam -s targetGenome -n outputAnchorFile -o output.maf -f output.fragmentation.maf -R 1 -Q 1"
+          << std::endl <<
+          "Options" << std::endl <<
+          " -h           produce help message" << std::endl <<
+          " -r   FILE    reference genome sequence" << std::endl <<
+          " -s   FILE    target genome sequence" << std::endl <<
+          " -w   INT     sequence alignment window width (default: " << windowWidth << ")" << std::endl <<
+          " -B   INT     mismatching penalty (default: " << mismatchingPenalty << ")" << std::endl <<
+          " -O1  INT     open gap penalty (default: " << openGapPenalty1 << ")" << std::endl <<
+          " -E1  INT     extend gap penalty (default: " << extendGapPenalty1 << ")" << std::endl <<
+          " -O2  INT     open gap penalty 2 (default: " << openGapPenalty2 << ")" << std::endl <<
+          " -E2  INT     extend gap penalty 2 (default: " << extendGapPenalty2 << ")" << std::endl << std::endl;
+
+    InputParser inputParser(argc, argv);
+    if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help")) {
+        std::cerr << usage.str();
+    } else if (inputParser.cmdOptionExists("-r") && inputParser.cmdOptionExists("-s")) {
+
+        std::string referenceGenomeSequence = inputParser.getCmdOption("-r");
+        std::string targetGenomeSequence = inputParser.getCmdOption("-s");
+
+        if( inputParser.cmdOptionExists("-w")){
+            windowWidth = std::stoi(inputParser.getCmdOption("-w"));
+        }
+
+        if( inputParser.cmdOptionExists("-B") ){
+            mismatchingPenalty = std::stoi( inputParser.getCmdOption("-B") );
+            if( mismatchingPenalty>=0 ){
+                std::cout << "parameter of B should be a negative value" << std::endl;
+                return 1;
+            }
+        }
+
+        if( inputParser.cmdOptionExists("-O1") ){
+            openGapPenalty1 = std::stoi( inputParser.getCmdOption("-O1") );
+            if( openGapPenalty1>=0 ){
+                std::cout << "parameter of O1 should be a negative value" << std::endl;
+                return 1;
+            }
+        }
+        if( inputParser.cmdOptionExists("-E1") ){
+            extendGapPenalty1 = std::stoi( inputParser.getCmdOption("-E1") );
+            if( extendGapPenalty1>=0 ){
+                std::cout << "parameter of E1 should be a negative value" << std::endl;
+                return 1;
+            }
+        }
+
+        if( inputParser.cmdOptionExists("-O2") ){
+            openGapPenalty2 = std::stoi( inputParser.getCmdOption("-O2") );
+            if( openGapPenalty2>=0 ){
+                std::cout << "parameter of O1 should be a negative value" << std::endl;
+                return 1;
+            }
+        }
+        if( inputParser.cmdOptionExists("-E2") ){
+            extendGapPenalty2 = std::stoi( inputParser.getCmdOption("-E2") );
+            if( extendGapPenalty2>0 ){
+                std::cout << "parameter of E1 should be a negative value" << std::endl;
+                return 1;
+            }
+        }
+
+        std::map<std::string, std::string> referenceSeq;
+        readFastaFile(referenceGenomeSequence, referenceSeq);
+
+        std::map<std::string, std::string> querySeq;
+        readFastaFile(targetGenomeSequence, querySeq);
+
+        if( referenceSeq.size() != 1 ){
+
+            std::cerr << "There should be one and only one sequence in the reference FASTA file" << std::endl;
+        }
+        if( querySeq.size() != 1 ){
+
+            std::cerr << "There should be one and only one sequence in the query FASTA file" << std::endl;
+        }
+        std::string _alignment_q;
+        std::string _alignment_d;
+
+        affine2p_penalties_t penalties = {
+                .match = 0,
+                .mismatch = -mismatchingPenalty,
+                .gap_opening1 = -openGapPenalty1,
+                .gap_extension1 = -extendGapPenalty1,
+                .gap_opening2 = -openGapPenalty2,
+                .gap_extension2 = -extendGapPenalty2,
+        };
+        mm_allocator_t * const mm_allocator = mm_allocator_new(BUFFER_SIZE_512M);
+        int32_t min_wavefront_length = 20;
+        int32_t max_distance_threshold = 100;
+        int32_t wfaSize = 15000;
+        Scorei m(matchingScore, mismatchingPenalty);
+        std::string refSeqStr = referenceSeq.begin()->second;
+        std::string querySeqStr = querySeq.begin()->second;
+        int64_t thiScore = alignSlidingWindow(querySeqStr, refSeqStr, _alignment_q, _alignment_d, &penalties, mm_allocator,
+                                              windowWidth, wfaSize, matchingScore, mismatchingPenalty, openGapPenalty1,
+                                              extendGapPenalty1, openGapPenalty2, extendGapPenalty2,
+                                              min_wavefront_length, max_distance_threshold, m, parameters);
+        std::cout << ">" << referenceSeq.begin()->first << std::endl;
+        std::cout << _alignment_d << std::endl;
+        std::cout << ">" << querySeq.begin()->first << std::endl;
+        std::cout << _alignment_q << std::endl;
+        mm_allocator_delete(mm_allocator);
+        return 0;
+    } else {
+        std::cerr << usage.str();
+    }
+    return 0;
+}
+

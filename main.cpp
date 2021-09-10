@@ -60,16 +60,16 @@ int main(int argc, char** argv){
     std::map<std::string, std::string> parameters = initialize_paramters(parameterFile, exepath);
 
 #ifdef __AVX512BW__
-    std::cout << "AVX512 is enabled" << std::endl;
+    std::cerr << "AVX512 is enabled" << std::endl;
 #elif __AVX2__
-    std::cout << "AVX2 is enabled" << std::endl;
+    std::cerr << "AVX2 is enabled" << std::endl;
 #elif __SSE4_1__
-    std::cout << "SSE4.1 is enabled" << std::endl;
+    std::cerr << "SSE4.1 is enabled" << std::endl;
 #elif __SSE2__
-    std::cout << "SSE2 is enabled" << std::endl;
+    std::cerr << "SSE2 is enabled" << std::endl;
 #else
-    std::cout << "The code has not been tested on you hardware platform." << std::endl;
-    std::cout << "If you find anything abnormal, please contact us." << std::endl;
+    std::cerr << "The code has not been tested on you hardware platform." << std::endl;
+    std::cerr << "If you find anything abnormal, please contact us." << std::endl;
 #endif
 
     if( program.compare("gff2seq") == 0 ) {
@@ -90,6 +90,8 @@ int main(int argc, char** argv){
         return evaluateTEAlignment(--argc, ++argv, parameters);
     } else if ( program.compare("sdiToMaf") == 0 ) {
         return sdiToMaf(--argc, ++argv, parameters);
+    } else if ( program.compare("ali") == 0 ) {
+        return ali(--argc, ++argv, parameters);
     } else{
         usage();
     }
