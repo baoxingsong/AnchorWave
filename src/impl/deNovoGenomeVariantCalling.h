@@ -44,8 +44,10 @@ void genomeAlignment( std::vector<std::vector<AlignmentMatch>> & alignmentMatchs
 void alignmentToVcf(std::string & queryAlignSeq, std::string & refAlignSeq, std::vector<Variant> & sdiRecordsThisOne, std::string chr, std::string & refSequence, int32_t refLetterNumber);
 void alignmentToVcf(std::string & queryAlignSeq, std::string & refAlignSeq, std::ofstream & ovcffile, std::string chr, std::map <std::string, std::string> & refSequences);
 
+void alignmentToVcf(std::string & queryAlignSeq, std::string & refAlignSeq, std::ofstream & ovcffile, std::string chr, std::map <std::string, std::string> & refSequences, int32_t refLetterNumber, const bool & gvcf);
 void alignmentToVcf(std::string & queryAlignSeq, std::string & refAlignSeq, std::ofstream & ovcffile, std::string chr, std::map <std::string, std::string> & refSequences, int32_t refLetterNumber);
 void alignmentToVcf(std::string & queryAlignSeq, std::string & refAlignSeq, std::vector<Variant> & sdiRecordsThisOne, std::string chr, std::map <std::string, std::string> & refSequences, int32_t refLetterNumber);
 void alignmentToVcf(std::string & queryAlignSeq, std::string & refAlignSeq, std::ofstream & ovcffile, std::string chr, std::string & refSequence, int32_t refLetterNumber);
+void alignmentToVcf(std::string & queryAlignSeq, std::string & refAlignSeq, std::ofstream & ovcffile, std::string chr, std::string & refSequence, int32_t refLetterNumber, const bool & gvcf);
 
 #endif //PROALI_DENOVOGENOMEVARIANTCALLING_H

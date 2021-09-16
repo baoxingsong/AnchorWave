@@ -6,7 +6,7 @@
 
 
 
-void mafTovcf( std::string & mafFile,  std::string & refGenomeFilePath, std::string & outputovcffile ){
+void mafTovcf( std::string & mafFile,  std::string & refGenomeFilePath, std::string & outputovcffile, const bool & gvcf ){
     std::ofstream ovcffile;
     ovcffile.open(outputovcffile);
 
@@ -25,20 +25,36 @@ void mafTovcf( std::string & mafFile,  std::string & refGenomeFilePath, std::str
     split(refGenomeFilePath, delim, elems);
     refFileName = elems.back();
 
-
-    ovcffile << "##fileformat=VCFv4.3" << std::endl;
-    ovcffile << "##fileDate=" << filedate << std::endl;
-    ovcffile << "##source=proali" << std::endl;
-    ovcffile <<"##reference=" << refFileName << std::endl;
-    ovcffile <<"##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Total Depth\">" << std::endl;
-    ovcffile <<"##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">" << std::endl;
-    ovcffile <<"##FORMAT=<ID=GQ,Number=1,Type=Integer,Description=\"Genotype Quality\">" << std::endl;
-    ovcffile <<"##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Read Depth\">" << std::endl;
-    ovcffile <<"##FILTER=<ID=q30,Description=\"Quality below 30\">" << std::endl;
+    if( gvcf ){
+        ovcffile << "##fileformat=VCFv4.2" << std::endl;
+        ovcffile << "##fileDate=" << filedate << std::endl;
+        ovcffile << "##source=proali" << std::endl;
+        ovcffile <<"##reference=" << refFileName << std::endl;
+        ovcffile << "##FORMAT=<ID=AD,Number=3,Type=Integer,Description=\"Allelic depths for the ref and alt alleles in the order listed\">" << std::endl;
+        ovcffile << "##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Read Depth (only filtered reads used for calling)\">" << std::endl;
+        ovcffile << "##FORMAT=<ID=GQ,Number=1,Type=Integer,Description=\"Genotype Quality\">" << std::endl;
+        ovcffile << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">" << std::endl;
+        ovcffile << "##FORMAT=<ID=PL,Number=3,Type=Integer,Description=\"Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification\">" << std::endl;
+        ovcffile << "##INFO=<ID=AF,Number=3,Type=Integer,Description=\"Allele Frequency\">" << std::endl;
+        ovcffile << "##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Total Depth\">" << std::endl;
+        ovcffile << "##INFO=<ID=END,Number=1,Type=Integer,Description=\"Stop position of the interval\">" << std::endl;
+        ovcffile << "##INFO=<ID=NS,Number=1,Type=Integer,Description=\"Number of Samples With Data\">" << std::endl;
+    }else{
+        ovcffile << "##fileformat=VCFv4.3" << std::endl;
+        ovcffile << "##fileDate=" << filedate << std::endl;
+        ovcffile << "##source=AnchorWave" << std::endl;
+        ovcffile <<"##reference=" << refFileName << std::endl;
+        ovcffile <<"##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Total Depth\">" << std::endl;
+        ovcffile <<"##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">" << std::endl;
+        ovcffile <<"##FORMAT=<ID=GQ,Number=1,Type=Integer,Description=\"Genotype Quality\">" << std::endl;
+        ovcffile <<"##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Read Depth\">" << std::endl;
+        ovcffile <<"##FILTER=<ID=q30,Description=\"Quality below 30\">" << std::endl;
+    }
     std::string accession = "query";
     accession = songStrReplaceAll(accession, ".fasta", "");
     accession = songStrReplaceAll(accession, ".fa", "");
     accession.erase(std::remove(accession.begin(), accession.end(), ' '), accession.end());
+
     ovcffile << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t" << accession << std::endl;
 
     std::map <std::string, std::string> refSequences;
@@ -81,8 +97,9 @@ void mafTovcf( std::string & mafFile,  std::string & refGenomeFilePath, std::str
             songStrReplaceAll(refchr, "Zea_mays.AGPv4.dna.toplevel.fa.", "");
             songStrReplaceAll(refchr, "col.", "");
             songStrReplaceAll(refchr, "hg38.fa.", "");
+            songStrReplaceAll(refchr, "B73.ref.fa.", "");
             refchr = songStrReplaceAll(refchr, "\\s", "");
-            alignmentToVcf(queryali, refali, ovcffile, refchr, refSequences, refstart);
+            alignmentToVcf(queryali, refali, ovcffile, refchr, refSequences, refstart, gvcf);
         }
     }
     ovcffile.close();

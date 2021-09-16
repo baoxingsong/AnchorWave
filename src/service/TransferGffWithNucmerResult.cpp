@@ -461,7 +461,7 @@ void readSam(std::vector<AlignmentMatch> & alignmentMatchsMapT, std::ifstream & 
 
                 if( lastChr.find(elems[0]) !=  lastChr.end() && lastChr[elems[0]] == queryChr && min((std::abs(lastPosition[elems[0]] - queryEnd)), std::abs(lastPosition[elems[0]] - queryStart) ) <  std::abs (transcriptHashMap[elems[0]].getPStart()- transcriptHashMap[elems[0]].getPEnd() ) ){
                     blackGeneList.insert(elems[0]);
-                    std::cout << "putting " << elems[0] << " into black list" << std::endl;
+                    std::cout << "putting " << elems[0] << " into unwanted list" << std::endl;
                 } // remove those genes generated weired alignment
 
                 lastChr[elems[0]] = queryChr;
@@ -1285,6 +1285,7 @@ void setupAnchorsWithSpliceAlignmentResultQuota_v0( const std::string & gffFileP
             for (int rangeIndex = 0; rangeIndex < it->second.size(); ++rangeIndex) {
                 if (it->second[rangeIndex].getRefStartPos() != it->second[rangeIndex].getQueryStartPos() ||
                     it->second[rangeIndex].getRefEndPos() != it->second[rangeIndex].getQueryEndPos()) {
+
                     blackGeneList.insert(it->second[rangeIndex].getReferenceGeneName());
                 }
             }
@@ -1982,6 +1983,7 @@ void setupAnchorsWithSpliceAlignmentResultQuota( const std::string & gffFilePath
             for (int rangeIndex = 0; rangeIndex < it->second.size(); ++rangeIndex) {
                 if (it->second[rangeIndex].getRefStartPos() != it->second[rangeIndex].getQueryStartPos() ||
                     it->second[rangeIndex].getRefEndPos() != it->second[rangeIndex].getQueryEndPos()) {
+                    std::cout << "putting " << it->second[rangeIndex].getReferenceGeneName() << " into unwanted list" << std::endl;
                     blackGeneList.insert(it->second[rangeIndex].getReferenceGeneName());
                 }
             }

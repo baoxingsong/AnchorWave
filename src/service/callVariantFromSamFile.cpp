@@ -184,8 +184,8 @@ void samToVcf (const std::string& samFilePath, const std::string& refGenomeFile,
 
                                 preQuerySeq = getSubsequence(queryGenome, queryChr, queryPosition-range, queryPosition - 1);
                                 postQuerySeq = getSubsequence(queryGenome, queryChr, queryPosition + cLen, queryPosition +cLen+range-1);
-                                ovcffile << databaseChr << "\t" << std::to_string(databasePosition) << "\t" << databaseChr << "_" << std::to_string(databasePosition) <<"\t" << "-" << "\t" << querySeq << "\t50\tPASS\tDP=1\tGT:GQ:DP\t1|1:50:1" << "\t" <<
-                                            preRefSeq << "\t" << postRefSeq << "\t" << preQuerySeq << "\t" << postQuerySeq << std::endl;
+                                ovcffile << databaseChr << "\t" << std::to_string(databasePosition) << "\t" << databaseChr << "_" << std::to_string(databasePosition) <<"\t" << "-" << "\t" << querySeq << "\t50\tPASS\tDP=1\tGT:GQ:DP\t1|1:50:1" /*<< "\t" <<
+                                            preRefSeq << "\t" << postRefSeq << "\t" << preQuerySeq << "\t" << postQuerySeq*/ << std::endl;
                                 queryPosition += cLen;
                                 break;
                             case 'D':
@@ -196,8 +196,8 @@ void samToVcf (const std::string& samFilePath, const std::string& refGenomeFile,
                                 preQuerySeq = getSubsequence(queryGenome, queryChr, queryPosition-range, queryPosition-1);
                                 postQuerySeq = getSubsequence(queryGenome, queryChr, queryPosition , queryPosition + range - 1);
 
-                                ovcffile << databaseChr << "\t" << std::to_string(databasePosition) << "\t" << databaseChr << "_" << std::to_string(databasePosition) <<"\t" << refSeq << "\t" << "-" << "\t50\tPASS\tDP=1\tGT:GQ:DP\t1|1:50:1" << "\t" <<
-                                           preRefSeq << "\t" << postRefSeq << "\t" << preQuerySeq << "\t" << postQuerySeq << std::endl;
+                                ovcffile << databaseChr << "\t" << std::to_string(databasePosition) << "\t" << databaseChr << "_" << std::to_string(databasePosition) <<"\t" << refSeq << "\t" << "-" << "\t50\tPASS\tDP=1\tGT:GQ:DP\t1|1:50:1" /*<< "\t" <<
+                                           preRefSeq << "\t" << postRefSeq << "\t" << preQuerySeq << "\t" << postQuerySeq */<< std::endl;
                                 databasePosition += cLen;
                                 break;
                             case 'N': // intron looks like deletion
@@ -208,8 +208,8 @@ void samToVcf (const std::string& samFilePath, const std::string& refGenomeFile,
                                 preQuerySeq = getSubsequence(queryGenome, queryChr, queryPosition-range, queryPosition-1);
                                 postQuerySeq = getSubsequence(queryGenome, queryChr, queryPosition , queryPosition + range - 1);
 
-                                ovcffile << databaseChr << "\t" << std::to_string(databasePosition) << "\t" << databaseChr << "_" << std::to_string(databasePosition) <<"\t" << refSeq << "\t" << "-" << "\t50\tPASS\tDP=1\tGT:GQ:DP\t1|1:50:1" << "\t" <<
-                                            preRefSeq << "\t" << postRefSeq << "\t" << preQuerySeq << "\t" << postQuerySeq << std::endl;
+                                ovcffile << databaseChr << "\t" << std::to_string(databasePosition) << "\t" << databaseChr << "_" << std::to_string(databasePosition) <<"\t" << refSeq << "\t" << "-" << "\t50\tPASS\tDP=1\tGT:GQ:DP\t1|1:50:1" /*<< "\t" <<
+                                            preRefSeq << "\t" << postRefSeq << "\t" << preQuerySeq << "\t" << postQuerySeq */<< std::endl;
                                 databasePosition += cLen;
                                 break;
                             case 'H':

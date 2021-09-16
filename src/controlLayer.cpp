@@ -1077,6 +1077,7 @@ int maf2vcf(int argc, char** argv, std::map<std::string, std::string>& parameter
           " -o   FILE    output file" << std::endl <<
           " -r   FILE    reference genome sequence" << std::endl <<
           " -m   FILE    input file in maf format" << std::endl <<
+          " -O   STRING  VCF/GVCF" << std::endl <<
           std::endl;
 
     InputParser inputParser(argc, argv);
@@ -1087,7 +1088,18 @@ int maf2vcf(int argc, char** argv, std::map<std::string, std::string>& parameter
         std::string fastaFilePath = inputParser.getCmdOption("-r");
         std::string outputovcffile = inputParser.getCmdOption("-o");
         std::string mafFile = inputParser.getCmdOption("-m");
-        mafTovcf( mafFile, fastaFilePath,  outputovcffile );
+        bool gvcf = false;
+        if(inputParser.cmdOptionExists("-O")){
+            if(inputParser.getCmdOption("-O").compare("VCF") == 0){
+
+            }else if(inputParser.getCmdOption("-O").compare("GVCF") == 0){
+                gvcf = true;
+            }else{
+                std::cerr << "the value of parameter O should be VCF or GVCF" << std::endl;
+                return 1;
+            }
+        }
+        mafTovcf( mafFile, fastaFilePath,  outputovcffile, gvcf );
     }else{
         std::cerr << usage.str();
     }
