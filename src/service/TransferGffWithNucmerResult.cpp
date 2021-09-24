@@ -258,6 +258,7 @@ void readSam(std::vector<AlignmentMatch> & alignmentMatchsMapT, std::ifstream & 
                 std::reverse(scores.begin(),scores.end());
                 if( scores.size()>expectCopy && scores[expectCopy]/scores[0] > secondarySimilarity ){
                     blackGeneList.insert(geneName);
+                    std::cout << "removing " << geneName << " due to too much copies. " << it1->first << "\t" << scores.size() << "\t" << scores[0] << "\t" << scores[expectCopy] << std::endl;
                 }
             }
         }
@@ -299,7 +300,7 @@ void readSam(std::vector<AlignmentMatch> & alignmentMatchsMapT, std::ifstream & 
     std::map<std::string, int32_t > lastPosition;
 
 
-    std::map<std::string, std::map<std::string, std::vector<double>>> geneScores; //fist key is gene name, second key is chr value is a vector of similarity
+    std::map<std::string, std::map<std::string, std::vector<double>>> geneScores; //first key is gene name, second key is chr value is a vector of similarity
 
     while (std::getline(infile, line)){ // no matter the transcript in on forward strand or reverse strand, it should do not matter
 //        std::cout << line << std::endl;
@@ -504,6 +505,7 @@ void readSam(std::vector<AlignmentMatch> & alignmentMatchsMapT, std::ifstream & 
                 std::reverse(scores.begin(),scores.end());
                 if( scores.size()>expectCopy && scores[expectCopy]/scores[0] > secondarySimilarity ){
                     blackGeneList.insert(geneName);
+                    std::cout << "removing " << geneName << " due to too much copies. " << it1->first << "\t" << scores.size() << "\t" << scores[0] << "\t" << scores[expectCopy] << std::endl;
                 }
             }
         }
@@ -657,6 +659,7 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
             for (int rangeIndex = 0; rangeIndex <  it->second.size(); ++rangeIndex) {
                 if( it->second[rangeIndex].getRefStartPos() != it->second[rangeIndex].getQueryStartPos() || it->second[rangeIndex].getRefEndPos() != it->second[rangeIndex].getQueryEndPos()   ){
                     blackGeneList.insert( it->second[rangeIndex].getReferenceGeneName() );
+                    std::cout << "putting\t" << it->second[rangeIndex].getReferenceGeneName() << "\tinto unwanted list" << std::endl;
                 }
             }
         }

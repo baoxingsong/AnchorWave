@@ -433,8 +433,14 @@ int genomeAlignment(int argc, char** argv, std::map<std::string, std::string>& p
                           << it->second[rangeIndex].getQueryStartPos() << "\t"
                           << it->second[rangeIndex].getQueryEndPos() << "\t"
                           << thisStrand << "\t"
-                          << it->second[rangeIndex].getReferenceGeneName() << "\t" <<
-                          blockIndex <<"\t" << it->second[rangeIndex].getScore() << std::endl;
+                          << it->second[rangeIndex].getReferenceGeneName() << "\t" ;
+
+                    if ( it->second[rangeIndex].getReferenceGeneName().find("localAlignment") == std::string::npos ){
+                        ofile << blockIndex << "\t" << it->second[rangeIndex].getScore() << std::endl;
+                    }else{
+                        ofile << blockIndex << "\t" << "NA" << std::endl;
+                    }
+//                          blockIndex <<"\t" << it->second[rangeIndex].getScore() << std::endl;
                 }
                 int rangeIndex = it->second.size() - 1;
                 if( ! hasInversion ){
@@ -576,8 +582,8 @@ int proportationalAlignment(int argc, char** argv, std::map<std::string, std::st
           "              This prevents using tandem duplicated genes to identify collinear block" << std::endl <<
           " -y   DOUBLE  minimal ratio of e+1 similarity to 1 similarity to drop an anchor (default: "<< maximumSimilarity << ")" << std::endl <<
           " -ar  FILE    sam file by mapping conserved sequence to reference genome" << std::endl <<
-          "              this is used to improve the accurancy of anchors mapping" << std::endl <<
-          " Following parameters are for identify collinear blocks" << std::endl<<
+          "              this is used to improve the accuracy of anchors mapping" << std::endl <<
+          " Following parameters are to identify collinear blocks" << std::endl<<
           " -d   DOUBLE  calculate IndelDistance (default: " << calculateIndelDistance << ")"  << std::endl<<
           " -OC  DOUBLE  chain open gap penalty (default: " << GAP_OPEN_PENALTY << ")"  << std::endl<<
           " -EC  DOUBLE  chain extend gap penalty (default: " << INDEL_SCORE << ")"  << std::endl<<
@@ -662,12 +668,14 @@ int proportationalAlignment(int argc, char** argv, std::map<std::string, std::st
         }else{
             std::cerr << "parameter -R is required" << std::endl;
             std::cerr << usage.str();
+            return 1;
         }
         if( inputParser.cmdOptionExists("-Q")){
             queryMaximumTimes = std::stoi(inputParser.getCmdOption("-Q"));
         }else{
             std::cerr << "parameter -Q is required" << std::endl;
             std::cerr << usage.str();
+            return 1;
         }
 //
 //        if( inputParser.cmdOptionExists("-A") ){
@@ -771,6 +779,7 @@ int proportationalAlignment(int argc, char** argv, std::map<std::string, std::st
             MAX_DIST_BETWEEN_MATCHES=25;
             useAlignmentScore = true;
         }
+
         if( inputParser.cmdOptionExists("-H") ){
             H = true;
         }
@@ -888,10 +897,13 @@ int proportationalAlignment(int argc, char** argv, std::map<std::string, std::st
                           << alignmentMatchs[rangeIndex].getQueryStartPos() << "\t"
                           << alignmentMatchs[rangeIndex].getQueryEndPos() << "\t"
                           << thisStrand << "\t"
-                          << alignmentMatchs[rangeIndex].getReferenceGeneName() << "\t" <<
-                          blockIndex << "\t" << alignmentMatchs[rangeIndex].getScore() << std::endl;
+                          << alignmentMatchs[rangeIndex].getReferenceGeneName() << "\t";
+
                     if ( alignmentMatchs[rangeIndex].getReferenceGeneName().find("localAlignment") == std::string::npos ){
                         totalAnchors++;
+                        ofile << blockIndex << "\t" << alignmentMatchs[rangeIndex].getScore() << std::endl;
+                    }else{
+                        ofile << blockIndex << "\t" << "NA" << std::endl;
                     }
                 }
                 ofile << "#block end" << std::endl;
