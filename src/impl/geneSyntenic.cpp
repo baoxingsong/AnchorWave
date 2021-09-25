@@ -625,7 +625,7 @@ void longestPathQuotav2 (std::vector<AlignmentMatch> pairedSimilarFragments, std
                     chainQueryEnd = chainQueryEnd > orthologPair2.getQueryEndPos()? chainQueryEnd:orthologPair2.getQueryEndPos();
                 }
 
-                std::map<std::string, int> countedRefs;
+                std::set<std::string> countedRefs;
                 std::string lastRef="";
                 for( int ii=0; ii<n; ii++ ){
                     if ( pairedSimilarFragments[ii].getRefChr() == pairedSimilarFragments[ans[0]].getRefChr() && (
@@ -634,13 +634,14 @@ void longestPathQuotav2 (std::vector<AlignmentMatch> pairedSimilarFragments, std
                        (chainRefStart <= pairedSimilarFragments[ii].getRefStartPos() && pairedSimilarFragments[ii].getRefStartPos() <= chainRefEnd) ||
                        (chainRefStart <= pairedSimilarFragments[ii].getRefEndPos() && pairedSimilarFragments[ii].getRefEndPos() <= chainRefEnd ))
                        /*&& pairedSimilarFragments[ii].getReferenceGeneName() != lastRef*/  ){
-                        if( countedRefs.find(pairedSimilarFragments[ii].getReferenceGeneName()) != countedRefs.end() ){
-                            lastRef = pairedSimilarFragments[ii].getReferenceGeneName();
+                        lastRef = pairedSimilarFragments[ii].getReferenceGeneName();
+                        if( countedRefs.find(pairedSimilarFragments[ii].getReferenceGeneName()) == countedRefs.end() ){ // do not count it repeatedly
                             if( refTimes.find(pairedSimilarFragments[ii].getReferenceGeneName()) != refTimes.end() ){
                                 refTimes[pairedSimilarFragments[ii].getReferenceGeneName()]=refTimes[pairedSimilarFragments[ii].getReferenceGeneName()]+1;
                             }else{
                                 refTimes[pairedSimilarFragments[ii].getReferenceGeneName()]=1;
                             }
+                            countedRefs.insert(pairedSimilarFragments[ii].getReferenceGeneName());
                         }
                     }
                 }

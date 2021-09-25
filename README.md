@@ -93,8 +93,8 @@ anchorwave gff2seq -i TAIR10_GFF3_genes.gff -r tair10.fa -m 0 -o cds.fa
 gmap_build --dir=./tair10 --genomedb=tair10 tair10.fa
 gmap_build --dir=./ler --genomedb=ler ler.fa
 
-gmap –t 10 -A -f samse -d tair10 -D tair10/ cds.fa > gmap_tair10.sam
-gmap –t 10 -A -f samse -d ler -D ler/ cds.fa > gmap_ler.sam
+gmap -t 10 -A -f samse -d tair10 -D tair10/ cds.fa > gmap_tair10.sam
+gmap -t 10 -A -f samse -d ler -D ler/ cds.fa > gmap_ler.sam
 ```
 
 ##### Alternatively using minimap2 for lift over
@@ -121,8 +121,8 @@ grep ">" Col.fa
 anchorwave gff2seq -i TAIR10_GFF3_genes.gff -r tair10.fa -m 0 -o cds.fa
 gmap_build --dir=./tair10 --genomedb=tair10 tair10.fa
 gmap_build --dir=./ler --genomedb=ler ler.fa
-gmap –t 10 -A -f samse -d tair10 -D tair10/ cds.fa > ref.sam
-gmap –t 10 -A -f samse -d ler -D ler/ cds.fa > ler.sam
+gmap -t 10 -A -f samse -d tair10 -D tair10/ cds.fa > ref.sam
+gmap -t 10 -A -f samse -d ler -D ler/ cds.fa > ler.sam
 ```
 ##### Anchors lift over using minimap2
 ```
