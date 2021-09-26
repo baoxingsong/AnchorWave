@@ -37,7 +37,8 @@ void readSam(std::vector<AlignmentMatch> & alignmentMatchsMapT, std::ifstream & 
             char seperator = ' ';
             char seperator2 = ',';
             split(line, seperator, elements);
-            if( elements[1] == "ID:minimap2" ) {
+            if( elements[0].find("ID:minimap2") != std::string::npos ) {
+                std::cout << "using minimap2 parameter line 41" << std::endl;
                 for (int i = 0; i < elements.size(); ++i) {
                     std::string element = elements[i];
                     if (element == "-k" and (i + 1) < elements.size()) {
@@ -310,7 +311,10 @@ void readSam(std::vector<AlignmentMatch> & alignmentMatchsMapT, std::ifstream & 
             char seperator = ' ';
             char seperator2 = ',';
             split(line, seperator, elements);
-            if( elements[1] == "ID:minimap2" ){
+            std::cout << elements[1] << std::endl;
+            std::cout << line << std::endl;
+            if( elements[0].find("ID:minimap2") != std::string::npos ) {
+                std::cout << "using minimap2 parameter line 316" << std::endl;
                 for (int i = 0; i < elements.size(); ++i) {
                     std::string element = elements[i];
                     if (element == "-k" and (i + 1) < elements.size()) {

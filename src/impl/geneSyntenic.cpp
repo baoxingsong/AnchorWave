@@ -635,14 +635,14 @@ void longestPathQuotav2 (std::vector<AlignmentMatch> pairedSimilarFragments, std
                        (chainRefStart <= pairedSimilarFragments[ii].getRefEndPos() && pairedSimilarFragments[ii].getRefEndPos() <= chainRefEnd ))
                        /*&& pairedSimilarFragments[ii].getReferenceGeneName() != lastRef*/  ){
                         lastRef = pairedSimilarFragments[ii].getReferenceGeneName();
-                        if( countedRefs.find(pairedSimilarFragments[ii].getReferenceGeneName()) == countedRefs.end() ){ // do not count it repeatedly
+                        //if( countedRefs.find(pairedSimilarFragments[ii].getReferenceGeneName()) == countedRefs.end() ){ // do not count it repeatedly
                             if( refTimes.find(pairedSimilarFragments[ii].getReferenceGeneName()) != refTimes.end() ){
                                 refTimes[pairedSimilarFragments[ii].getReferenceGeneName()]=refTimes[pairedSimilarFragments[ii].getReferenceGeneName()]+1;
                             }else{
                                 refTimes[pairedSimilarFragments[ii].getReferenceGeneName()]=1;
                             }
                             countedRefs.insert(pairedSimilarFragments[ii].getReferenceGeneName());
-                        }
+                        //}
                     }
                 }
 //                std::map<std::string, std::set<int>> countedQueries;  // key is the id set above
