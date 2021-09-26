@@ -548,7 +548,7 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
     int32_t mismatchingPenalty = 4;
     int32_t openGapPenalty1 = 4;
     int32_t extendGapPenalty1 = 2;
-    int k = 15;
+    int k = 12;
     int w = 0.666*k;
     bool H = false;
 
@@ -1886,7 +1886,7 @@ void setupAnchorsWithSpliceAlignmentResultQuota( const std::string & gffFilePath
     int32_t mismatchingPenalty = 4;
     int32_t openGapPenalty1 = 4;
     int32_t extendGapPenalty1 = 2;
-    int k = 15;
+    int k = 12;
     int w = 0.666 * k;
     bool H = false;
 
