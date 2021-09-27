@@ -613,7 +613,7 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
     if( exonModel ){
 
     }else{
-        CheckAndUpdateTranscriptsEnds(transcriptHashSet, referenceGenome, nucleotideCodeSubstitutionMatrix);
+//        CheckAndUpdateTranscriptsEnds(transcriptHashSet, referenceGenome, nucleotideCodeSubstitutionMatrix);
     }
     std::map<std::string, Transcript> transcriptHashMap; // key is transcript name, value is a transcript structure
     for( std::map<std::string, std::vector<Transcript> >::iterator it = transcriptHashSet.begin(); it!=transcriptHashSet.end(); ++it ){
@@ -1927,7 +1927,7 @@ void setupAnchorsWithSpliceAlignmentResultQuota( const std::string & gffFilePath
     if (exonModel) {
 
     } else {
-        CheckAndUpdateTranscriptsEnds(transcriptHashSet, referenceGenome, nucleotideCodeSubstitutionMatrix);
+//        CheckAndUpdateTranscriptsEnds(transcriptHashSet, referenceGenome, nucleotideCodeSubstitutionMatrix);
     }
     std::map<std::string, Transcript> transcriptHashMap; // key is transcript name, value is a transcript structure
     for (std::map<std::string, std::vector<Transcript> >::iterator it = transcriptHashSet.begin();

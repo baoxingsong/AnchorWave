@@ -300,8 +300,8 @@ Options
               this is used to improve the accurancy of anchors mapping
  Following parameters are for identify collinear blocks
  -d   DOUBLE  calculate IndelDistance (default: 3)
- -OC  DOUBLE  chain open gap penalty (default: -0.03)
- -EC  DOUBLE  chain extend gap penalty (default: -0.01)
+ -O   DOUBLE  chain open gap penalty (default: -0.03)
+ -E   DOUBLE  chain extend gap penalty (default: -0.01)
  -I   DOUBLE  minimum chain score (default: 2)
  -D   INT     maximum gap size for chain (default: 25)
  -ns          do not search for new anchors (default: false)

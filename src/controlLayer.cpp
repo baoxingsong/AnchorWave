@@ -585,8 +585,8 @@ int proportationalAlignment(int argc, char** argv, std::map<std::string, std::st
           "              this is used to improve the accuracy of anchors mapping" << std::endl <<
           " Following parameters are to identify collinear blocks" << std::endl<<
           " -d   DOUBLE  calculate IndelDistance (default: " << calculateIndelDistance << ")"  << std::endl<<
-          " -O  DOUBLE  chain open gap penalty (default: " << GAP_OPEN_PENALTY << ")"  << std::endl<<
-          " -E  DOUBLE  chain extend gap penalty (default: " << INDEL_SCORE << ")"  << std::endl<<
+          " -O   DOUBLE  chain open gap penalty (default: " << GAP_OPEN_PENALTY << ")"  << std::endl<<
+          " -E   DOUBLE  chain extend gap penalty (default: " << INDEL_SCORE << ")"  << std::endl<<
           " -I   DOUBLE  minimum chain score (default: " << MIN_ALIGNMENT_SCORE << ")"  << std::endl<<
           " -D   INT     maximum gap size for chain (default: " << MAX_DIST_BETWEEN_MATCHES << ")"  << std::endl<<
           " -ns          do not search for new anchors (default: false)" << std::endl <<
