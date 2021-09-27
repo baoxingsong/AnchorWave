@@ -585,8 +585,8 @@ int proportationalAlignment(int argc, char** argv, std::map<std::string, std::st
           "              this is used to improve the accuracy of anchors mapping" << std::endl <<
           " Following parameters are to identify collinear blocks" << std::endl<<
           " -d   DOUBLE  calculate IndelDistance (default: " << calculateIndelDistance << ")"  << std::endl<<
-          " -OC  DOUBLE  chain open gap penalty (default: " << GAP_OPEN_PENALTY << ")"  << std::endl<<
-          " -EC  DOUBLE  chain extend gap penalty (default: " << INDEL_SCORE << ")"  << std::endl<<
+          " -O  DOUBLE  chain open gap penalty (default: " << GAP_OPEN_PENALTY << ")"  << std::endl<<
+          " -E  DOUBLE  chain extend gap penalty (default: " << INDEL_SCORE << ")"  << std::endl<<
           " -I   DOUBLE  minimum chain score (default: " << MIN_ALIGNMENT_SCORE << ")"  << std::endl<<
           " -D   INT     maximum gap size for chain (default: " << MAX_DIST_BETWEEN_MATCHES << ")"  << std::endl<<
           " -ns          do not search for new anchors (default: false)" << std::endl <<
@@ -756,11 +756,11 @@ int proportationalAlignment(int argc, char** argv, std::map<std::string, std::st
         if( inputParser.cmdOptionExists("-d")){
             calculateIndelDistance = std::stod(inputParser.getCmdOption("-d"));
         }
-        if( inputParser.cmdOptionExists("-OC")){
-            GAP_OPEN_PENALTY = std::stod(inputParser.getCmdOption("-OC"));
+        if( inputParser.cmdOptionExists("-O")){
+            GAP_OPEN_PENALTY = std::stod(inputParser.getCmdOption("-O"));
         }
-        if( inputParser.cmdOptionExists("-EC")){
-            INDEL_SCORE = std::stod(inputParser.getCmdOption("-EC"));
+        if( inputParser.cmdOptionExists("-E")){
+            INDEL_SCORE = std::stod(inputParser.getCmdOption("-E"));
         }
         if( inputParser.cmdOptionExists("-I")){
             MIN_ALIGNMENT_SCORE = std::stod(inputParser.getCmdOption("-I"));
