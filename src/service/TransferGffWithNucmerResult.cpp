@@ -38,7 +38,7 @@ void readSam(std::vector<AlignmentMatch> & alignmentMatchsMapT, std::ifstream & 
             char seperator2 = ',';
             split(line, seperator, elements);
             if( elements[0].find("ID:minimap2") != std::string::npos ) {
-                std::cout << "using minimap2 parameter line 41" << std::endl;
+                std::cout << "using parameters detected from the input SAM file for novel anchors identification" << std::endl;
                 for (int i = 0; i < elements.size(); ++i) {
                     std::string element = elements[i];
                     if (element == "-k" and (i + 1) < elements.size()) {
@@ -259,7 +259,7 @@ void readSam(std::vector<AlignmentMatch> & alignmentMatchsMapT, std::ifstream & 
                 std::reverse(scores.begin(),scores.end());
                 if( scores.size()>expectCopy && scores[expectCopy]/scores[0] > secondarySimilarity ){
                     blackGeneList.insert(geneName);
-                    std::cout << "removing " << geneName << " due to too much copies. " << it1->first << "\t" << scores.size() << "\t" << scores[0] << "\t" << scores[expectCopy] << std::endl;
+//                    std::cout << "removing " << geneName << " due to too much copies. " << it1->first << "\t" << scores.size() << "\t" << scores[0] << "\t" << scores[expectCopy] << std::endl;
                 }
             }
         }
@@ -311,10 +311,11 @@ void readSam(std::vector<AlignmentMatch> & alignmentMatchsMapT, std::ifstream & 
             char seperator = ' ';
             char seperator2 = ',';
             split(line, seperator, elements);
-            std::cout << elements[1] << std::endl;
-            std::cout << line << std::endl;
+//            std::cout << elements[1] << std::endl;
+//            std::cout << line << std::endl;
             if( elements[0].find("ID:minimap2") != std::string::npos ) {
-                std::cout << "using minimap2 parameter line 316" << std::endl;
+//                std::cout << "using minimap2 parameter line 316" << std::endl;
+//                std::cout << "using parameters detected from the input SAM file for novel anchors identification" << std::endl;
                 for (int i = 0; i < elements.size(); ++i) {
                     std::string element = elements[i];
                     if (element == "-k" and (i + 1) < elements.size()) {
@@ -466,7 +467,7 @@ void readSam(std::vector<AlignmentMatch> & alignmentMatchsMapT, std::ifstream & 
 
                 if( lastChr.find(elems[0]) !=  lastChr.end() && lastChr[elems[0]] == queryChr && min((std::abs(lastPosition[elems[0]] - queryEnd)), std::abs(lastPosition[elems[0]] - queryStart) ) <  std::abs (transcriptHashMap[elems[0]].getPStart()- transcriptHashMap[elems[0]].getPEnd() ) ){
                     blackGeneList.insert(elems[0]);
-                    std::cout << "putting " << elems[0] << " into unwanted list" << std::endl;
+//                    std::cout << "putting " << elems[0] << " into unwanted list" << std::endl;
                 } // remove those genes generated weired alignment
 
                 lastChr[elems[0]] = queryChr;
@@ -509,7 +510,7 @@ void readSam(std::vector<AlignmentMatch> & alignmentMatchsMapT, std::ifstream & 
                 std::reverse(scores.begin(),scores.end());
                 if( scores.size()>expectCopy && scores[expectCopy]/scores[0] > secondarySimilarity ){
                     blackGeneList.insert(geneName);
-                    std::cout << "removing " << geneName << " due to too much copies. " << it1->first << "\t" << scores.size() << "\t" << scores[0] << "\t" << scores[expectCopy] << std::endl;
+//                    std::cout << "removing " << geneName << " due to too much copies. " << it1->first << "\t" << scores.size() << "\t" << scores[0] << "\t" << scores[expectCopy] << std::endl;
                 }
             }
         }
@@ -612,7 +613,7 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
     if( exonModel ){
 
     }else{
-        //CheckAndUpdateTranscriptsEnds(transcriptHashSet, referenceGenome, nucleotideCodeSubstitutionMatrix);
+        CheckAndUpdateTranscriptsEnds(transcriptHashSet, referenceGenome, nucleotideCodeSubstitutionMatrix);
     }
     std::map<std::string, Transcript> transcriptHashMap; // key is transcript name, value is a transcript structure
     for( std::map<std::string, std::vector<Transcript> >::iterator it = transcriptHashSet.begin(); it!=transcriptHashSet.end(); ++it ){
@@ -663,7 +664,7 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
             for (int rangeIndex = 0; rangeIndex <  it->second.size(); ++rangeIndex) {
                 if( it->second[rangeIndex].getRefStartPos() != it->second[rangeIndex].getQueryStartPos() || it->second[rangeIndex].getRefEndPos() != it->second[rangeIndex].getQueryEndPos()   ){
                     blackGeneList.insert( it->second[rangeIndex].getReferenceGeneName() );
-                    std::cout << "putting\t" << it->second[rangeIndex].getReferenceGeneName() << "\tinto unwanted list" << std::endl;
+//                    std::cout << "putting\t" << it->second[rangeIndex].getReferenceGeneName() << "\tinto unwanted list" << std::endl;
                 }
             }
         }
@@ -787,8 +788,8 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
                         if ( (refSeq.size() * querySeq.size() > wfaSize3 * wfaSize3) &&
                             (refSeq.size() > k && querySeq.size() > k) && blackList.find(startRef)==blackList.end() ) {
 
-//                            std::cout << "line 774" << std::endl;
-//                            std::cout << refSeq << "\t" << querySeq << std::endl;
+//                            std::cout << "line 667" << std::endl;
+ //                           std::cout << refSeq << "\t" << querySeq << std::endl;
                             mm_idxopt_t iopt;
                             mm_mapopt_t mopt;
                             mm_verbose = 2; // disable message output to stderr
@@ -879,7 +880,6 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
                             delete(reference_seq_array);
                             delete(query_seq_array);
                         }
-//                        std::cout << "line 866" << std::endl;
                     }
                 } else if (lastStrand == NEGATIVE && alignmentMatch.getStrand() == NEGATIVE
 //                        && lastAlignmentMatch.getRefEndPos() < alignmentMatch.getRefStartPos()
@@ -902,8 +902,7 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
                             (refSeq.size() > k && querySeq.size() > k)  && blackList.find(startRef)==blackList.end()) {
                             mm_idxopt_t iopt;
                             mm_mapopt_t mopt;
-//                            std::cout << "line 888" << std::endl;
-//                            std::cout << refSeq << std::endl << querySeq << std::endl;
+
                             mm_verbose = 2; // disable message output to stderr
                             mm_set_opt(0, &iopt, &mopt);
                             //mopt.flag &= ~ MM_F_CIGAR; // DO NOT perform alignment
@@ -1004,7 +1003,6 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
                 }
                 lastStrand = alignmentMatch.getStrand();
             }
-//            std::cout << "line 991" << std::endl;
             if (!hasInversion) {
                 endRef = referenceGenome[refChr].length();
                 endQuery = queryGenome[queryChr].length();
@@ -1022,10 +1020,10 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
 
                     if (  (refSeq.size() * querySeq.size() > wfaSize3 * wfaSize3) &&
                         (refSeq.size() > k && querySeq.size() > k)  && blackList.find(startRef)==blackList.end() ) {
+//                        std::cout << "line 858" << std::endl;
                         mm_idxopt_t iopt;
                         mm_mapopt_t mopt;
-//                        std::cout << "line 1008" << std::endl;
-//                        std::cout << refSeq << std::endl << querySeq << std::endl;
+//                        std::cout << refSeq << std::endl << querySeq << std::endl << std::endl;
                         mm_verbose = 2; // disable message output to stderr
                         mm_set_opt(0, &iopt, &mopt);
                         //mopt.flag &= ~ MM_F_CIGAR; // DO NOT perform alignment
@@ -1119,17 +1117,15 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
                         mm_idx_destroy(mi);
                         delete(reference_seq_array);
                         delete(query_seq_array);
-//                        std::cout << "line 1103" << std::endl;
                     }
                 }
             }
-//            std::cout << "line 1110" << std::endl;
             for( AlignmentMatch alignmentMatch : temp2 ){
                 temp.push_back(alignmentMatch);
             }
 //            myAlignmentMatchSort(temp, inversion_PENALTY, MIN_ALIGNMENT_SCORE, keepTandemDuplication, considerInversion);
         }
-//        std::cout << "line 1116" << std::endl;
+
         if (temp.size() > 0) {
             myAlignmentMatchSort(temp, inversion_PENALTY, MIN_ALIGNMENT_SCORE, keepTandemDuplication, considerInversion);
 //            for (unsigned long i = 0; i < temp.size(); ++i) {
@@ -1174,9 +1170,7 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
             }
         }
     }
-//    std::cout << "line 1161" << std::endl;
     infile.close();
-//    std::cout << "control line 1163" << std::endl;
 }
 
 
@@ -1292,7 +1286,6 @@ void setupAnchorsWithSpliceAlignmentResultQuota_v0( const std::string & gffFileP
             for (int rangeIndex = 0; rangeIndex < it->second.size(); ++rangeIndex) {
                 if (it->second[rangeIndex].getRefStartPos() != it->second[rangeIndex].getQueryStartPos() ||
                     it->second[rangeIndex].getRefEndPos() != it->second[rangeIndex].getQueryEndPos()) {
-
                     blackGeneList.insert(it->second[rangeIndex].getReferenceGeneName());
                 }
             }
@@ -1310,13 +1303,13 @@ void setupAnchorsWithSpliceAlignmentResultQuota_v0( const std::string & gffFileP
 
 //        std::cout << "reading sam file done. size:" << alignmentMatchsMapT.size() << std::endl;
         // begin setting index, they are necessary in the longest path approach
-        std::map<std::string, int> queryIndex;
-        std::map<std::string, std::map<int, AlignmentMatch>> queryIndexMap; // chr, index, AlignmentMatch
+        std::map<std::string, int64_t> queryIndex;
+        std::map<std::string, std::map<int64_t, AlignmentMatch>> queryIndexMap; // chr, index, AlignmentMatch
         myOrthologPairsSortQueryQuota(alignmentMatchsMapT);
         for (size_t ii = 0; ii < alignmentMatchsMapT.size(); ++ii) {
             if (queryIndex.find(alignmentMatchsMapT[ii].getQueryChr()) == queryIndex.end()) {
                 queryIndex[alignmentMatchsMapT[ii].getQueryChr()] = 0;
-                queryIndexMap[alignmentMatchsMapT[ii].getQueryChr()] = std::map<int, AlignmentMatch>();
+                queryIndexMap[alignmentMatchsMapT[ii].getQueryChr()] = std::map<int64_t, AlignmentMatch>();
             } else {
                 queryIndex[alignmentMatchsMapT[ii].getQueryChr()] =
                         queryIndex[alignmentMatchsMapT[ii].getQueryChr()] + 1;
@@ -1327,12 +1320,12 @@ void setupAnchorsWithSpliceAlignmentResultQuota_v0( const std::string & gffFileP
 //        std::cout << "query id setting done" << std::endl;
 
         myOrthologPairsSortQuota(alignmentMatchsMapT);
-        std::map<std::string, int> refIndex; // key is chr
-        std::map<std::string, std::map<int, AlignmentMatch>> refIndexMap; // chr, index, AlignmentMatch
+        std::map<std::string, int64_t> refIndex; // key is chr
+        std::map<std::string, std::map<int64_t, AlignmentMatch>> refIndexMap; // chr, index, AlignmentMatch
         for (size_t ii = 0; ii < alignmentMatchsMapT.size(); ++ii) {
             if (refIndex.find(alignmentMatchsMapT[ii].getRefChr()) == refIndex.end()) {
                 refIndex[alignmentMatchsMapT[ii].getRefChr()] = 0;
-                refIndexMap[alignmentMatchsMapT[ii].getRefChr()] = std::map<int, AlignmentMatch>();
+                refIndexMap[alignmentMatchsMapT[ii].getRefChr()] = std::map<int64_t, AlignmentMatch>();
             } else {
                 refIndex[alignmentMatchsMapT[ii].getRefChr()] = refIndex[alignmentMatchsMapT[ii].getRefChr()] + 1;
             }
@@ -1677,13 +1670,13 @@ void setupAnchorsWithSpliceAlignmentResultQuota_v0( const std::string & gffFileP
         }
 
         {
-            std::map<std::string, int> queryIndex;
-            std::map<std::string, std::map<int, AlignmentMatch>> queryIndexMap;
+            std::map<std::string, int64_t> queryIndex;
+            std::map<std::string, std::map<int64_t, AlignmentMatch>> queryIndexMap;
             myOrthologPairsSortQueryQuota(alignmentMatchsMapT);
             for (size_t ii = 0; ii < alignmentMatchsMapT.size(); ++ii) {
                 if (queryIndex.find(alignmentMatchsMapT[ii].getQueryChr()) == queryIndex.end()) {
                     queryIndex[alignmentMatchsMapT[ii].getQueryChr()] = 0;
-                    queryIndexMap[alignmentMatchsMapT[ii].getQueryChr()] = std::map<int, AlignmentMatch>();
+                    queryIndexMap[alignmentMatchsMapT[ii].getQueryChr()] = std::map<int64_t, AlignmentMatch>();
                 } else {
                     queryIndex[alignmentMatchsMapT[ii].getQueryChr()] =
                             queryIndex[alignmentMatchsMapT[ii].getQueryChr()] + 1;
@@ -1695,12 +1688,12 @@ void setupAnchorsWithSpliceAlignmentResultQuota_v0( const std::string & gffFileP
 
 
             myOrthologPairsSortQuota(alignmentMatchsMapT);
-            std::map<std::string, int> refIndex;
-            std::map<std::string, std::map<int, AlignmentMatch>> refIndexMap;
+            std::map<std::string, int64_t> refIndex;
+            std::map<std::string, std::map<int64_t , AlignmentMatch>> refIndexMap;
             for (size_t ii = 0; ii < alignmentMatchsMapT.size(); ++ii) {
                 if (refIndex.find(alignmentMatchsMapT[ii].getRefChr()) == refIndex.end()) {
                     refIndex[alignmentMatchsMapT[ii].getRefChr()] = 0;
-                    refIndexMap[alignmentMatchsMapT[ii].getRefChr()] = std::map<int, AlignmentMatch>();
+                    refIndexMap[alignmentMatchsMapT[ii].getRefChr()] = std::map<int64_t, AlignmentMatch>();
                 } else {
                     refIndex[alignmentMatchsMapT[ii].getRefChr()] = refIndex[alignmentMatchsMapT[ii].getRefChr()] + 1;
                 }
@@ -1934,7 +1927,7 @@ void setupAnchorsWithSpliceAlignmentResultQuota( const std::string & gffFilePath
     if (exonModel) {
 
     } else {
-        //CheckAndUpdateTranscriptsEnds(transcriptHashSet, referenceGenome, nucleotideCodeSubstitutionMatrix);
+        CheckAndUpdateTranscriptsEnds(transcriptHashSet, referenceGenome, nucleotideCodeSubstitutionMatrix);
     }
     std::map<std::string, Transcript> transcriptHashMap; // key is transcript name, value is a transcript structure
     for (std::map<std::string, std::vector<Transcript> >::iterator it = transcriptHashSet.begin();
@@ -1990,7 +1983,6 @@ void setupAnchorsWithSpliceAlignmentResultQuota( const std::string & gffFilePath
             for (int rangeIndex = 0; rangeIndex < it->second.size(); ++rangeIndex) {
                 if (it->second[rangeIndex].getRefStartPos() != it->second[rangeIndex].getQueryStartPos() ||
                     it->second[rangeIndex].getRefEndPos() != it->second[rangeIndex].getQueryEndPos()) {
-                    std::cout << "putting " << it->second[rangeIndex].getReferenceGeneName() << " into unwanted list" << std::endl;
                     blackGeneList.insert(it->second[rangeIndex].getReferenceGeneName());
                 }
             }
@@ -2009,34 +2001,36 @@ void setupAnchorsWithSpliceAlignmentResultQuota( const std::string & gffFilePath
 
 //        std::cout << "reading sam file done. size:" << alignmentMatchsMapT.size() << std::endl;
         // begin setting index, they are necessary in the longest path approach
-        std::map<std::string, int> queryIndex;
-        std::map<std::string, std::map<int, AlignmentMatch>> queryIndexMap; // chr, index, AlignmentMatch
+        std::map<std::string, int64_t> queryIndex;
+        std::map<std::string, std::map<int64_t, AlignmentMatch>> queryIndexMap; // chr, index, AlignmentMatch
         myOrthologPairsSortQueryQuota(alignmentMatchsMapT);
         for (size_t ii = 0; ii < alignmentMatchsMapT.size(); ++ii) {
             if (queryIndex.find(alignmentMatchsMapT[ii].getQueryChr()) == queryIndex.end()) {
                 queryIndex[alignmentMatchsMapT[ii].getQueryChr()] = 0;
-                queryIndexMap[alignmentMatchsMapT[ii].getQueryChr()] = std::map<int, AlignmentMatch>();
+                queryIndexMap[alignmentMatchsMapT[ii].getQueryChr()] = std::map<int64_t, AlignmentMatch>();
             } else {
                 queryIndex[alignmentMatchsMapT[ii].getQueryChr()] =
                         queryIndex[alignmentMatchsMapT[ii].getQueryChr()] + 1;
             }
-            queryIndexMap[alignmentMatchsMapT[ii].getQueryChr()][queryIndex[alignmentMatchsMapT[ii].getQueryChr()]] = alignmentMatchsMapT[ii];
+
             alignmentMatchsMapT[ii].setQueryId(queryIndex[alignmentMatchsMapT[ii].getQueryChr()]);
+            queryIndexMap[alignmentMatchsMapT[ii].getQueryChr()][queryIndex[alignmentMatchsMapT[ii].getQueryChr()]] = alignmentMatchsMapT[ii];
+//            std::cout << "line 2016\t" << queryIndex[alignmentMatchsMapT[ii].getQueryChr()] << "\t" << queryIndexMap[alignmentMatchsMapT[ii].getQueryChr()][queryIndex[alignmentMatchsMapT[ii].getQueryChr()]].getQueryId() << "\t" << alignmentMatchsMapT[ii].getQueryChr() << std::endl;
         }
 //        std::cout << "query id setting done" << std::endl;
 
         myOrthologPairsSortQuota(alignmentMatchsMapT);
-        std::map<std::string, int> refIndex; // key is chr
-        std::map<std::string, std::map<int, AlignmentMatch>> refIndexMap; // chr, index, AlignmentMatch
+        std::map<std::string, int64_t> refIndex; // key is chr
+        std::map<std::string, std::map<int64_t, AlignmentMatch>> refIndexMap; // chr, index, AlignmentMatch
         for (size_t ii = 0; ii < alignmentMatchsMapT.size(); ++ii) {
             if (refIndex.find(alignmentMatchsMapT[ii].getRefChr()) == refIndex.end()) {
                 refIndex[alignmentMatchsMapT[ii].getRefChr()] = 0;
-                refIndexMap[alignmentMatchsMapT[ii].getRefChr()] = std::map<int, AlignmentMatch>();
+                refIndexMap[alignmentMatchsMapT[ii].getRefChr()] = std::map<int64_t, AlignmentMatch>();
             } else {
                 refIndex[alignmentMatchsMapT[ii].getRefChr()] = refIndex[alignmentMatchsMapT[ii].getRefChr()] + 1;
             }
-            refIndexMap[alignmentMatchsMapT[ii].getRefChr()][refIndex[alignmentMatchsMapT[ii].getRefChr()]] = alignmentMatchsMapT[ii];
             alignmentMatchsMapT[ii].setRefId(refIndex[alignmentMatchsMapT[ii].getRefChr()]);
+            refIndexMap[alignmentMatchsMapT[ii].getRefChr()][refIndex[alignmentMatchsMapT[ii].getRefChr()]] = alignmentMatchsMapT[ii];
         }
         // index setting end
 //        std::cout << "reference id setting done" << std::endl;
