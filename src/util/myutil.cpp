@@ -70,3 +70,4 @@ void splitCIGAR( std::string & cigarString, std::vector<std::string> & cigarElem
         cigarString = match.suffix().str();
     }
 }
+

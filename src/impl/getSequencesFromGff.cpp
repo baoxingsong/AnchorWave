@@ -31,7 +31,7 @@ void getSequences(const std::string& gffFile, const std::string& genomeFile,
     if( exonModel ){
 
     }else{
-        CheckAndUpdateTranscriptsEnds(transcriptHashSet, genome, nucleotideCodeSubstitutionMatrix);
+       // CheckAndUpdateTranscriptsEnds(transcriptHashSet, genome, nucleotideCodeSubstitutionMatrix);
     }
 //    CheckAndUpdateTranscriptsEnds( transcriptHashSet, genome, nucleotideCodeSubstitutionMatrix);
 

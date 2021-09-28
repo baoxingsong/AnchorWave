@@ -9,5 +9,6 @@
 #include "TransferGffWithNucmerResult.h"
 #include "Reformat.h"
 #include "evaluation.h"
+#include "callVariantFromSamFile.h"
 
 #endif //ANNOTATIONLIFTOVER_SERVICE_H

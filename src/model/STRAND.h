@@ -22,10 +22,12 @@
 
 #ifndef ANNOTATIONLIFTOVER_STRAND_H
 #define ANNOTATIONLIFTOVER_STRAND_H
-
+#include "map"
 enum STRAND {
-    POSITIVE, NEGATIVE
+    POSITIVE=0, NEGATIVE
 };
+
+std::ostream& operator<<(std::ostream& out, const STRAND value);
 
 
 #endif //ANNOTATIONLIFTOVER_STRAND_H

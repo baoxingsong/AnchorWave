@@ -325,16 +325,16 @@ void longestPath (std::vector<AlignmentMatch> & pairedSimilarFragments, std::vec
 
 // since we will change pairedSimilarFragments, so do not use reference C++ data type here
 void longestPathQuotav2 (std::vector<AlignmentMatch> pairedSimilarFragments, std::vector<std::vector<AlignmentMatch>> & sortedOrthologPairChains,
-                         std::map<std::string, std::map<int, AlignmentMatch>> refIndexMap, std::map<std::string, std::map<int, AlignmentMatch>> queryIndexMap,
+                         std::map<std::string, std::map<int64_t, AlignmentMatch>> & refIndexMap /*chr, index, AlignmentMatch*/, std::map<std::string, std::map<int64_t, AlignmentMatch>> & queryIndexMap,
                          double & INDEL_SCORE, double & GAP_OPEN_PENALTY,
                          double & MIN_ALIGNMENT_SCORE, const int & MAX_DIST_BETWEEN_MATCHES, int & refMaximumTimes, int & queryMaximumTimes,
                          double & calculateIndelDistance, bool withNovelAnchros ){
     sortedOrthologPairChains.clear();
-    std::map<std::string, int> refTimes;
-    std::map<std::string, std::map<int, int>> queryTimes;  // key is the id set above
+    std::map<std::string, int64_t> refTimes;
+    std::map<std::string, std::map<int64_t, int64_t>> queryTimes;  // key is the id set above
 
     std::vector <Path> high;
-    std::vector <int> ans;
+    std::vector <int64_t> ans;
     bool done;
     int n, i, j;
     do{
@@ -407,9 +407,11 @@ void longestPathQuotav2 (std::vector<AlignmentMatch> pairedSimilarFragments, std
                             for( int idi = pairedSimilarFragments[jdx].getQueryId()+1; idi<pairedSimilarFragments[idx].getQueryId(); ++idi){
                                 if( queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryGeneName().find("localAlignment") == std::string::npos ){
                                     ++query_del;
+//                                    std::cout << "line 410: " << pairedSimilarFragments[idx].getQueryChr() << "\t" << queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getReferenceGeneName() << " pairedSimilarFragments[idx].getQueryId():" << pairedSimilarFragments[idx].getQueryId() << " pairedSimilarFragments[jdx].getQueryId():" << pairedSimilarFragments[jdx].getQueryId() <<" idi:" << idi << " queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId():" << queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId() << std::endl;
+                                    assert(queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId() == idi);
                                     if ( queryTimes.find(pairedSimilarFragments[idx].getQueryChr())!=queryTimes.end()
-                                        && queryTimes[pairedSimilarFragments[idx].getQueryChr()].find(queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId()) != queryTimes[pairedSimilarFragments[idx].getQueryChr()].end()
-                                        && queryTimes[pairedSimilarFragments[idx].getQueryChr()][queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId()] >= queryMaximumTimes) {
+                                        && queryTimes[pairedSimilarFragments[idx].getQueryChr()].find(idi) != queryTimes[pairedSimilarFragments[idx].getQueryChr()].end()
+                                        && queryTimes[pairedSimilarFragments[idx].getQueryChr()][idi] >= queryMaximumTimes) {
                                         query_del += MAX_DIST_BETWEEN_MATCHES + MAX_DIST_BETWEEN_MATCHES;
                                     }
                                 }
@@ -442,7 +444,7 @@ void longestPathQuotav2 (std::vector<AlignmentMatch> pairedSimilarFragments, std
                                 }
                             }
 
-                            //std::cout << "line 599 thisScore:" << thisScore << " distance:" << distance << " jdx:" << jdx << " idx:" << idx << " thisIndexScore:" << thisIndexScore << " scoreArray[jdx]:" << scoreArray[jdx] << " pairedSimilarFragments[idx].getRefId()" << pairedSimilarFragments[idx].getRefId() << " pairedSimilarFragments[jdx].getRefId():" << pairedSimilarFragments[jdx].getRefId() << std::endl;
+//                            std::cout << "line 599 thisScore:" << thisScore << " distance:" << distance << " jdx:" << jdx << " idx:" << idx << " thisIndexScore:" << thisIndexScore << " scoreArray[jdx]:" << scoreArray[jdx] << " pairedSimilarFragments[idx].getRefId()" << pairedSimilarFragments[idx].getRefId() << " pairedSimilarFragments[jdx].getRefId():" << pairedSimilarFragments[jdx].getRefId() << std::endl;
                             if ( thisScore > scoreArray[idx] && pairedSimilarFragments[jdx].getQueryId() < pairedSimilarFragments[idx].getQueryId() ){
                                 scoreArray[idx] = thisScore;
                                 prev[idx] = jdx;
@@ -490,6 +492,7 @@ void longestPathQuotav2 (std::vector<AlignmentMatch> pairedSimilarFragments, std
                             for( int idi = pairedSimilarFragments[jdx].getRefId()+1; idi<pairedSimilarFragments[idx].getRefId(); ++idi){
                                 if( refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getReferenceGeneName().find("localAlignment") == std::string::npos ){
                                     ++ref_del;
+
                                     if ( refTimes.find(refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getReferenceGeneName()) != refTimes.end() && refTimes[refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getReferenceGeneName()] >= refMaximumTimes ){
                                         ref_del += MAX_DIST_BETWEEN_MATCHES + MAX_DIST_BETWEEN_MATCHES;
                                     }
@@ -508,9 +511,11 @@ void longestPathQuotav2 (std::vector<AlignmentMatch> pairedSimilarFragments, std
 //                            for( int idi = smallerIdi+1; idi<largerIdi; ++idi){
                                 if( queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryGeneName().find("localAlignment") == std::string::npos ){
                                     ++query_del;
+//                                    std::cout << pairedSimilarFragments[idx].getQueryChr() << "\t" << queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getReferenceGeneName() << " pairedSimilarFragments[idx].getQueryId():" << pairedSimilarFragments[idx].getQueryId() << " pairedSimilarFragments[jdx].getQueryId():" << pairedSimilarFragments[jdx].getQueryId() <<" idi:" << idi << " queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId():" << queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId() << std::endl;
+                                    assert(queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId() == idi);
                                     if ( queryTimes.find(pairedSimilarFragments[idx].getQueryChr())!=queryTimes.end()
-                                         && queryTimes[pairedSimilarFragments[idx].getQueryChr()].find(queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId()) != queryTimes[pairedSimilarFragments[idx].getQueryChr()].end()
-                                         && queryTimes[pairedSimilarFragments[idx].getQueryChr()][queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId()] >= queryMaximumTimes) {
+                                         && queryTimes[pairedSimilarFragments[idx].getQueryChr()].find(idi) != queryTimes[pairedSimilarFragments[idx].getQueryChr()].end()
+                                         && queryTimes[pairedSimilarFragments[idx].getQueryChr()][idi] >= queryMaximumTimes) {
                                         query_del += MAX_DIST_BETWEEN_MATCHES + MAX_DIST_BETWEEN_MATCHES;
                                     }
                                 }
@@ -541,6 +546,7 @@ void longestPathQuotav2 (std::vector<AlignmentMatch> pairedSimilarFragments, std
                                     thisScore = thisScore + GAP_OPEN_PENALTY + INDEL_SCORE*distance;
                                 }
                             }
+//                            std::cout << "line 544 thisScore:" << thisScore << " distance:" << distance << " jdx:" << jdx << " idx:" << idx << " thisIndexScore:" << thisIndexScore << " scoreArray[jdx]:" << scoreArray[jdx] << " pairedSimilarFragments[idx].getRefId()" << pairedSimilarFragments[idx].getRefId() << " pairedSimilarFragments[jdx].getRefId():" << pairedSimilarFragments[jdx].getRefId() << std::endl;
                             if ( thisScore > scoreArray[idx] &&
                                  pairedSimilarFragments[jdx].getQueryId() > pairedSimilarFragments[idx].getQueryId()){
                                 scoreArray[idx] = thisScore;
@@ -571,6 +577,7 @@ void longestPathQuotav2 (std::vector<AlignmentMatch> pairedSimilarFragments, std
             done = false;
             i=0;
             if  (prev[high[i].index] != -2) { // only output the chain with highest score for each loop
+//                std::cout << "line 574\t" << high[i].score << "\t" << pairedSimilarFragments[high[i].index].getReferenceGeneName() << std::endl;
                 // trace back begin
 //                double subMaxScore = 0.0;
 //                int startIndex = high[i].index;
@@ -626,6 +633,7 @@ void longestPathQuotav2 (std::vector<AlignmentMatch> pairedSimilarFragments, std
                 }
 
                 std::string lastRef="";
+                std::set<std::string> countedRefs;
                 for( int ii=0; ii<n; ii++ ){
                     if ( pairedSimilarFragments[ii].getRefChr() == pairedSimilarFragments[ans[0]].getRefChr() && (
                        (pairedSimilarFragments[ii].getRefStartPos() <= chainRefStart && chainRefStart <= pairedSimilarFragments[ii].getRefEndPos()) ||
@@ -634,10 +642,14 @@ void longestPathQuotav2 (std::vector<AlignmentMatch> pairedSimilarFragments, std
                        (chainRefStart <= pairedSimilarFragments[ii].getRefEndPos() && pairedSimilarFragments[ii].getRefEndPos() <= chainRefEnd ))
                        /*&& pairedSimilarFragments[ii].getReferenceGeneName() != lastRef*/  ){
                         lastRef = pairedSimilarFragments[ii].getReferenceGeneName();
-                        if( refTimes.find(pairedSimilarFragments[ii].getReferenceGeneName()) != refTimes.end() ){
-                            refTimes[pairedSimilarFragments[ii].getReferenceGeneName()]=refTimes[pairedSimilarFragments[ii].getReferenceGeneName()]+1;
-                        }else{
-                            refTimes[pairedSimilarFragments[ii].getReferenceGeneName()]=1;
+                        if( countedRefs.find(pairedSimilarFragments[ii].getReferenceGeneName()) == countedRefs.end() ) { // do not count it repeatedly
+                            if (refTimes.find(pairedSimilarFragments[ii].getReferenceGeneName()) != refTimes.end()) {
+                                refTimes[pairedSimilarFragments[ii].getReferenceGeneName()] =
+                                        refTimes[pairedSimilarFragments[ii].getReferenceGeneName()] + 1;
+                            } else {
+                                refTimes[pairedSimilarFragments[ii].getReferenceGeneName()] = 1;
+                            }
+                            countedRefs.insert(pairedSimilarFragments[ii].getReferenceGeneName());
                         }
                     }
                 }
@@ -649,7 +661,7 @@ void longestPathQuotav2 (std::vector<AlignmentMatch> pairedSimilarFragments, std
                             (chainQueryStart <= pairedSimilarFragments[ii].getQueryEndPos() && pairedSimilarFragments[ii].getQueryEndPos() <= chainQueryEnd ))
                             ){
                         if ( queryTimes.find(pairedSimilarFragments[ii].getQueryChr()) == queryTimes.end() ){
-                            std::map<int, int> t;
+                            std::map<int64_t , int64_t> t;
                             queryTimes[pairedSimilarFragments[ii].getQueryChr()] =t;
                         }
 
@@ -688,9 +700,12 @@ void longestPathQuotav2 (std::vector<AlignmentMatch> pairedSimilarFragments, std
                         pairedSimilarFragments[j]=pairedSimilarFragments[i];
                     }
                     ++j;
+                }else if ( prev[i] != -2 ) {
+//                    std::cout << "line 694, times" << pairedSimilarFragments[i].getReferenceGeneName() << "\t" << refTimes[pairedSimilarFragments[i].getReferenceGeneName()] << "\t" << pairedSimilarFragments[i].getQueryChr() << "\t" << pairedSimilarFragments[i].getQueryStartPos() << "\t" << pairedSimilarFragments[i].getQueryEndPos() << "\t" << queryTimes[pairedSimilarFragments[i].getQueryChr()][pairedSimilarFragments[i].getQueryId()] << std::endl;
                 }
             }
             pairedSimilarFragments.resize(j);
+//            std::cout << "line 703 size: " <<  pairedSimilarFragments.size() << std::endl;
         }
     }while(! done);
 }

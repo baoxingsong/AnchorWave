@@ -24,6 +24,8 @@ std::string getSubsequence( std::map<std::string, std::string>& sequences,const 
             end = sequences[seqName].size();
         }
         return sequences[seqName].substr(start-1, end-start+1);
+    }else{
+        std::cerr << "could not find " << seqName << std::endl;
     }
     return "";
 }

@@ -35,5 +35,11 @@ the methods under this folder does not rely on any code from other folders
 #include "PairedSimilarFragment.h"
 #include "Score.h"
 #include "Seed.h"
+#include "AlignmentBlock.h"
+#include "BlocksForMsa.h"
 #include <regex>
+#include "PhylogeneticTreeNode.h"
+#include "PhylogeneticTree.h"
+#include "Range.h"
+#include "TwoVectorsOfRanges.h"
 #endif
