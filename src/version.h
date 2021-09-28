@@ -8,3 +8,4 @@
 #define VERSION "Beta1.0"
 #define PROGRAMNAME "anchorwave"
 #endif //ANCHORWAVE_VERSION_H
+
