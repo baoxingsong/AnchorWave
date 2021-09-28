@@ -13,8 +13,10 @@ AnchorWave then identifies collinear anchors using one of three user-specified a
 Table of Contents
 =================
 1. [Installation](#Installation)
-    1. [Dependencies](#Dependencies)
-    2. [Compile](#Compile)
+    1. [Installation from source code](#Install_from_source_code)
+       1. [Dependencies](#Dependencies)
+       2. [Compile](#Compile)
+    2. [Installation using Docker](#Install_from_source_code)
 2. [Usage](#Usage)
     1. [Lift over the reference CDS coordinates to the query genome](#lift-over-the-reference-cds-coordinates-to-the-query-genome-command-1-3)
     2. [Genome alignment without chromosomal rearrangement](#genome-alignment-without-chromosomal-rearrangement-an-option-of-command-4)
@@ -27,7 +29,8 @@ Table of Contents
 7. [Founding](#Founding)
 8. [Citation](#Citation)
 ## Installation
-### Dependencies
+### Installation from source code
+#### Dependencies
 GNU GCC >=7.0  
 Cmake >= 3.0  
 [GMAP](http://research-pub.gene.com/gmap/) or [minimap2](https://github.com/lh3/minimap2)  
@@ -37,7 +40,13 @@ Memory: > 85 Gb
   
 If you would like to take the advantage of modern CPU to speed up please refer [the document for advanced installation](./installation.md).
 Or you are using old x86_64 CPUs without SSE4.1 but with SSE2, please also refer [the document for advanced installation](./installation.md).
-### Compile
+### Installation using Docker
+Compile using your local docker with the Dockerfile in this package:
+`docker build -f docker/Dockerfile -t anchorwave ./`
+Test the installation:
+`docker run -it anchorwave anchorwave`
+`docker run -it anchorwave anchorwave gff2seq`
+#### Compile
 ```
 git clone https://github.com/baoxingsong/anchorwave.git
 cd anchorwave
