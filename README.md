@@ -13,10 +13,10 @@ AnchorWave then identifies collinear anchors using one of three user-specified a
 Table of Contents
 =================
 1. [Installation](#Installation)
-    1. [Installation from source code](#Install-from-source-code)
+    1. [Installation from source code](#Installation-from-source-code)
        1. [Dependencies](#Dependencies)
        2. [Compile](#Compile)
-    2. [Installation using Docker](#Install-from-source-code)
+    2. [Installation using Docker](#Installation-using-Docker)
 2. [Usage](#Usage)
     1. [Lift over the reference CDS coordinates to the query genome](#lift-over-the-reference-cds-coordinates-to-the-query-genome-command-1-3)
     2. [Genome alignment without chromosomal rearrangement](#genome-alignment-without-chromosomal-rearrangement-an-option-of-command-4)
