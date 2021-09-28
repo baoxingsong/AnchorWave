@@ -18,3 +18,4 @@
 *.o
 /googletest/googletest/CMakeFiles/
 /.idea
+/googletest/googletest/gtest.cbp
