@@ -854,6 +854,7 @@ int proportationalAlignment(int argc, char** argv, std::map<std::string, std::st
                   << "blockIndex" << "\t"
                   << "score" << std::endl;
 
+
             size_t totalAnchors = 0;
             int blockIndex = 0;
             for (std::vector<AlignmentMatch> alignmentMatchs : alignmentMatchsMap) {
