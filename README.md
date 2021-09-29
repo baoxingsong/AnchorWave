@@ -40,12 +40,7 @@ Memory: > 85 Gb
   
 If you would like to take the advantage of modern CPU to speed up please refer [the document for advanced installation](./installation.md).
 Or you are using old x86_64 CPUs without SSE4.1 but with SSE2, please also refer [the document for advanced installation](./installation.md).
-### Installation using Docker
-Compile using your local docker with the Dockerfile in this package:
-`docker build -f docker/Dockerfile -t anchorwave ./`
-Test the installation:
-`docker run -it anchorwave anchorwave`
-`docker run -it anchorwave anchorwave gff2seq`
+
 #### Compile
 ```
 git clone https://github.com/baoxingsong/anchorwave.git
@@ -55,7 +50,12 @@ make
 ```
 You will get an executable file named ```anchorwave ```. If you would like to move ```anchorwave``` to a new path, please always put ```configure``` and ```anchorwave``` into the same folder.
 The code has been tested under Ubuntu 20.2 and CentOS 7 with intel/AMD CPU. It should work well on other REDHAT or Debian based Linux Distributions.
-
+### Installation using Docker
+Compile using your local docker with the Dockerfile in this package: \
+```docker build -f docker/Dockerfile -t anchorwave ./``` \
+Test the installation: \
+```docker run -it anchorwave anchorwave```
+```docker run -it anchorwave anchorwave gff2seq```
 ## Usage
 In general, totally four commands are need to run through the whole pipeline.  
 1) extract CDS  
