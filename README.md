@@ -319,7 +319,7 @@ Options
 <span style='color: #00ffff;'>The setting of -Q and -R is essential for the `proali` function.</span> You could refer the [walkthrough guidelines](./doc/guideline.pdf) for how to set them.
 
 ## Tips for following analysis
-The [maf-convert](https://home.cc.umanitoba.ca/~psgendb/doc/last/maf-convert.html) script could be used to reformat the MAF format file into several different formats.  
+The [maf-convert](https://gitlab.com/mcfrith/last/-/blob/main/bin/maf-convert) script could be used to reformat the MAF format file into several different formats.  
 For example, reformat maize B73 against Mo17 alignment into sam and bam format:
 ```
 python2 maf-convert sam anchorwave.maf | sed 's/Zea_mays.AGPv4.dna.toplevel.fa.//g' | sed 's/Zm-Mo17-REFERENCE-CAU-1.0.fa.//g' |  sed 's/[0-9]\+H//g' > anchorwave.sam
