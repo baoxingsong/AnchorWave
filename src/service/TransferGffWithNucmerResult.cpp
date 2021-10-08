@@ -216,6 +216,7 @@ void readSam(std::vector<AlignmentMatch> & alignmentMatchsMapT, std::ifstream & 
 
                 if( lastChr.find(elems[0]) !=  lastChr.end() && lastChr[elems[0]] == queryChr && min((std::abs(lastPosition[elems[0]] - queryEnd)), std::abs(lastPosition[elems[0]] - queryStart) ) <  std::abs (transcriptHashMap[elems[0]].getPStart()- transcriptHashMap[elems[0]].getPEnd() ) ){
                     blackGeneList.insert(elems[0]);
+                    std::cout << "putting " << elems[0] << " into unwanted list due to tandem duplication on the query genome" << std::endl;
                 } // remove those genes generated weired alignment
 
                 lastChr[elems[0]] = queryChr;
@@ -259,7 +260,7 @@ void readSam(std::vector<AlignmentMatch> & alignmentMatchsMapT, std::ifstream & 
                 std::reverse(scores.begin(),scores.end());
                 if( scores.size()>expectCopy && scores[expectCopy]/scores[0] > secondarySimilarity ){
                     blackGeneList.insert(geneName);
-//                    std::cout << "removing " << geneName << " due to too much copies. " << it1->first << "\t" << scores.size() << "\t" << scores[0] << "\t" << scores[expectCopy] << std::endl;
+                    std::cout << "removing " << geneName << " due to too much copies on the query genome. " << it1->first << "\t" << scores.size() << "\t" << scores[0] << "\t" << scores[expectCopy] << std::endl;
                 }
             }
         }
@@ -467,7 +468,7 @@ void readSam(std::vector<AlignmentMatch> & alignmentMatchsMapT, std::ifstream & 
 
                 if( lastChr.find(elems[0]) !=  lastChr.end() && lastChr[elems[0]] == queryChr && min((std::abs(lastPosition[elems[0]] - queryEnd)), std::abs(lastPosition[elems[0]] - queryStart) ) <  std::abs (transcriptHashMap[elems[0]].getPStart()- transcriptHashMap[elems[0]].getPEnd() ) ){
                     blackGeneList.insert(elems[0]);
-//                    std::cout << "putting " << elems[0] << " into unwanted list" << std::endl;
+                    std::cout << "putting " << elems[0] << " into unwanted list due to tandem duplication in the reference genome" << std::endl;
                 } // remove those genes generated weired alignment
 
                 lastChr[elems[0]] = queryChr;
@@ -510,7 +511,7 @@ void readSam(std::vector<AlignmentMatch> & alignmentMatchsMapT, std::ifstream & 
                 std::reverse(scores.begin(),scores.end());
                 if( scores.size()>expectCopy && scores[expectCopy]/scores[0] > secondarySimilarity ){
                     blackGeneList.insert(geneName);
-//                    std::cout << "removing " << geneName << " due to too much copies. " << it1->first << "\t" << scores.size() << "\t" << scores[0] << "\t" << scores[expectCopy] << std::endl;
+                    std::cout << "removing " << geneName << " due to too much copies. " << it1->first << "\t" << scores.size() << "\t" << scores[0] << "\t" << scores[expectCopy] << std::endl;
                 }
             }
         }
@@ -664,7 +665,7 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
             for (int rangeIndex = 0; rangeIndex <  it->second.size(); ++rangeIndex) {
                 if( it->second[rangeIndex].getRefStartPos() != it->second[rangeIndex].getQueryStartPos() || it->second[rangeIndex].getRefEndPos() != it->second[rangeIndex].getQueryEndPos()   ){
                     blackGeneList.insert( it->second[rangeIndex].getReferenceGeneName() );
-//                    std::cout << "putting\t" << it->second[rangeIndex].getReferenceGeneName() << "\tinto unwanted list" << std::endl;
+                    std::cout << "putting\t" << it->second[rangeIndex].getReferenceGeneName() << "\tinto an unwanted list due to the splice aware aligner could not align the CDS/cDNA sequence to the reference genome correctly" << std::endl;
                 }
             }
         }
