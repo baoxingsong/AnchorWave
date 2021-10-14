@@ -852,11 +852,15 @@ void setupAnchorsWithSpliceAlignmentResult( const std::string & gffFilePath, con
                                 double length = r->re - r->rs + 1.0;
                                 double numberofMs = 0.0;
                                 for (int i = 0; i < r->p->n_cigar; ++i){
+                                    int32_t  thisLength1 = r->p->cigar[i]>>4;
+                                    std::cout << thisLength1 << "MIDNSH"[r->p->cigar[i]&0xf];
                                     if( "MIDNSH"[r->p->cigar[i]&0xf] == 'M' ){
                                         int32_t  thisLength = r->p->cigar[i]>>4;
                                         numberofMs = numberofMs + thisLength;
                                     }
                                 }
+                                std::cout << "\t" << alignmentName << std::endl;
+
                                 double similarity = numberofMs/length ;
                                 if( similarity > minimumSimilarity2 ){
                                     changed = true;
