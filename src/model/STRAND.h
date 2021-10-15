@@ -23,6 +23,7 @@
 #ifndef ANNOTATIONLIFTOVER_STRAND_H
 #define ANNOTATIONLIFTOVER_STRAND_H
 #include "map"
+#include <ostream>
 enum STRAND {
     POSITIVE=0, NEGATIVE
 };
