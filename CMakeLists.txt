@@ -246,6 +246,8 @@ add_executable(anchorwave
 
 target_link_libraries(anchorwave gtest gtest_main ZLIB::ZLIB)
 
+install(TARGETS anchorwave DESTINATION bin)
+install(FILES configure DESTINATION bin)
 #
 #set(MAKE_CMD "/bin/bash")
 #set(MAKE_CMD_ARG1 "${CMAKE_SOURCE_DIR}/compileWFA.sh")
