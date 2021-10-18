@@ -16,7 +16,8 @@ Table of Contents
     1. [Installation from source code](#Installation-from-source-code)
        1. [Dependencies](#Dependencies)
        2. [Compile](#Compile)
-    2. [Installation using Docker](#Installation-using-Docker)
+    2. [Installation using conda](#Installation-using-conda)
+    3. [Installation using Docker](#Installation-using-Docker)
 2. [Usage](#Usage)
     1. [Lift over the reference CDS coordinates to the query genome](#lift-over-the-reference-cds-coordinates-to-the-query-genome-command-1-3)
     2. [Genome alignment without chromosomal rearrangement](#genome-alignment-without-chromosomal-rearrangement-an-option-of-command-4)
@@ -50,6 +51,10 @@ make
 ```
 You will get an executable file named ```anchorwave ```. If you would like to move ```anchorwave``` to a new path, please always put ```configure``` and ```anchorwave``` into the same folder.
 The code has been tested under Ubuntu 20.2 and CentOS 7 with intel/AMD CPU. It should work well on other REDHAT or Debian based Linux Distributions.
+### Installation using conda
+```
+conda install -c bioconda anchorwave
+```
 ### Installation using Docker
 Compile using your local docker with the Dockerfile in this package: \
 ```docker build -f docker/Dockerfile -t anchorwave ./``` \
