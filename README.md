@@ -248,8 +248,10 @@ This command might cost a couple of days (~ three days on our computer) and 80 G
 If you have larger memory and multiple CPU cores available, you could increase the value of ```-t``` to run the command using multiple threads. By increasing each thread, ~50Gb more memory would be used. The memory cost is associated with sequence diversity. The above dataset is roughly represent the dataset that cost largest memory.
 
 ### Genome alignment with relocation variation, chromosome fusion or whole genome duplication (an option of command 4)
-When comparing two genomes undergone different genome duplications (goldfish genome, plant genomes and maybe hexapod genomes), this program implemented algorithm to identify collinear blocks with user specified coverage, and perform base pair resolution genome alignment for each collinear block.  
-The outputs are end-to-end sequence alignments for each collinear block in maf format.  
+When comparing two genomes undergone different genome duplications (goldfish genome, plant genomes and maybe hexapod genomes), this program implemented algorithm to identify collinear blocks with user specified coverage, and perform base pair resolution genome alignment for each collinear block.  \
+The alignment depth thresholds are the parameters ‘-R’ and ‘-Q’. They are used to control the alignment depth for the reference genome and query genome. ’-R’ is the maximum alignment depth for the reference genome, and ‘-Q’ is the maximum alignment depth for the query genome. For example, the maize genome has an additional round of whole-genome duplication compared to the sorghum genome, so we set the maximum alignment depth of the maize genome as 1 and the maximum alignment depth of the sorghum genome as 2. We use parameters ‘-R 1 -Q 2’ to align the sorghum genome against the maize genome. 
+
+The outputs of this function are end-to-end sequence alignments for each collinear block in maf format.  
   
 Data: maize B73 genome sequence and GFF3 annotation file from [http://plants.ensembl.org/Zea_mays/Info/Index](http://plants.ensembl.org/Zea_mays/Info/Index);  
 and sorghum genome sequence from [https://plants.ensembl.org/Sorghum_bicolor/Info/Index](https://plants.ensembl.org/Sorghum_bicolor/Info/Index]).  
