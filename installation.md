@@ -1,9 +1,10 @@
 # Installation
 AnchorWave uses the SIMD instructions to speed up the dynamic programming algorithm. Specific functions have been implemented for SSE2, SSE4.1, AVX2 and AVX512 instruction sets.  
 Empirically, the time cost: SSE2 > SSE4.1 > AVX2 > AVX512.  
+The conda version compile all of them and pick the correct version to run.  
 To check what CPU instructions are supported by your machine, you could run this command:
 ```cat /proc/cpuinfo | grep "flags" | uniq```  
-By default, we assume the machine supports SSE4.1.
+By default, we assume the machine supports SSE4.1.  
 
 ## If you are using machine with AVX512 and would like to take the advantage of that
 Clone the repository, and replace the default CMakeLists.txt with the avx512 one.
