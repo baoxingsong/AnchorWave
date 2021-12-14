@@ -98,7 +98,7 @@ std::string getexepath(char** argv) {
         exeFile = temp;
         exeFile.pop_back();
     }
-    std::regex e ("\\/[\\w._ ]+$");
+    std::regex e ("\\/[\\w._\\- ]+$");
     std::string result="";
     std::regex_replace(std::back_inserter(result), exeFile.begin(), exeFile.end(), e, "");
     return result;
