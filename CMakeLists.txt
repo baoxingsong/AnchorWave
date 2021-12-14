@@ -248,13 +248,3 @@ target_link_libraries(anchorwave gtest gtest_main ZLIB::ZLIB)
 
 install(TARGETS anchorwave DESTINATION bin)
 install(FILES configure DESTINATION bin)
-#
-#set(MAKE_CMD "/bin/bash")
-#set(MAKE_CMD_ARG1 "${CMAKE_SOURCE_DIR}/compileWFA.sh")
-#
-#MESSAGE("COMMAND: ${MAKE_CMD} ${MAKE_CMD_ARG1}")
-#execute_process(COMMAND ${MAKE_CMD} ${MAKE_CMD_ARG1}
-#        RESULT_VARIABLE CMD_ERROR
-#        OUTPUT_FILE CMD_OUTPUT)
-#MESSAGE( STATUS "CMD_ERROR:" ${CMD_ERROR})
-#MESSAGE( STATUS "CMD_OUTPUT:" ${CMD_OUTPUT})

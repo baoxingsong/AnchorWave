@@ -12,10 +12,10 @@ set(CMAKE_CXX_STANDARD 14)
 
 find_package(ZLIB)
 
-#
-
 set(CMAKE_CXX_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -mavx2 -msse4.1 -msse4.2 -I ./ -std=gnu++14 -pthread -lrt") # the -mavx* is for GNU compiler and xCORE* are for intel compiler
 set(CMAKE_C_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -mavx2 -msse4.1 -msse4.2 -I ./ -pthread -lrt")
+
+
 #for google unit test
 add_subdirectory(./googletest/googletest)
 include_directories(googletest/googletest/include googletest/googletest)
@@ -246,13 +246,5 @@ add_executable(anchorwave
 
 target_link_libraries(anchorwave gtest gtest_main ZLIB::ZLIB)
 
-#
-#set(MAKE_CMD "/bin/bash")
-#set(MAKE_CMD_ARG1 "${CMAKE_SOURCE_DIR}/compileWFA.sh")
-#
-#MESSAGE("COMMAND: ${MAKE_CMD} ${MAKE_CMD_ARG1}")
-#execute_process(COMMAND ${MAKE_CMD} ${MAKE_CMD_ARG1}
-#        RESULT_VARIABLE CMD_ERROR
-#        OUTPUT_FILE CMD_OUTPUT)
-#MESSAGE( STATUS "CMD_ERROR:" ${CMD_ERROR})
-#MESSAGE( STATUS "CMD_OUTPUT:" ${CMD_OUTPUT})
+install(TARGETS anchorwave DESTINATION bin)
+install(FILES configure DESTINATION bin)
