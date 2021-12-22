@@ -353,7 +353,9 @@ Please feel free to send E-mail to songbaoxing168@163.com.
 This work is funded by NSF [#1822330](https://nsf.gov/awardsearch/showAward?AWD_ID=1822330).
 
 ## Citation
-The manuscript is under preparation.
+Baoxing Song, Santiago Marco-Sola, Miquel Moreto, Lynn Johnson, Edward S. Buckler, Michelle C. Stitzer.
+AnchorWave: Sensitive alignment of genomes with high sequence diversity, extensive structural polymorphism, and whole-genome duplication.
+Proceedings of the National Academy of Sciences Jan 2022, 119 (1) e2113075119; DOI: 10.1073/pnas.2113075119
 
 [license]: ./LICENSE
 [license-badge]: https://img.shields.io/badge/license-MIT-blue.svg
