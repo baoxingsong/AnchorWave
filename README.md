@@ -99,8 +99,16 @@ Options
 ##### Data
 <i>Arabidopsis thaliana</i> Col-o reference genome and GFF3 annotation file from https://www.arabidopsis.org/  
 <i>Arabidopsis thaliana</i> L<i>er</i>-0 accession assembly from http://www.pnas.org/content/113/28/E4052  
-We tested GMAP and minimap2 for this purpose, any other splice aware sequence alignment program should work, as long as it could generate alignment in SAM format
-##### Using GMAP for lift over
+We tested minimap2 and GMAP for this purpose, any other splice aware sequence alignment program should work, as long as it could generate alignment in SAM format
+##### Using minimap2 for lift over
+Since minimap2 could not deal with short CDS very well, and that causes error to lift over anchors to the query genome. To minimum this side effects, AnchorWave would ignore those short (-m parameter) CDS records.
+```
+anchorwave gff2seq -i TAIR10_GFF3_genes.gff -r tair10.fa -o cds.fa
+minimap2 -x splice -t 10 -k 12 -a -p 0.4 -N 20 tair10.fa cds.fa > ref.sam
+minimap2 -x splice -t 10 -k 12 -a -p 0.4 -N 20 ler.fa cds.fa > ler.sam
+```
+
+##### Alternatively using GMAP for lift over
 ```
 anchorwave gff2seq -i TAIR10_GFF3_genes.gff -r tair10.fa -m 0 -o cds.fa
 
@@ -111,13 +119,6 @@ gmap -t 10 -A -f samse -d tair10 -D tair10/ cds.fa > gmap_tair10.sam
 gmap -t 10 -A -f samse -d ler -D ler/ cds.fa > gmap_ler.sam
 ```
 
-##### Alternatively using minimap2 for lift over
-Since minimap2 could not deal with short CDS very well, and that causes error to lift over anchors to the query genome. To minimum this side effects, AnchorWave would ignore those short (-m parameter) CDS records.
-```
-anchorwave gff2seq -i TAIR10_GFF3_genes.gff -r tair10.fa -o cds.fa
-minimap2 -x splice -t 10 -k 12 -a -p 0.4 -N 20 tair10.fa cds.fa > ref.sam
-minimap2 -x splice -t 10 -k 12 -a -p 0.4 -N 20 ler.fa cds.fa > ler.sam
-```
 
 
 ### Genome alignment without chromosomal rearrangement (an option of command 4)
@@ -130,6 +131,14 @@ grep ">" ler.fa
 grep ">" Col.fa
 ```
 #### Anchors lift over using GMAP or minimap2
+
+##### Anchors lift over using minimap2
+```
+anchorwave gff2seq -i TAIR10_GFF3_genes.gff -r tair10.fa -o cds.fa
+minimap2 -x splice -t 10 -k 12 -a -p 0.4 -N 20 tair10.fa cds.fa > ref.sam
+minimap2 -x splice -t 10 -k 12 -a -p 0.4 -N 20 ler.fa cds.fa > ler.sam
+```
+
 ##### Anchors lift over using GMAP
 ```
 anchorwave gff2seq -i TAIR10_GFF3_genes.gff -r tair10.fa -m 0 -o cds.fa
@@ -138,22 +147,17 @@ gmap_build --dir=./ler --genomedb=ler ler.fa
 gmap -t 10 -A -f samse -d tair10 -D tair10/ cds.fa > ref.sam
 gmap -t 10 -A -f samse -d ler -D ler/ cds.fa > ler.sam
 ```
-##### Anchors lift over using minimap2
-```
-anchorwave gff2seq -i TAIR10_GFF3_genes.gff -r tair10.fa -o cds.fa
-minimap2 -x splice -t 10 -k 12 -a -p 0.4 -N 20 tair10.fa cds.fa > ref.sam
-minimap2 -x splice -t 10 -k 12 -a -p 0.4 -N 20 ler.fa cds.fa > ler.sam
-```
 
 #### Perform alignment and variant calling:
 The `-m` setting of this command should be identical with the above `gff2seq` command
-##### If GMAP was used for lift over:
-```
-anchorwave genoAli -i TAIR10_GFF3_genes.gff -as cds.fa -r tair10.fa -a ler.sam -ar ref.sam -s ler.fa -v ler.vcf -n ler.anchors -o ler.maf -f ler.f.maf -m 0 > ler.log
-```
 ##### If minimap2 was used for lift over:
 ```
 anchorwave genoAli -i TAIR10_GFF3_genes.gff -as cds.fa -r tair10.fa -a ler.sam -ar ref.sam -s ler.fa -v ler.vcf -n ler.anchors -o ler.maf -f ler.f.maf > ler.log
+```
+
+##### If GMAP was used for lift over:
+```
+anchorwave genoAli -i TAIR10_GFF3_genes.gff -as cds.fa -r tair10.fa -a ler.sam -ar ref.sam -s ler.fa -v ler.vcf -n ler.anchors -o ler.maf -f ler.f.maf -m 0 > ler.log
 ```
 The output file ```ler.anchors``` could be used to visualize collinear anchors/blocks.  
 Please note: Under the global alignment model, if the block length is longer than a preset window size, the output alignment maybe a suboptimal alignment. While a large window size (larger values of parameters ```-w``` and ```-fa3```) would cost more memory.  
@@ -219,7 +223,14 @@ Use this command to rename each chromosome for Zm-Mo17-REFERENCE-CAU-1.0.fa:
 sed -i 's/>chr/>/g' Zm-Mo17-REFERENCE-CAU-1.0.fa
 ```
 #### Anchors lift over:
-##### Using GMAP:
+##### Ｕsing minimap2 for lift over:
+```
+anchorwave gff2seq -i Zea_mays.AGPv4.34.gff3 -r Zea_mays.AGPv4.dna.toplevel.fa -o cds.fa
+minimap2 -x splice -t 10 -k 12 -a -p 0.4 -N 20 Zm-Mo17-REFERENCE-CAU-1.0.fa cds.fa > cds.sam
+minimap2 -x splice -t 10 -k 12 -a -p 0.4 -N 20 Zea_mays.AGPv4.dna.toplevel.fa cds.fa > ref.sam
+```
+
+##### Alternatively　Using GMAP　for lift over:
 ```
 anchorwave gff2seq -i Zea_mays.AGPv4.34.gff3 -r Zea_mays.AGPv4.dna.toplevel.fa -m 0 -o cds.fa
 gmap_build --dir=./B73 --genomedb=B73 Zea_mays.AGPv4.dna.toplevel.fa
@@ -227,23 +238,19 @@ gmap_build --dir=./Mo17 --genomedb=Mo17 Zm-Mo17-REFERENCE-CAU-1.0.fa
 gmap –t 10 -A -f samse -d B73 -D B73/ cds.fa > ref.sam
 gmap –t 10 -A -f samse -d Mo17 -D Mo17/ cds.fa > cds.sam
 ```
-##### Alternatively using minimap2 for lift over:
-```
-anchorwave gff2seq -i Zea_mays.AGPv4.34.gff3 -r Zea_mays.AGPv4.dna.toplevel.fa -o cds.fa
-minimap2 -x splice -t 10 -k 12 -a -p 0.4 -N 20 Zm-Mo17-REFERENCE-CAU-1.0.fa cds.fa > cds.sam
-minimap2 -x splice -t 10 -k 12 -a -p 0.4 -N 20 Zea_mays.AGPv4.dna.toplevel.fa cds.fa > ref.sam
-```
+
 #### Perform alignment using the ```genoAli``` function with parameter ```-IV```:
 The `-m` setting of this command should be identical with the above `gff2seq` command
+##### If minimap2 was used for lift over:
+```
+anchorwave genoAli -i Zea_mays.AGPv4.34.gff3 -as cds.fa -r Zea_mays.AGPv4.dna.toplevel.fa -a cds.sam -ar ref.sam -s Zm-Mo17-REFERENCE-CAU-1.0.fa -n anchors -o anchorwave.maf -f anchorwave.f.maf -IV
+```
+
 ##### If GMAP was used for lift over:
 ```
 anchorwave genoAli -i Zea_mays.AGPv4.34.gff3 -as cds.fa -r Zea_mays.AGPv4.dna.toplevel.fa -a cds.sam -ar ref.sam -s Zm-Mo17-REFERENCE-CAU-1.0.fa -n anchors -o anchorwave.maf -f anchorwave.f.maf -IV -m 0
 ```
 
-##### If minimap2 was used for lift over:
-```
-anchorwave genoAli -i Zea_mays.AGPv4.34.gff3 -as cds.fa -r Zea_mays.AGPv4.dna.toplevel.fa -a cds.sam -ar ref.sam -s Zm-Mo17-REFERENCE-CAU-1.0.fa -n anchors -o anchorwave.maf -f anchorwave.f.maf -IV
-```
 This command might cost a couple of days (~ three days on our computer) and 80 Gb memory. Reduce the values of parameters ```-w``` and ```-fa3``` could reduce memory usage and CPU time but would also reduce the sequence alignment quality.  
 If you have larger memory and multiple CPU cores available, you could increase the value of ```-t``` to run the command using multiple threads. By increasing each thread, ~50Gb more memory would be used. The memory cost is associated with sequence diversity. The above dataset is roughly represent the dataset that cost largest memory.
 
@@ -258,6 +265,14 @@ and sorghum genome sequence from [https://plants.ensembl.org/Sorghum_bicolor/Inf
   
 This function does not need the reference and query genomes having identical chromosome names.
 #### Anchors lift over:
+
+##### Using minimap2:
+```
+anchorwave gff2seq -r Zea_mays.AGPv4.dna.toplevel.fa -i Zea_mays.AGPv4.34.gff3 -o cds.fa
+minimap2 -x splice -t 10 -k 12 -a -p 0.4 -N 20 Sorghum_bicolor.Sorghum_bicolor_NCBIv3.dna.toplevel.fa cds.fa > cds.sam
+minimap2 -x splice -t 10 -k 12 -a -p 0.4 -N 20 Zea_mays.AGPv4.dna.toplevel.fa cds.fa > ref.sam
+```
+
 ##### Using GMAP:
 ```
 anchorwave gff2seq -r Zea_mays.AGPv4.dna.toplevel.fa -i Zea_mays.AGPv4.34.gff3 -o cds.fa -m 0
@@ -267,22 +282,19 @@ gmap –t 10 -A -f samse -d B73 -D B73/ cds.fa > ref.sam
 gmap –t 10 -A -f samse -d sorghum -D sorghum/ cds.fa > cds.sam
 ```
 
-##### Using minimap2:
-```
-anchorwave gff2seq -r Zea_mays.AGPv4.dna.toplevel.fa -i Zea_mays.AGPv4.34.gff3 -o cds.fa
-minimap2 -x splice -t 10 -k 12 -a -p 0.4 -N 20 Sorghum_bicolor.Sorghum_bicolor_NCBIv3.dna.toplevel.fa cds.fa > cds.sam
-minimap2 -x splice -t 10 -k 12 -a -p 0.4 -N 20 Zea_mays.AGPv4.dna.toplevel.fa cds.fa > ref.sam
-```
+
 
 #### Perform alignment using the ```proali``` function:
-##### If GMAP was used for lift over:
-```
-anchorwave proali -i Zea_mays.AGPv4.34.gff3 -as cds.fa -r Zea_mays.AGPv4.dna.toplevel.fa -a cds.sam -ar ref.sam -s Sorghum_bicolor.Sorghum_bicolor_NCBIv3.dna.toplevel.fa -n anchors -R 1 -Q 2 -o alignment.maf -f alignment.f.maf -m 0
-```
 ##### If minimap2 was used for lift over:
 ```
 anchorwave proali -i Zea_mays.AGPv4.34.gff3 -as cds.fa -r Zea_mays.AGPv4.dna.toplevel.fa -a cds.sam -ar ref.sam -s Sorghum_bicolor.Sorghum_bicolor_NCBIv3.dna.toplevel.fa -n anchors -R 1 -Q 2 -o alignment.maf -f alignment.f.maf
 ```
+
+##### If GMAP was used for lift over:
+```
+anchorwave proali -i Zea_mays.AGPv4.34.gff3 -as cds.fa -r Zea_mays.AGPv4.dna.toplevel.fa -a cds.sam -ar ref.sam -s Sorghum_bicolor.Sorghum_bicolor_NCBIv3.dna.toplevel.fa -n anchors -R 1 -Q 2 -o alignment.maf -f alignment.f.maf -m 0
+```
+
 Options of the ```proali``` function:
 ```
 Usage: anchorwave proali -i refGffFile -r refGenome -a cds.sam -as cds.fa -ar ref.sam -s targetGenome -n outputAnchorFile -o output.maf -f output.fragmentation.maf -R 1 -Q 1
