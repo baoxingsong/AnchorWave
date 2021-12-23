@@ -7,7 +7,7 @@ By performing sensitive sequence alignment for each shorter interval via a 2-pie
 <img src="./doc/workflow.png" width="800px" background-color="#ffffff" />
 </p>
 AnchorWave takes the reference genome sequence and gene annotation in GFF3 format as input and extracts reference full-length coding sequences (CDS) to use as anchors. 
-Using a splice aware alignment program (GMAP and minimap2 have been tested) to lift over the start and end position of reference full-length CDS to the query genome (step 1). 
+Using a splice aware alignment program (minimap2 and GMAP have been tested) to lift over the start and end position of reference full-length CDS to the query genome (step 1). 
 AnchorWave then identifies collinear anchors using one of three user-specified algorithm options (step 2) and uses the [WFA](https://github.com/smarco/WFA) algorithm to perform alignment for each anchor and inter anchor interval (step 4). Some anchor/inter-anchor regions cannot be aligned using our standard approach due to high memory and computational time costs. For these, AnchorWave either identifies novel anchors within long inter-anchor regions (step 3), or for those that cannot be split by novel anchors, aligns using the ksw_extd2 function implemented in minimap2 or a reimplemented sliding window approach (step 4). AnchorWave concatenates base pair sequence alignment for each anchor and inter-anchor region and outputs the alignment in MAF format (step 5).
 
 Table of Contents
@@ -34,7 +34,7 @@ Table of Contents
 #### Dependencies
 GNU GCC >=7.0  
 Cmake >= 3.0  
-[GMAP](http://research-pub.gene.com/gmap/) or [minimap2](https://github.com/lh3/minimap2)  
+[minimap2](https://github.com/lh3/minimap2) or [GMAP](http://research-pub.gene.com/gmap/)
 Operating System: Linux  
 Architecture: x86_64 CPUs with SSE4.1  
 Memory: > 85 Gb  
