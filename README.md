@@ -53,7 +53,7 @@ You will get an executable file named ```anchorwave ```. If you would like to mo
 The code has been tested under Ubuntu 20.2 and CentOS 7 with intel/AMD CPU. It should work well on other REDHAT or Debian based Linux Distributions.
 ### Installation using conda
 ```
-conda install -c bioconda anchorwave
+conda install -c bioconda -c conda-forge anchorwave
 ```
 ### Installation using Docker
 Compile using your local docker with the Dockerfile in this package: \
