@@ -69,7 +69,7 @@ In general, totally four commands are need to run through the whole pipeline.
 4) perform genome alignment    
 ### Note
 * [AnchorWave use prior informations about whole genome duplication, chromosome rearrangement etc to guide the genome alignment, while AnchorWave could not figure out those evolution events automatically. Users need to know those informations before running AnchorWave and tune the parameters of the command carefully. Users might need to draw some plots to figure out if you would like to use `genoAli` or `proali`. If you think `genoAli` is proper for your data, you need to think about if you would like to set `IV`.
-If you think `proali` is proper for your data, you need to think about how to set the values of `-e`, `R` and `Q`.](#)
+If you think `proali` is proper for your data, you need to think about how to set the values of `R`, `Q` and maybe `-e`.](#)
 You could reference [guideline.pdf](./doc/guideline.pdf) or [#16](./issues/16) for how to do that.
 * To alignment highly diverse genomes, the command 4 might cost a couple of CPU days. </span> If you have large memory available, this step could be paralyzed. Without heavily parameters turning, for highly diverse genomes, using a single thread, AnchorWave uses ~85Gb mem. Increasing a thread would cost an extra ~50Gb mem.
 
