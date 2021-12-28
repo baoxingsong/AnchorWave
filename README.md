@@ -6,6 +6,7 @@ By performing sensitive sequence alignment for each shorter interval via a 2-pie
 <p align="center">
 <img src="./doc/workflow.png" width="800px" background-color="#ffffff" />
 </p>
+
 AnchorWave takes the reference genome sequence and gene annotation in GFF3 format as input and extracts reference full-length coding sequences (CDS) to use as anchors. 
 Using a splice aware alignment program (minimap2 and GMAP have been tested) to lift over the start and end position of reference full-length CDS to the query genome (step 1). 
 AnchorWave then identifies collinear anchors using one of three user-specified algorithm options (step 2) and uses the [WFA](https://github.com/smarco/WFA) algorithm to perform alignment for each anchor and inter anchor interval (step 4). Some anchor/inter-anchor regions cannot be aligned using our standard approach due to high memory and computational time costs. For these, AnchorWave either identifies novel anchors within long inter-anchor regions (step 3), or for those that cannot be split by novel anchors, aligns using the ksw_extd2 function implemented in minimap2 or a reimplemented sliding window approach (step 4). AnchorWave concatenates base pair sequence alignment for each anchor and inter-anchor region and outputs the alignment in MAF format (step 5).
@@ -68,9 +69,9 @@ In general, totally four commands are need to run through the whole pipeline.
 3) align CDS to the query genome  
 4) perform genome alignment    
 ### Note
-* [AnchorWave use prior informations about whole genome duplication, chromosome rearrangement etc to guide the genome alignment, while AnchorWave could not figure out those evolution events automatically. Users need to know those informations before running AnchorWave and tune the parameters of the command carefully. Users might need to draw some plots to figure out if you would like to use `genoAli` or `proali`. If you think `genoAli` is proper for your data, you need to think about if you would like to set `IV`.
-If you think `proali` is proper for your data, you need to think about how to set the values of `R`, `Q` and maybe `-e`.](#)
-You could reference [guideline.pdf](./doc/guideline.pdf) or [#16](./issues/16) for how to do that.
+* [AnchorWave use prior informations about whole genome duplication, chromosome rearrangement etc to guide the genome alignment, while AnchorWave could not figure out those evolution events automatically. Users need to know those informations before running AnchorWave and tune the parameters accordingly. Users might need to draw some plots to figure out if you would like to use `genoAli` or `proali`. If `genoAli` is proper, then need to think about if you would like to set `IV`.
+If `proali` is proper, then need to think about how to set the values of `R`, `Q` and maybe `-e`.](#Note)
+Could refer [guideline.pdf](./doc/guideline.pdf) or [#16](./issues/16) for how to do that.
 * To alignment highly diverse genomes, the command 4 might cost a couple of CPU days. </span> If you have large memory available, this step could be paralyzed. Without heavily parameters turning, for highly diverse genomes, using a single thread, AnchorWave uses ~85Gb mem. Increasing a thread would cost an extra ~50Gb mem.
 
 
@@ -369,9 +370,9 @@ Please feel free to send E-mail to songbaoxing168@163.com.
 This work is funded by NSF [#1822330](https://nsf.gov/awardsearch/showAward?AWD_ID=1822330).
 
 ## Citation
-Baoxing Song, Santiago Marco-Sola, Miquel Moreto, Lynn Johnson, Edward S. Buckler, Michelle C. Stitzer.
+[Baoxing Song, Santiago Marco-Sola, Miquel Moreto, Lynn Johnson, Edward S. Buckler, Michelle C. Stitzer.
 AnchorWave: Sensitive alignment of genomes with high sequence diversity, extensive structural polymorphism, and whole-genome duplication.
-Proceedings of the National Academy of Sciences Jan 2022, 119 (1) e2113075119; DOI: 10.1073/pnas.2113075119
+Proceedings of the National Academy of Sciences Jan 2022, 119 (1) e2113075119; DOI: 10.1073/pnas.2113075119](https://www.pnas.org/content/119/1/e2113075119)
 
 [license]: ./LICENSE
 [license-badge]: https://img.shields.io/badge/license-MIT-blue.svg
