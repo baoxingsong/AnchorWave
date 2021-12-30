@@ -35,7 +35,7 @@ Table of Contents
 #### Dependencies
 GNU GCC >=7.0  
 Cmake >= 3.0  
-[minimap2](https://github.com/lh3/minimap2) or [GMAP](http://research-pub.gene.com/gmap/)
+[minimap2](https://github.com/lh3/minimap2) or [GMAP](http://research-pub.gene.com/gmap/)  
 Operating System: Linux  
 Architecture: x86_64 CPUs with SSE4.1  
 Memory: > 85 Gb  
@@ -72,7 +72,7 @@ In general, totally four commands are need to run through the whole pipeline.
 * [AnchorWave use prior informations about whole genome duplication, chromosome rearrangement etc to guide the genome alignment, while AnchorWave could not figure out those evolution events automatically. Users need to know those informations before running AnchorWave and tune the parameters accordingly. Users might need to draw some plots to figure out if you would like to use `genoAli` or `proali`. If `genoAli` is proper, then need to think about if you would like to set `IV`.
 If `proali` is proper, then need to think about how to set the values of `R`, `Q` and maybe `-e`.](#Note)
 Could refer [guideline.pdf](./doc/guideline.pdf) or [#16](./issues/16) for how to do that.
-* To alignment highly diverse genomes, the command 4 might cost a couple of CPU days. </span> If you have large memory available, this step could be paralyzed. Without heavily parameters turning, for highly diverse genomes, using a single thread, AnchorWave uses ~85Gb mem. Increasing a thread would cost an extra ~50Gb mem.
+* To alignment highly diverse genomes, the command 4 might cost a couple of CPU days. </span> If you have large memory available, this step could be paralyzed. Without heavily parameters turning, for highly diverse genomes, using a single thread, AnchorWave uses ~85Gb memory. Increasing a thread would cost an extra ~50Gb memory. If the two genomes have very similar sequences, the time and memory cost would be significantly less.
 
 
 Options:
