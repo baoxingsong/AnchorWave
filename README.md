@@ -25,7 +25,7 @@ Table of Contents
     3. [Genome alignment without translocation rearrangement while with inversions](#genome-alignment-without-translocation-rearrangement-while-with-inversions-an-option-of-command-4)
     4. [Genome alignment with relocation variation, chromosome fusion or whole genome duplication](#genome-alignment-with-relocation-variation-chromosome-fusion-or-whole-genome-duplication-an-option-of-command-4)
 3. [Tips for following analysis](#tips-for-following-analysis)
-4. [Guidelines](#Guidelines)
+4. [Guidelines](#walkthrough-guidelines)
 5. [FAQ](#FAQ)
 6. [Contact](#Contact)
 7. [Founding](#Founding)
