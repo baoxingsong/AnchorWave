@@ -346,7 +346,7 @@ Options
 The [maf-convert](https://gitlab.com/mcfrith/last/-/blob/main/bin/maf-convert) script could be used to reformat the MAF format file into several different formats.  
 For example, reformat maize B73 against Mo17 alignment into sam and bam format:
 ```
-python2 maf-convert sam anchorwave.maf | sed 's/Zea_mays.AGPv4.dna.toplevel.fa.//g' | sed 's/Zm-Mo17-REFERENCE-CAU-1.0.fa.//g' |  sed 's/[0-9]\+H//g' > anchorwave.sam
+python2 maf-convert sam anchorwave.maf | sed 's/[0-9]\+H//g' > anchorwave.sam
 cat anchorwave.sam | samtools view -O BAM --reference Zea_mays.AGPv4.dna.toplevel.fa - | samtools sort - > anchorwave.bam
 samtools index anchorwave.bam
 ```
@@ -354,7 +354,7 @@ If you would like to swap reference and query sequence, there is no need to re-r
 The script ```anchorwave-maf-swap.py``` under folder ```scripts``` has been implemented for this aim:
 ```
 cat anchorwave.maf | python2 anchorwave-maf-swap.py >anchorwave_swap.maf
-maf-convert sam anchorwave_swap.maf | sed 's/Zea_mays.AGPv4.dna.toplevel.fa.//g' | sed 's/Zm-Mo17-REFERENCE-CAU-1.0.fa.//g' |  sed 's/[0-9]\+H//g' > anchorwave_swap.sam
+maf-convert sam anchorwave_swap.maf | sed 's/[0-9]\+H//g' > anchorwave_swap.sam
 samtools view -O BAM --reference Zm-Mo17-REFERENCE-CAU-1.0.fa anchorwave_swap.sam | samtools sort - > anchorwave_swap.bam
 ```
 If you would like to reformat MAF files into wiggle format for sequence alignment coverage and identification
