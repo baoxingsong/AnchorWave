@@ -312,7 +312,7 @@ Options
  -s   FILE    target genome sequence
  -n   FILE    output anchors file
  -o   FILE    output file in maf format
- -f   FILE    output sequence alignment for each block in maf format
+ -f   FILE    output sequence alignment for each anchor/inter-anchor region in maf format
  -t   INT     number of threads (default: 1)
  -fa3 INT     if the inter-anchor length is shorter than this value, stop trying to find new anchors (default: 200000)
  -w   INT     sequence alignment window width (default: 38000)
