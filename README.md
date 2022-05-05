@@ -365,7 +365,7 @@ Please message Lynn Johnson (lcj34@cornell.edu), if you have any question.
 If you would like to reformat MAF files into (G)VCF or track the coordinates on query genome and the reference genome
 ```
 https://bitbucket.org/bucklerlab/biokotlin/src/develop/src/main/kotlin/biokotlin/genome/MAFToGVCF.kt
-Please message Zack Miller (zrm22@cornell.edu), if you have any question.
+Please read https://bitbucket.org/bucklerlab/practicalhaplotypegraph/wiki/UserInstructions/CreatePHG_step2_MAFToGVCFPluginDetails.md for usage.
 ```
 
 
