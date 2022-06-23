@@ -11,6 +11,10 @@ AnchorWave takes the reference genome sequence and gene annotation in GFF3 forma
 Using a splice aware alignment program (minimap2 and GMAP have been tested) to lift over the start and end position of reference full-length CDS to the query genome (step 1). 
 AnchorWave then identifies collinear anchors using one of three user-specified algorithm options (step 2) and uses the [WFA](https://github.com/smarco/WFA) algorithm to perform alignment for each anchor and inter anchor interval (step 4). Some anchor/inter-anchor regions cannot be aligned using our standard approach due to high memory and computational time costs. For these, AnchorWave either identifies novel anchors within long inter-anchor regions (step 3), or for those that cannot be split by novel anchors, aligns using the ksw_extd2 function implemented in minimap2 or a reimplemented sliding window approach (step 4). AnchorWave concatenates base pair sequence alignment for each anchor and inter-anchor region and outputs the alignment in MAF format (step 5).
 
+### I am hiring at the Peking University Institute of Advanced Agricultural Sciences. If you are interested in the usage or development of AnchorWave and are looking for a postdoc/academic/programming position, please contact me (baoxing.song@pku-iaas.edu.cn).
+### Visiting scientist/student are also very welcome.
+
+
 Table of Contents
 =================
 1. [Installation](#Installation)
