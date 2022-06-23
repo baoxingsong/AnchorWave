@@ -6,6 +6,7 @@ By performing sensitive sequence alignment for each shorter interval via a 2-pie
 <p align="center">
 <img src="./doc/workflow.png" width="800px" background-color="#ffffff" />
 </p>
+
 AnchorWave takes the reference genome sequence and gene annotation in GFF3 format as input and extracts reference full-length coding sequences (CDS) to use as anchors. 
 Using a splice aware alignment program (minimap2 and GMAP have been tested) to lift over the start and end position of reference full-length CDS to the query genome (step 1). 
 AnchorWave then identifies collinear anchors using one of three user-specified algorithm options (step 2) and uses the [WFA](https://github.com/smarco/WFA) algorithm to perform alignment for each anchor and inter anchor interval (step 4). Some anchor/inter-anchor regions cannot be aligned using our standard approach due to high memory and computational time costs. For these, AnchorWave either identifies novel anchors within long inter-anchor regions (step 3), or for those that cannot be split by novel anchors, aligns using the ksw_extd2 function implemented in minimap2 or a reimplemented sliding window approach (step 4). AnchorWave concatenates base pair sequence alignment for each anchor and inter-anchor region and outputs the alignment in MAF format (step 5).
@@ -24,7 +25,7 @@ Table of Contents
     3. [Genome alignment without translocation rearrangement while with inversions](#genome-alignment-without-translocation-rearrangement-while-with-inversions-an-option-of-command-4)
     4. [Genome alignment with relocation variation, chromosome fusion or whole genome duplication](#genome-alignment-with-relocation-variation-chromosome-fusion-or-whole-genome-duplication-an-option-of-command-4)
 3. [Tips for following analysis](#tips-for-following-analysis)
-4. [Guidelines](#Guidelines)
+4. [Guidelines](#walkthrough-guidelines)
 5. [FAQ](#FAQ)
 6. [Contact](#Contact)
 7. [Founding](#Founding)
@@ -34,7 +35,7 @@ Table of Contents
 #### Dependencies
 GNU GCC >=7.0  
 Cmake >= 3.0  
-[minimap2](https://github.com/lh3/minimap2) or [GMAP](http://research-pub.gene.com/gmap/)
+[minimap2](https://github.com/lh3/minimap2) or [GMAP](http://research-pub.gene.com/gmap/)  
 Operating System: Linux  
 Architecture: x86_64 CPUs with SSE4.1  
 Memory: > 85 Gb  
@@ -73,10 +74,10 @@ In general, totally four commands are need to run through the whole pipeline.
 3) align CDS to the query genome  
 4) perform genome alignment    
 ### Note
-* [AnchorWave use prior informations about whole genome duplication, chromosome rearrangement etc to guide the genome alignment, while AnchorWave could not figure out those evolution events automatically. Users need to know those informations before running AnchorWave and tune the parameters of the command carefully. Users might need to draw some plots to figure out if you would like to use `genoAli` or `proali`. If you think `genoAli` is proper for your data, you need to think about if you would like to set `IV`.
-If you think `proali` is proper for your data, you need to think about how to set the values of `R`, `Q` and maybe `-e`.](#)
-You could reference [guideline.pdf](./doc/guideline.pdf) or [#16](./issues/16) for how to do that.
-* To alignment highly diverse genomes, the command 4 might cost a couple of CPU days. </span> If you have large memory available, this step could be paralyzed. Without heavily parameters turning, for highly diverse genomes, using a single thread, AnchorWave uses ~85Gb mem. Increasing a thread would cost an extra ~50Gb mem.
+* [AnchorWave use prior informations about whole genome duplication, chromosome rearrangement etc to guide the genome alignment, while AnchorWave could not figure out those evolution events automatically. Users need to know those informations before running AnchorWave and tune the parameters accordingly. Users might need to draw some plots to figure out if you would like to use `genoAli` or `proali`. If `genoAli` is proper, then need to think about if you would like to set `IV`.
+If `proali` is proper, then need to think about how to set the values of `R`, `Q` and maybe `-e`.](#Note)
+Could refer [guideline.pdf](./doc/guideline.pdf) or [#16](./issues/16) for how to do that.
+* To alignment highly diverse genomes, the command 4 might cost a couple of CPU days. </span> If you have large memory available, this step could be paralyzed. Without heavily parameters turning, for highly diverse genomes, using a single thread, AnchorWave uses ~85Gb memory. Increasing a thread would cost an extra ~50Gb memory. If the two genomes have very similar sequences, the time and memory cost would be significantly less.
 
 
 Options:
@@ -316,7 +317,7 @@ Options
  -s   FILE    target genome sequence
  -n   FILE    output anchors file
  -o   FILE    output file in maf format
- -f   FILE    output sequence alignment for each block in maf format
+ -f   FILE    output sequence alignment for each anchor/inter-anchor region in maf format
  -t   INT     number of threads (default: 1)
  -fa3 INT     if the inter-anchor length is shorter than this value, stop trying to find new anchors (default: 200000)
  -w   INT     sequence alignment window width (default: 38000)
@@ -350,17 +351,29 @@ Options
 The [maf-convert](https://gitlab.com/mcfrith/last/-/blob/main/bin/maf-convert) script could be used to reformat the MAF format file into several different formats.  
 For example, reformat maize B73 against Mo17 alignment into sam and bam format:
 ```
-python2 maf-convert sam anchorwave.maf | sed 's/Zea_mays.AGPv4.dna.toplevel.fa.//g' | sed 's/Zm-Mo17-REFERENCE-CAU-1.0.fa.//g' |  sed 's/[0-9]\+H//g' > anchorwave.sam
+python2 maf-convert sam anchorwave.maf | sed 's/[0-9]\+H//g' > anchorwave.sam
 cat anchorwave.sam | samtools view -O BAM --reference Zea_mays.AGPv4.dna.toplevel.fa - | samtools sort - > anchorwave.bam
 samtools index anchorwave.bam
 ```
-If you could like to swap reference and query sequence, there is no need to re-run AnchorWave, which is computational cost.  
+If you would like to swap reference and query sequence, there is no need to re-run AnchorWave, which is computational cost.  
 The script ```anchorwave-maf-swap.py``` under folder ```scripts``` has been implemented for this aim:
 ```
 cat anchorwave.maf | python2 anchorwave-maf-swap.py >anchorwave_swap.maf
-maf-convert sam anchorwave_swap.maf | sed 's/Zea_mays.AGPv4.dna.toplevel.fa.//g' | sed 's/Zm-Mo17-REFERENCE-CAU-1.0.fa.//g' |  sed 's/[0-9]\+H//g' > anchorwave_swap.sam
+maf-convert sam anchorwave_swap.maf | sed 's/[0-9]\+H//g' > anchorwave_swap.sam
 samtools view -O BAM --reference Zm-Mo17-REFERENCE-CAU-1.0.fa anchorwave_swap.sam | samtools sort - > anchorwave_swap.bam
 ```
+If you would like to reformat MAF files into wiggle format for sequence alignment coverage and identification
+```
+https://bitbucket.org/bucklerlab/biokotlin/src/develop/src/main/kotlin/biokotlin/genome/GetCovIDFromMAFMultiThread.kt
+Please message Lynn Johnson (lcj34@cornell.edu), if you have any question.
+```
+If you would like to reformat MAF files into (G)VCF or track the coordinates on query genome and the reference genome
+```
+https://bitbucket.org/bucklerlab/biokotlin/src/develop/src/main/kotlin/biokotlin/genome/MAFToGVCF.kt
+Please read https://bitbucket.org/bucklerlab/practicalhaplotypegraph/wiki/UserInstructions/CreatePHG_step2_MAFToGVCFPluginDetails.md for usage.
+```
+
+
 ## Walkthrough guidelines
 A more detailed guideline for which algorithm to use, how to visualize the results and how to select parameters could be found at the [walkthrough guidelines](./doc/guideline.pdf).  
 More examples and comparsion with other tools could be found at [genome alignment](https://github.com/baoxingsong/genomeAlignment).
@@ -374,9 +387,9 @@ Please feel free to send E-mail to songbaoxing168@163.com.
 This work is funded by NSF [#1822330](https://nsf.gov/awardsearch/showAward?AWD_ID=1822330).
 
 ## Citation
-Baoxing Song, Santiago Marco-Sola, Miquel Moreto, Lynn Johnson, Edward S. Buckler, Michelle C. Stitzer.
+[Baoxing Song, Santiago Marco-Sola, Miquel Moreto, Lynn Johnson, Edward S. Buckler, Michelle C. Stitzer.
 AnchorWave: Sensitive alignment of genomes with high sequence diversity, extensive structural polymorphism, and whole-genome duplication.
-Proceedings of the National Academy of Sciences Jan 2022, 119 (1) e2113075119; DOI: 10.1073/pnas.2113075119
+Proceedings of the National Academy of Sciences Jan 2022, 119 (1) e2113075119; DOI: 10.1073/pnas.2113075119](https://www.pnas.org/content/119/1/e2113075119)
 
 [license]: ./LICENSE
 [license-badge]: https://img.shields.io/badge/license-MIT-blue.svg

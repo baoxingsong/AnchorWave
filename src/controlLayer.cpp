@@ -555,7 +555,7 @@ int proportationalAlignment(int argc, char** argv, std::map<std::string, std::st
           " -s   FILE    target genome sequence" << std::endl <<
           " -n   FILE    output anchors file" << std::endl <<
           " -o   FILE    output file in maf format" << std::endl <<
-          " -f   FILE    output sequence alignment for each block in maf format" << std::endl <<
+          " -f   FILE    output sequence alignment for each anchor/inter-anchor region in maf format" << std::endl <<
           " -t   INT     number of threads (default: " << threads << ")" << std::endl <<
 //          " -l   FILE    output local alignment for each anchor and inter-anchor region" << std::endl <<
 //          " -fa  INT     if fragment length is smaller than this value in inter-anchor region, use WFA to align (default: " << wfaSize << ")" << std::endl <<
