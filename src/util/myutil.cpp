@@ -56,7 +56,7 @@ std::string songStrReplaceAll( std::string& str, const std::string& pattern, con
 
 int32_t min (  const int32_t & a, const int32_t & b ){
     if ( a < b ){
-        return 1;
+        return a;
     }
     return b;
 }
