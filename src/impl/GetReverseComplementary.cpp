@@ -5,7 +5,7 @@
 #include "GetReverseComplementary.h"
 
 
-std::string getReverseComplementary(const std::string& sequence) {
+std::string getReverseComplementary(const std::string &sequence) {
     std::string reserveString;
     reserveString.reserve(sequence.size());
     std::stringstream reversecomplementary(reserveString);
@@ -38,7 +38,8 @@ std::string getReverseComplementary(const std::string& sequence) {
         } else if ('H' == c) {
             c = 'D';
         }
-        reversecomplementary<< c;
+        reversecomplementary << c;
     }
+
     return reversecomplementary.str();
 }

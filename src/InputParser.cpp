@@ -14,54 +14,46 @@
  *
  * =====================================================================================
  */
-#include <stdlib.h>
-/*************************************************************************
-
-
-
-
- ************************************************************************/
-
 #include <iostream>
 #include "InputParser.h"
 
-InputParser::InputParser (int &argc, char **argv){
-    for (int i=1; i < argc; ++i)
+InputParser::InputParser(int &argc, char **argv) {
+    for (int i = 1; i < argc; ++i)
         this->tokens.push_back(std::string(argv[i]));
 }
 
-const std::string InputParser::getCmdOption( std::string &option) {
+const std::string InputParser::getCmdOption(std::string &option) {
     std::vector<std::string>::iterator itr;
-    itr =  std::find(this->tokens.begin(), this->tokens.end(), option);
-    if (itr != this->tokens.end() && ++itr != this->tokens.end()){
+    itr = std::find(this->tokens.begin(), this->tokens.end(), option);
+    if (itr != this->tokens.end() && ++itr != this->tokens.end()) {
         return *itr;
     }
+
     return "";
 }
 
-std::string InputParser::getCmdOption( const char* o) {
+std::string InputParser::getCmdOption(const char *o) {
     std::string option = o;
     return getCmdOption(option);
 }
 
 bool InputParser::cmdOptionExists(std::string &option) {
-    return std::find(this->tokens.begin(), this->tokens.end(), option)
-           != this->tokens.end();
+    return std::find(this->tokens.begin(), this->tokens.end(), option) != this->tokens.end();
 }
 
-bool InputParser::cmdOptionExists( const char* o){
+bool InputParser::cmdOptionExists(const char *o) {
     std::string option = o;
     return cmdOptionExists(option);
 }
 
-void usage( ){
+void usage() {
     std::cout << "Program " << PROGRAMNAME << " v" << VERSION << std::endl <<
-    "Usage: "<< PROGRAMNAME <<" <command> [options]"<< std::endl <<
-    "Commands:"<< std::endl <<
-        "    gff2seq     get the longest full-length CDS for each gene" << std::endl<<
-        "    genoAli     whole chromosome global alignment and variant calling" <<  std::endl <<
-        "    proali      genome alignment with relocation variation, chromosome fusion or whole genome duplication" << std::endl <<
-        "    ali         perform global alignment for a pair of sequences using the 2-piece affine gap cost strategy" << std::endl/*<<
+              "Usage: " << PROGRAMNAME << " <command> [options]" << std::endl <<
+              "Commands:" << std::endl <<
+              "    gff2seq     get the longest full-length CDS for each gene" << std::endl <<
+              "    genoAli     whole chromosome global alignment and variant calling" << std::endl <<
+              "    proali      genome alignment with relocation variation, chromosome fusion or whole genome duplication" << std::endl <<
+              "    ali         perform global alignment for a pair of sequences using the 2-piece affine gap cost strategy" << std::endl/*<<
         "    triAnc      generate an ancestral genome from two inner group genomes and an outgroup genome" << std::endl*/
-        ;
+            ;
 }

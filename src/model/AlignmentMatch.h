@@ -25,38 +25,61 @@ private:
     std::string queryGeneName;
 public:
     AlignmentMatch();
-    AlignmentMatch(const AlignmentMatch & alignmentMatch );
-    AlignmentMatch(const std::string &refChr, const std::string &queryChr, const uint32_t & refStartPos, const uint32_t & refEndPos,
-                   const uint32_t & queryStartPos, const uint32_t & queryEndPos, const double & score,
-                   const STRAND & strand, const int & refId, const int & queryId, const std::string & referenceGeneName,
-                   const std::string & queryGeneName);
-    AlignmentMatch(const std::string &refChr, const std::string &queryChr, const uint32_t & refStartPos, const uint32_t & refEndPos,
-                   const uint32_t & queryStartPos, const uint32_t & queryEndPos, const double & score,
-                   const STRAND & strand, const std::string & referenceGeneName,
-                   const std::string & queryGeneName);
-    AlignmentMatch(const uint32_t & refStartPos, const uint32_t & refEndPos,
-                   const uint32_t & queryStartPos, const uint32_t & queryEndPos, const double & score,
-                   const STRAND & strand) ;
+
+    AlignmentMatch(const AlignmentMatch &alignmentMatch);
+
+    AlignmentMatch(const std::string &refChr, const std::string &queryChr, const uint32_t &refStartPos, const uint32_t &refEndPos,
+                   const uint32_t &queryStartPos, const uint32_t &queryEndPos, const double &score,
+                   const STRAND &strand, const int &refId, const int &queryId, const std::string &referenceGeneName,
+                   const std::string &queryGeneName);
+
+    AlignmentMatch(const std::string &refChr, const std::string &queryChr, const uint32_t &refStartPos, const uint32_t &refEndPos,
+                   const uint32_t &queryStartPos, const uint32_t &queryEndPos, const double &score,
+                   const STRAND &strand, const std::string &referenceGeneName,
+                   const std::string &queryGeneName);
+
+    AlignmentMatch(const uint32_t &refStartPos, const uint32_t &refEndPos,
+                   const uint32_t &queryStartPos, const uint32_t &queryEndPos, const double &score,
+                   const STRAND &strand);
+
     const std::string &getRefChr() const;
+
     void setRefChr(const std::string &refChr);
+
     const std::string &getQueryChr() const;
+
     void setQueryChr(const std::string &queryChr);
 
     uint32_t getRefStartPos() const;
+
     void setRefStartPos(uint32_t refStartPos);
+
     uint32_t getRefEndPos() const;
+
     void setRefEndPos(uint32_t refEndPos);
+
     uint32_t getQueryStartPos() const;
+
     void setQueryStartPos(uint32_t queryStartPos);
+
     uint32_t getQueryEndPos() const;
-    void setQueryEndPos(uint32_t queryEndPos);\
+
+    void setQueryEndPos(uint32_t queryEndPos);
+
     double getScore() const;
+
     void setScore(double score);
+
     STRAND getStrand() const;
+
     void setStrand(STRAND &strand);
+
     int getRefId() const;
+
     void setRefId(int refId);
+
     int getQueryId() const;
+
     void setQueryId(int queryId);
 
     const std::string &getReferenceGeneName() const;
@@ -67,31 +90,34 @@ public:
 
     void setQueryGeneName(const std::string &queryGeneName);
 
-    bool operator<( const AlignmentMatch& OrthologPair2 ) const{
-            if( refStartPos < OrthologPair2.refStartPos){
-                    return true;
-            }else if(refStartPos == OrthologPair2.refStartPos && queryStartPos<OrthologPair2.queryStartPos ){
-                    return true;
-            }
+    bool operator<(const AlignmentMatch &OrthologPair2) const {
+        if (refStartPos < OrthologPair2.refStartPos) {
+            return true;
+        } else if (refStartPos == OrthologPair2.refStartPos && queryStartPos < OrthologPair2.queryStartPos) {
+            return true;
+        }
+        return false;
+    }
+
+    bool operator>(const AlignmentMatch &OrthologPair2) const {
+        if (refStartPos > OrthologPair2.refStartPos) {
+            return true;
+        } else if (refStartPos == OrthologPair2.refStartPos && queryStartPos > OrthologPair2.queryStartPos) {
+            return true;
+        }
+        return false;
+    }
+
+    bool operator==(const AlignmentMatch &OrthologPair2) const {
+        if (refStartPos == OrthologPair2.refStartPos && queryStartPos == OrthologPair2.queryStartPos) {
+            return true;
+        }
+        return false;
+    }
+
+    bool operator!=(const AlignmentMatch &OrthologPair2) const {
+        if (refStartPos == OrthologPair2.refStartPos && queryStartPos == OrthologPair2.queryStartPos) {
             return false;
-    }
-    bool operator>(const AlignmentMatch& OrthologPair2 )const {
-        if( refStartPos > OrthologPair2.refStartPos){
-            return true;
-        }else if(refStartPos == OrthologPair2.refStartPos && queryStartPos>OrthologPair2.queryStartPos ){
-            return true;
-        }
-        return false;
-    }
-    bool operator==(const AlignmentMatch& OrthologPair2 ) const{
-        if( refStartPos == OrthologPair2.refStartPos && queryStartPos==OrthologPair2.queryStartPos ){
-                return true;
-        }
-        return false;
-    }
-    bool operator!=(const AlignmentMatch& OrthologPair2 ) const{
-        if( refStartPos == OrthologPair2.refStartPos && queryStartPos==OrthologPair2.queryStartPos ){
-                return false;
         }
         return true;
     }

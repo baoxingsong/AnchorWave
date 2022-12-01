@@ -9,10 +9,10 @@
 #include "TranscriptUpdateInformation.h"
 #include "../util/util.h"
 
-void CheckAndUpdateTranscriptsEnds(std::map<std::string, Transcript> & Transcripts,
-         std::map<std::string, std::string>& sequences,  NucleotideCodeSubstitutionMatrix & nucleotideCodeSubstitutionMatrix);
+void CheckAndUpdateTranscriptsEnds(std::map<std::string, Transcript> &Transcripts,
+                                   std::map<std::string, std::string> &sequences, NucleotideCodeSubstitutionMatrix &nucleotideCodeSubstitutionMatrix);
 
-void CheckAndUpdateTranscriptsEnds(std::map<std::string, std::vector<Transcript> > & transcriptHashSet, std::map<std::string, std::string>& sequences,
-                                   NucleotideCodeSubstitutionMatrix & nucleotideCodeSubstitutionMatrix);
+void CheckAndUpdateTranscriptsEnds(std::map<std::string, std::vector<Transcript> > &transcriptHashSet, std::map<std::string, std::string> &sequences,
+                                   NucleotideCodeSubstitutionMatrix &nucleotideCodeSubstitutionMatrix);
 
 #endif //ZSDP_CHECKANDUPDATETRANSCRIPTSENDS_H

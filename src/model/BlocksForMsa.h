@@ -4,10 +4,12 @@
 
 #ifndef ANCHORWAVE_BLOCKSFORMSA_H
 #define ANCHORWAVE_BLOCKSFORMSA_H
+
 #include <string>
 #include <vector>
 #include "AlignmentBlock.h"
 #include <iostream>
+
 class BlocksForMsa {
 private:
     std::vector<AlignmentBlock> alignmentBlocks;
@@ -16,7 +18,7 @@ private:
     std::string whichRef = "NA";
     std::string ancestralSequence = "";
 public:
-    std::vector<AlignmentBlock> &getAlignmentBlocks() ;
+    std::vector<AlignmentBlock> &getAlignmentBlocks();
 
     const std::string &getWhichRef() const;
 
@@ -31,12 +33,16 @@ public:
     void setWhileOutPut(const std::string &whileOutPut);
 
     void setAlignmentBlocks(const std::vector<AlignmentBlock> &alignmentBlocks);
-    void addAlignmentBlock(const AlignmentBlock & alignmentBlock);
+
+    void addAlignmentBlock(const AlignmentBlock &alignmentBlock);
+
     BlocksForMsa *getNext() const;
+
     void setNext(BlocksForMsa *next);
+
     BlocksForMsa *getPrev() const;
+
     void setPrev(BlocksForMsa *prev);
 };
-
 
 #endif //ANCHORWAVE_BLOCKSFORMSA_H

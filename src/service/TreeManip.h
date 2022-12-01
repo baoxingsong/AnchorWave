@@ -14,19 +14,29 @@
 
 class TreeManip {
 private:
-    PhylogeneticTree::SharedPtr             _tree;
+    PhylogeneticTree::SharedPtr _tree;
 public:
     TreeManip();
+
     TreeManip(PhylogeneticTree::SharedPtr t);
+
     ~TreeManip();
-    void                        setTree(PhylogeneticTree::SharedPtr t);
-    PhylogeneticTree::SharedPtr             getTree();
-    double                      calcTreeLength() const;
-    unsigned                    countEdges() const;
-    void                        scaleAllEdgeLengths(double scaler);
-    void                        createTestTree();
-    void                        clear();
-    typedef std::shared_ptr< TreeManip > SharedPtr;
+
+    void setTree(PhylogeneticTree::SharedPtr t);
+
+    PhylogeneticTree::SharedPtr getTree();
+
+    double calcTreeLength() const;
+
+    unsigned countEdges() const;
+
+    void scaleAllEdgeLengths(double scaler);
+
+    void createTestTree();
+
+    void clear();
+
+    typedef std::shared_ptr<TreeManip> SharedPtr;
 };
 
 

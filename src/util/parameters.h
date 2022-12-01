@@ -14,12 +14,6 @@
  *
  * =====================================================================================
  */
-/*************************************************************************
-
-
-
-
- ************************************************************************/
 
 #ifndef VARIANTSANNOTATIONSOFTWARE_PARAMETERS_H
 #define VARIANTSANNOTATIONSOFTWARE_PARAMETERS_H
@@ -32,8 +26,8 @@
 
 std::map<std::string, std::string> initialize_paramters(std::string parameters_file, std::string exepath);
 
-std::string get_parameters(std::string parameter, std::map<std::string, std::string>& parameters);
+std::string get_parameters(std::string parameter, std::map<std::string, std::string> &parameters);
 
-std::string getexepath(char** argv);
+std::string getexepath(char **argv);
 
 #endif

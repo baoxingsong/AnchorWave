@@ -4,6 +4,7 @@
 
 #ifndef ANCHORWAVE_RANGE_H
 #define ANCHORWAVE_RANGE_H
+
 #include <iostream>
 
 class Range {
@@ -21,27 +22,27 @@ public:
 
     void setEnd(int32_t end);
 
-    bool operator == ( const Range & rag) const {
-        if( this->getStart() == rag.getStart() && this->getEnd() == rag.getEnd() ){
+    bool operator==(const Range &rag) const {
+        if (this->getStart() == rag.getStart() && this->getEnd() == rag.getEnd()) {
             return true;
         }
         return false;
     }
 
-    bool operator != ( const Range & rag) const {
-        if( this->getStart() == rag.getStart() && this->getEnd() == rag.getEnd() ){
+    bool operator!=(const Range &rag) const {
+        if (this->getStart() == rag.getStart() && this->getEnd() == rag.getEnd()) {
             return false;
         }
         return true;
     }
 
-    bool operator > ( const Range & rag) const {
+    bool operator>(const Range &rag) const {
         return this->getStart() > rag.getStart();
     }
-    bool operator < ( const Range & rag) const {
+
+    bool operator<(const Range &rag) const {
         return this->getStart() < rag.getStart();
     }
 };
-
 
 #endif //ANCHORWAVE_RANGE_H

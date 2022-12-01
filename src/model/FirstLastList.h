@@ -31,36 +31,44 @@ The link list data structure could deal with records deletion and insertion very
 
 #include "variant.h"
 
-class Data{
+class Data {
 private:
     Variant mapSingleRecord;
     Data *next;
     Data *prev;
 public:
-    Data(Variant& mapSingleRecord);
-    //        Data();
-    const Variant & getMapSingleRecord() const;
-    Data* getNext() const;
-    Data* getPrev() const;
-    void setNext( Data* data );
-    void setPrev( Data* data);
-    void setMapSingleRecord( Variant& mapSingleRecord);
-};
+    Data(Variant &mapSingleRecord);
 
+    const Variant &getMapSingleRecord() const;
+
+    Data *getNext() const;
+
+    Data *getPrev() const;
+
+    void setNext(Data *data);
+
+    void setPrev(Data *data);
+
+    void setMapSingleRecord(Variant &mapSingleRecord);
+};
 
 class FirstLastList {
-    private:
-        Data *first = NULL;
-        Data *last = NULL;
-    public:
+private:
+    Data *first = NULL;
+    Data *last = NULL;
+public:
     //        void insertFirst(Data* data);
-        void insertLast(Data* data);
-        void setLast(Data* data);
-        void deleteFirst();
-        void deleteLast();
-        Data* getFirst() const;
-        Data* getLast() const;
-};
+    void insertLast(Data *data);
 
+    void setLast(Data *data);
+
+    void deleteFirst();
+
+    void deleteLast();
+
+    Data *getFirst() const;
+
+    Data *getLast() const;
+};
 
 #endif //ANNOTATIONLIFTOVER_FIRSTLASTLIST_H

@@ -4,6 +4,7 @@
 #include "./Range.h"
 #include <vector>
 #include <set>
+
 #ifndef ANCHORWAVE_TWOVECTORSOFRANGES_H
 #define ANCHORWAVE_TWOVECTORSOFRANGES_H
 
@@ -31,8 +32,9 @@ public:
 
     void setAnEnd(int32_t anEnd);
 
-    void addRange1( Range & ran);
+    void addRange1(Range &ran);
 
-    void addRange2( Range & ran);
+    void addRange2(Range &ran);
 };
+
 #endif //ANCHORWAVE_TWOVECTORSOFRANGES_H

@@ -3,56 +3,69 @@
 //
 
 #include "PairedSimilarFragment.h"
-PairedSimilarFragment::PairedSimilarFragment(){
-    start1=0;
-    start2=0;
-    end1=0;
-    end2=0;
-    score=0;
+
+PairedSimilarFragment::PairedSimilarFragment() {
+    start1 = 0;
+    start2 = 0;
+    end1 = 0;
+    end2 = 0;
+    score = 0;
 }
 
 PairedSimilarFragment::PairedSimilarFragment(uint32_t start1, uint32_t end1, uint32_t start2, uint32_t end2,
-        uint32_t score, const std::vector<uint32_t> &cigar): start1(start1),
-    end1(end1), start2(start2), end2(end2), score(score), cigar(cigar){
+                                             uint32_t score, const std::vector<uint32_t> &cigar) : start1(start1),
+                                                                                                   end1(end1), start2(start2), end2(end2), score(score), cigar(cigar) {
 
 }
 
 uint32_t PairedSimilarFragment::getStart1() const {
     return start1;
 }
+
 void PairedSimilarFragment::setStart1(uint32_t start1) {
     PairedSimilarFragment::start1 = start1;
 }
+
 uint32_t PairedSimilarFragment::getEnd1() const {
     return end1;
 }
+
 void PairedSimilarFragment::setEnd1(uint32_t end1) {
     PairedSimilarFragment::end1 = end1;
 }
+
 uint32_t PairedSimilarFragment::getStart2() const {
     return start2;
 }
+
 void PairedSimilarFragment::setStart2(uint32_t start2) {
     PairedSimilarFragment::start2 = start2;
 }
+
 uint32_t PairedSimilarFragment::getEnd2() const {
     return end2;
 }
+
 void PairedSimilarFragment::setEnd2(uint32_t end2) {
     PairedSimilarFragment::end2 = end2;
 }
+
 uint32_t PairedSimilarFragment::getScore() const {
     return score;
 }
-uint32_t PairedSimilarFragment::getLength() const{
+
+uint32_t PairedSimilarFragment::getLength() const {
     return end2 - start2 + 1;
 }
+
 void PairedSimilarFragment::setScore(uint32_t score) {
     PairedSimilarFragment::score = score;
 }
+
 const std::vector<uint32_t> &PairedSimilarFragment::getCigar() const {
     return cigar;
 }
+
 void PairedSimilarFragment::setCigar(const std::vector<uint32_t> &cigar) {
     PairedSimilarFragment::cigar = cigar;
 }

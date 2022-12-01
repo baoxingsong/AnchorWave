@@ -4,12 +4,13 @@
 
 #include "AlignmentMatch.h"
 
-AlignmentMatch::AlignmentMatch(const uint32_t & refStartPos, const uint32_t & refEndPos,
-                               const uint32_t & queryStartPos, const uint32_t & queryEndPos, const double & score,
-                               const STRAND & strand) : refStartPos(refStartPos), refEndPos(refEndPos),
-        queryStartPos(queryStartPos), queryEndPos(queryEndPos), score(score), strand(strand) {
+AlignmentMatch::AlignmentMatch(const uint32_t &refStartPos, const uint32_t &refEndPos,
+                               const uint32_t &queryStartPos, const uint32_t &queryEndPos, const double &score,
+                               const STRAND &strand) : refStartPos(refStartPos), refEndPos(refEndPos),
+                                                       queryStartPos(queryStartPos), queryEndPos(queryEndPos), score(score), strand(strand) {
 }
-AlignmentMatch::AlignmentMatch(){
+
+AlignmentMatch::AlignmentMatch() {
 
 }
 
@@ -57,44 +58,43 @@ STRAND AlignmentMatch::getStrand() const {
     return strand;
 }
 
-void AlignmentMatch::setStrand(STRAND & strand) {
+void AlignmentMatch::setStrand(STRAND &strand) {
     AlignmentMatch::strand = strand;
 }
 
-
 AlignmentMatch::AlignmentMatch(const std::string &refChr, const std::string &queryChr,
-                               const uint32_t & refStartPos, const uint32_t & refEndPos,
-                               const uint32_t & queryStartPos, const uint32_t & queryEndPos, const double & score,
-                               const STRAND & strand, const int & refId, const int & queryId, const std::string & referenceGeneName,
-                               const std::string & queryGeneName) : refChr(refChr), queryChr(queryChr),
-            refStartPos(refStartPos), refEndPos(refEndPos),
-            queryStartPos(queryStartPos), queryEndPos(queryEndPos), score(score), strand(strand), refId(refId),
-            queryId(queryId), referenceGeneName(referenceGeneName), queryGeneName(queryGeneName) {
+                               const uint32_t &refStartPos, const uint32_t &refEndPos,
+                               const uint32_t &queryStartPos, const uint32_t &queryEndPos, const double &score,
+                               const STRAND &strand, const int &refId, const int &queryId, const std::string &referenceGeneName,
+                               const std::string &queryGeneName) : refChr(refChr), queryChr(queryChr),
+                                                                   refStartPos(refStartPos), refEndPos(refEndPos),
+                                                                   queryStartPos(queryStartPos), queryEndPos(queryEndPos), score(score), strand(strand), refId(refId),
+                                                                   queryId(queryId), referenceGeneName(referenceGeneName), queryGeneName(queryGeneName) {
 }
 
 AlignmentMatch::AlignmentMatch(const std::string &refChr, const std::string &queryChr,
-                               const uint32_t & refStartPos, const uint32_t & refEndPos,
-                               const uint32_t & queryStartPos, const uint32_t & queryEndPos, const double & score,
-                               const STRAND & strand, const std::string & referenceGeneName,
-                               const std::string & queryGeneName) : refChr(refChr), queryChr(queryChr),
-                                                                  refStartPos(refStartPos), refEndPos(refEndPos),
-                                                                  queryStartPos(queryStartPos), queryEndPos(queryEndPos), score(score), strand(strand),
-                                                                  referenceGeneName(referenceGeneName), queryGeneName(queryGeneName) {
+                               const uint32_t &refStartPos, const uint32_t &refEndPos,
+                               const uint32_t &queryStartPos, const uint32_t &queryEndPos, const double &score,
+                               const STRAND &strand, const std::string &referenceGeneName,
+                               const std::string &queryGeneName) : refChr(refChr), queryChr(queryChr),
+                                                                   refStartPos(refStartPos), refEndPos(refEndPos),
+                                                                   queryStartPos(queryStartPos), queryEndPos(queryEndPos), score(score), strand(strand),
+                                                                   referenceGeneName(referenceGeneName), queryGeneName(queryGeneName) {
 }
 
-AlignmentMatch::AlignmentMatch(const AlignmentMatch & orthologPair )  {
-    refChr=orthologPair.getRefChr();
-    queryChr=orthologPair.getQueryChr();
-    refStartPos=orthologPair.getRefStartPos();
-    refEndPos=orthologPair.getRefEndPos();
-    queryStartPos=orthologPair.getQueryStartPos();
-    queryEndPos=orthologPair.getQueryEndPos();
-    score=orthologPair.getScore();
-    strand=orthologPair.getStrand();
-    refId=orthologPair.getRefId();
-    queryId=orthologPair.getQueryId();
-    referenceGeneName=orthologPair.getReferenceGeneName();
-    queryGeneName=orthologPair.getQueryGeneName();
+AlignmentMatch::AlignmentMatch(const AlignmentMatch &orthologPair) {
+    refChr = orthologPair.getRefChr();
+    queryChr = orthologPair.getQueryChr();
+    refStartPos = orthologPair.getRefStartPos();
+    refEndPos = orthologPair.getRefEndPos();
+    queryStartPos = orthologPair.getQueryStartPos();
+    queryEndPos = orthologPair.getQueryEndPos();
+    score = orthologPair.getScore();
+    strand = orthologPair.getStrand();
+    refId = orthologPair.getRefId();
+    queryId = orthologPair.getQueryId();
+    referenceGeneName = orthologPair.getReferenceGeneName();
+    queryGeneName = orthologPair.getQueryGeneName();
 }
 
 const std::string &AlignmentMatch::getRefChr() const {
@@ -132,13 +132,15 @@ void AlignmentMatch::setQueryId(int queryId) {
 const std::string &AlignmentMatch::getReferenceGeneName() const {
     return referenceGeneName;
 }
+
 void AlignmentMatch::setReferenceGeneName(const std::string &referenceGeneName) {
     AlignmentMatch::referenceGeneName = referenceGeneName;
 }
+
 const std::string &AlignmentMatch::getQueryGeneName() const {
     return queryGeneName;
 }
+
 void AlignmentMatch::setQueryGeneName(const std::string &queryGeneName) {
     AlignmentMatch::queryGeneName = queryGeneName;
 }
-

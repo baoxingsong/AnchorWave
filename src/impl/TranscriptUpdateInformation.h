@@ -8,6 +8,6 @@
 #include "../model/model.h"
 #include "getSubsequence.h"
 
-void TranscriptUpdateCdsInformation(Transcript & transcript, std::map<std::string, std::string>& genome);
+void TranscriptUpdateCdsInformation(Transcript &transcript, std::map<std::string, std::string> &genome);
 
 #endif //ANNOTATIONLIFTOVER_TRANSCRIPTUPDATEINFORMATION_H

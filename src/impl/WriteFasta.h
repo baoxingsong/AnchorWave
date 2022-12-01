@@ -6,6 +6,7 @@
 #define ANNOTATIONLIFTOVER_WRITEFASTA_H
 
 #include <iostream>
-void writeFasta( std::ostream& out, const std::string& seqname, const std::string& sequence, const int& linewidth);
+
+void writeFasta(std::ostream &out, const std::string &seqname, const std::string &sequence, const int &linewidth);
 
 #endif //ANNOTATIONLIFTOVER_WRITEFASTA_H

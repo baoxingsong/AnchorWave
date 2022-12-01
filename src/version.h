@@ -5,7 +5,7 @@
 #ifndef ANCHORWAVE_VERSION_H
 #define ANCHORWAVE_VERSION_H
 
-#define VERSION "1.0.1"
+#define VERSION "1.1.0"
 #define PROGRAMNAME "anchorwave"
 #endif //ANCHORWAVE_VERSION_H
 

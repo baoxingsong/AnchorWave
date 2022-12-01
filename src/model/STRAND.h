@@ -13,22 +13,23 @@
 //
 // =====================================================================================
 /*************************************************************************
- Stand information of CDS transcript or gene
 
+ Stand information of CDS transcript or gene
 
 *************************************************************************/
 
 
-
 #ifndef ANNOTATIONLIFTOVER_STRAND_H
 #define ANNOTATIONLIFTOVER_STRAND_H
+
 #include "map"
 #include <ostream>
+
 enum STRAND {
-    POSITIVE=0, NEGATIVE
+    POSITIVE = 0, NEGATIVE
 };
 
-std::ostream& operator<<(std::ostream& out, const STRAND value);
+std::ostream &operator<<(std::ostream &out, const STRAND value);
 
 
 #endif //ANNOTATIONLIFTOVER_STRAND_H

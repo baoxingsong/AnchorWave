@@ -5,7 +5,6 @@
 #ifndef PROALI_EVALUATION_H
 #define PROALI_EVALUATION_H
 
-
 #include <iostream>
 #include <sstream>
 #include "../model/model.h"

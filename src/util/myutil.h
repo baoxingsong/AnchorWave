@@ -12,15 +12,10 @@
 //         Author:  Baoxing Song (songbx.me), songbaoxing168@163.com
 //
 // =====================================================================================
-/*************************************************************************
-
-
-
-
- ************************************************************************/
 
 #ifndef _MYUTIL_H
 #define _MYUTIL_H
+
 #include <algorithm>
 #include "../model/model.h"
 #include <string>
@@ -28,12 +23,15 @@
 #include <map>
 #include "nucleotideCodeSubstitutionMatrix.h"
 
-void split(const std::string &s, char& delim,std::vector<std::string> &elems);
-std::string songStrReplaceAll(std::string& str, const std::string& pattern, const std::string& pattern2);
-int32_t min (  const int32_t & a, const int32_t & b );
-void splitCIGAR( std::string & cigarString, std::vector<std::string> & cigarElems);
-// trim from start (in place)
+void split(const std::string &s, char &delim, std::vector<std::string> &elems);
 
+std::string songStrReplaceAll(std::string &str, const std::string &pattern, const std::string &pattern2);
+
+int32_t min(const int32_t &a, const int32_t &b);
+
+void splitCIGAR(std::string cigarString, std::vector<std::string> &cigarElems);
+
+// trim from start (in place)
 inline void ltrim(std::string &s) {
     s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) {
         return !std::isspace(ch);
@@ -52,4 +50,5 @@ inline void trim(std::string &s) {
     ltrim(s);
     rtrim(s);
 }
+
 #endif

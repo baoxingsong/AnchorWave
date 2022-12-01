@@ -4,10 +4,11 @@
 
 #ifndef ANNOTATIONLIFTOVER_GETREVERSECOMPLEMENTARY_H
 #define ANNOTATIONLIFTOVER_GETREVERSECOMPLEMENTARY_H
+
 #include <string>
 #include <sstream>
 
 
-std::string getReverseComplementary(const std::string& sequence);
+std::string getReverseComplementary(const std::string &sequence);
 
 #endif //ANNOTATIONLIFTOVER_GETREVERSECOMPLEMENTARY_H

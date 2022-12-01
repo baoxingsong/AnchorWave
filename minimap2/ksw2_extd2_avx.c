@@ -603,10 +603,10 @@ void ksw_extd2_avx512(void *km, int qlen, const uint8_t *query, int tlen, const 
             } else H[0] = v8[0] - qe, max_H = H[0], max_t = 0; // special casing r==0
 
             // update ez
-            if (en0 == tlen - 1 && H[en0] > ez->mte) {
-                ez->mte = H[en0], ez->mte_q = r - en_new;
+            if (en0 == tlen - 1 && H[en0] >= ez->mte) { // Baoxing changed this from  H[en0] > ez->mte;
+                ez->mte = H[en0], ez->mte_q = r - en0; // Baoxing changed this from ez->mte_q = r - en_new;    on 2022 Nov 22, searched mte_q, looks like it has not been used anywhere else
             }
-            if (r - st0 == qlen - 1 && H[st0] > ez->mqe) {
+            if (r - st0 == qlen - 1 && H[st0] >= ez->mqe) { // Baoxing changed this from  H[st0] > ez->mqe
                 ez->mqe = H[st0], ez->mqe_t = st0;
             }
             
@@ -1280,10 +1280,10 @@ void ksw_extd2_avx2(void *km, int qlen, const uint8_t *query, int tlen, const ui
             } else H[0] = v8[0] - qe, max_H = H[0], max_t = 0; // special casing r==0
 
             // update ez
-            if (en0 == tlen - 1 && H[en0] > ez->mte) {
-                ez->mte = H[en0], ez->mte_q = r - en_new;
+            if (en0 == tlen - 1 && H[en0] >= ez->mte) { // Baoxing changed this from  H[en0] > ez->mte;
+                ez->mte = H[en0], ez->mte_q = r - en0; // Baoxing changed this from ez->mte_q = r - en_new;    on 2022 Nov 22, searched mte_q, looks like it has not been used anywhere else
             }
-            if (r - st0 == qlen - 1 && H[st0] > ez->mqe) {
+            if (r - st0 == qlen - 1 && H[st0] >= ez->mqe) { // Baoxing changed this from  H[st0] > ez->mqe
                 ez->mqe = H[st0], ez->mqe_t = st0;
             }
 

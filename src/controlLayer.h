@@ -14,12 +14,6 @@
  *
  * =====================================================================================
  */
-/*************************************************************************
-
-
-
-
- ************************************************************************/
 
 #ifndef _CONTROLLAYER_H
 #define _CONTROLLAYER_H
@@ -34,15 +28,24 @@
 #include "./myImportandFunction/myImportantFunction.h"
 #include "./version.h"
 
-int gff2seq(int argc, char** argv, std::map<std::string, std::string>& parameters);
+int gff2seq(int argc, char **argv, std::map<std::string, std::string> &parameters);
 
-int genomeAlignment(int argc, char** argv, std::map<std::string, std::string>& parameters );
-int proportationalAlignment(int argc, char** argv, std::map<std::string, std::string>& parameters );
-int tripleAncestral(int argc, char** argv, std::map<std::string, std::string>& parameters );
-int maf2vcf(int argc, char** argv, std::map<std::string, std::string>& parameters );
-int sam2maf (int argc, char** argv, std::map<std::string, std::string>& parameters );
-int sam2vcf(int argc, char** argv, std::map<std::string, std::string>& parameters);
-int evaluateTEAlignment (int argc, char** argv, std::map<std::string, std::string>& parameters );
-int sdiToMaf (int argc, char** argv, std::map<std::string, std::string>& parameters );
-int ali( int argc, char** argv, std::map<std::string, std::string>& parameters );
+int genomeAlignment(int argc, char **argv, std::map<std::string, std::string> &parameters);
+
+int proportationalAlignment(int argc, char **argv, std::map<std::string, std::string> &parameters);
+
+int tripleAncestral(int argc, char **argv, std::map<std::string, std::string> &parameters);
+
+int maf2vcf(int argc, char **argv, std::map<std::string, std::string> &parameters);
+
+int sam2maf(int argc, char **argv, std::map<std::string, std::string> &parameters);
+
+int sam2vcf(int argc, char **argv, std::map<std::string, std::string> &parameters);
+
+int evaluateTEAlignment(int argc, char **argv, std::map<std::string, std::string> &parameters);
+
+int sdiToMaf(int argc, char **argv, std::map<std::string, std::string> &parameters);
+
+int ali(int argc, char **argv, std::map<std::string, std::string> &parameters);
+
 #endif

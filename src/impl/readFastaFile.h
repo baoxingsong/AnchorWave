@@ -4,6 +4,7 @@
 
 #ifndef ANNOTATIONLIFTOVER_READFASTAFILE_H
 #define ANNOTATIONLIFTOVER_READFASTAFILE_H
+
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -11,9 +12,9 @@
 #include "../model/model.h"
 #include <sstream>
 
-void readFastaFile( const std::string& filePath, std::map<std::string, std::string>& sequences);
+void readFastaFile(const std::string &filePath, std::map<std::string, std::string> &sequences);
 
 //void readFastaFileWorkWithIUPACcode( const std::string& filePath, std::map<std::string, Fasta>& sequences);
-void readFastaFileWorkWithIUPACcode( const std::string& filePath, std::map<std::string, std::string>& sequences);
+void readFastaFileWorkWithIUPACcode(const std::string &filePath, std::map<std::string, std::string> &sequences);
 
 #endif //ANNOTATIONLIFTOVER_READFASTAFILE_H

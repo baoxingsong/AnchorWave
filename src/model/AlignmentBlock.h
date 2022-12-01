@@ -4,8 +4,10 @@
 
 #ifndef ANCHORWAVE_ALIGNMENTBLOCK_H
 #define ANCHORWAVE_ALIGNMENTBLOCK_H
+
 #include <string>
 #include "STRAND.h"
+
 class AlignmentBlock {
 private:
     std::string species;
@@ -42,6 +44,5 @@ public:
 
     void setStrand(STRAND strand);
 };
-
 
 #endif //ANCHORWAVE_ALIGNMENTBLOCK_H

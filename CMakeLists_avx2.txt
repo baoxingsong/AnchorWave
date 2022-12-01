@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0)
-project(anchorwave)
+project(anchorwave-MSA)
 
 #include(CheckCXXCompilerFlag)
 set(CMAKE_CXX_STANDARD 14)
@@ -67,6 +67,8 @@ add_executable(anchorwave
         src/util/util.h
         src/impl/getSubsequence.cpp
         src/impl/getSubsequence.h
+        src/impl/dynmatrix.cc
+        src/impl/dynmatrix.h
         src/impl/readGffFile.cpp
         src/impl/readGffFile.h
         src/impl/getSequencesFromGff.cpp
@@ -80,7 +82,8 @@ add_executable(anchorwave
         src/tests/impl/TEGffToAlignment.cpp
         src/tests/impl/readGffFile.cpp
         src/tests/impl/readFastaFile_test.cpp
-#        src/tests/impl/CompareSdiAlignmentWithMafFile
+        src/tests/impl/sequencesToKmerCountMatrix.cpp
+        #        src/tests/impl/CompareSdiAlignmentWithMafFile
         src/service/TransferGffWithNucmerResult.cpp
         src/service/TransferGffWithNucmerResult.h
         src/service/Reformat.cpp
@@ -103,92 +106,99 @@ add_executable(anchorwave
         src/impl/geneSyntenic.h
         src/impl/SequenceCharToUInt8.cpp
         src/impl/SequenceCharToUInt8.h
-        WFA/alignment/cigar.c
-        WFA/alignment/cigar.h
-        WFA/alignment/score_matrix.c
-        WFA/alignment/score_matrix.h
 
-        WFA/system/profiler_counter.c
-        WFA/system/profiler_counter.h
-        WFA/system/profiler_timer.c
-        WFA/system/profiler_timer.h
-        WFA/system/mm_allocator.c
-        WFA/system/mm_allocator.h
-        WFA/system/mm_stack.c
-        WFA/system/mm_stack.h
+        WFA2-lib/alignment/affine2p_penalties.c
+        WFA2-lib/alignment/affine_penalties.c
+        WFA2-lib/alignment/cigar.c
+        WFA2-lib/alignment/score_matrix.c
 
-        WFA/benchmark/benchmark_edit.h
-        WFA/benchmark/benchmark_gap_affine.c
-        WFA/benchmark/benchmark_gap_affine.h
-        WFA/benchmark/benchmark_gap_lineal.c
-        WFA/benchmark/benchmark_gap_lineal.h
-        WFA/benchmark/benchmark_utils.c
-        WFA/benchmark/benchmark_utils.h
-        WFA/benchmark/benchmark_check.c
-        WFA/benchmark/benchmark_check.h
-        WFA/benchmark/benchmark_gap_affine2p.c
-        WFA/benchmark/benchmark_gap_affine2p.h
-        WFA/utils/commons.c
-        WFA/utils/commons.h
-        WFA/utils/dna_text.c
-        WFA/utils/dna_text.h
-        WFA/utils/string_padded.c
-        WFA/utils/string_padded.h
-        WFA/utils/vector.c
-        WFA/utils/vector.h
-        WFA/gap_affine/affine_penalties.c
-        WFA/gap_affine/affine_penalties.h
-        WFA/gap_affine/affine_matrix.c
-        WFA/gap_affine/affine_matrix.h
-        WFA/gap_affine/affine_wavefront_align.c
-        WFA/gap_affine/affine_wavefront_align.h
-        WFA/gap_affine/affine_wavefront_backtrace.c
-        WFA/gap_affine/affine_wavefront_backtrace.h
-        WFA/gap_affine/affine_wavefront.c
-        WFA/gap_affine/affine_wavefront_display.c
-        WFA/gap_affine/affine_wavefront_display.h
-        WFA/gap_affine/affine_wavefront_extend.c
-        WFA/gap_affine/affine_wavefront_extend.h
-        WFA/gap_affine/affine_wavefront.h
-        WFA/gap_affine/affine_wavefront_penalties.c
-        WFA/gap_affine/affine_wavefront_penalties.h
-        WFA/gap_affine/affine_wavefront_reduction.c
-        WFA/gap_affine/affine_wavefront_reduction.h
-        WFA/gap_affine/affine_wavefront_utils.c
-        WFA/gap_affine/affine_wavefront_utils.h
-        WFA/gap_affine/swg.c
-        WFA/gap_affine/swg.h
-        WFA/gap_affine/wavefront_stats.c
-        WFA/gap_affine/wavefront_stats.h
-        WFA/gap_affine2p/affine2p_dp.c
-        WFA/gap_affine2p/affine2p_dp.h
-        WFA/gap_affine2p/affine2p_matrix.c
-        WFA/gap_affine2p/affine2p_matrix.h
-        WFA/gap_affine2p/affine2p_penalties.c
-        WFA/gap_affine2p/affine2p_penalties.h
-        WFA/gap_affine2p/affine2p_wavefront.c
-        WFA/gap_affine2p/affine2p_wavefront.h
-        WFA/gap_affine2p/affine2p_wavefront_align.c
-        WFA/gap_affine2p/affine2p_wavefront_align.h
-        WFA/gap_affine2p/affine2p_wavefront_backtrace.c
-        WFA/gap_affine2p/affine2p_wavefront_backtrace.h
-        WFA/gap_affine2p/affine2p_wavefront_display.c
-        WFA/gap_affine2p/affine2p_wavefront_display.h
-        WFA/gap_affine2p/affine2p_wavefront_extend.c
-        WFA/gap_affine2p/affine2p_wavefront_extend.h
-        WFA/gap_lineal/lineal_penalties.h
-        WFA/gap_lineal/nw.c
-        WFA/gap_lineal/nw.h
-        WFA/edit/edit_dp.c
-        WFA/edit/edit_dp.h
-        WFA/benchmark/benchmark_edit.c
-        WFA/benchmark/benchmark_edit.h
-        WFA/benchmark/benchmark_gap_affine.c
-        WFA/benchmark/benchmark_gap_affine.h
-        WFA/benchmark/benchmark_gap_lineal.c
-        WFA/benchmark/benchmark_gap_lineal.h
-        WFA/benchmark/benchmark_utils.c
-        WFA/benchmark/benchmark_utils.h
+        WFA2-lib/system/mm_allocator.c
+        WFA2-lib/system/mm_stack.c
+        WFA2-lib/system/profiler_counter.c
+        WFA2-lib/system/profiler_timer.c
+        WFA2-lib/utils/bitmap.c
+        WFA2-lib/utils/commons.c
+        WFA2-lib/utils/dna_text.c
+        WFA2-lib/utils/heatmap.c
+        WFA2-lib/utils/sequence_buffer.c
+        WFA2-lib/utils/string_padded.c
+        WFA2-lib/utils/vector.c
+        WFA2-lib/wavefront/wavefront_align.c
+        WFA2-lib/wavefront/wavefront_aligner.c
+        WFA2-lib/wavefront/wavefront_attributes.c
+        WFA2-lib/wavefront/wavefront_backtrace_buffer.c
+        WFA2-lib/wavefront/wavefront_backtrace.c
+        WFA2-lib/wavefront/wavefront_backtrace_offload.c
+        WFA2-lib/wavefront/wavefront_bialign.c
+        WFA2-lib/wavefront/wavefront.c
+        WFA2-lib/wavefront/wavefront_components.c
+        WFA2-lib/wavefront/wavefront_compute_affine2p.c
+        WFA2-lib/wavefront/wavefront_compute_affine.c
+        WFA2-lib/wavefront/wavefront_compute.c
+        WFA2-lib/wavefront/wavefront_compute_edit.c
+        WFA2-lib/wavefront/wavefront_compute_linear.c
+        WFA2-lib/wavefront/wavefront_debug.c
+        WFA2-lib/wavefront/wavefront_display.c
+        WFA2-lib/wavefront/wavefront_extend.c
+        WFA2-lib/wavefront/wavefront_heuristic.c
+        WFA2-lib/wavefront/wavefront_pcigar.c
+        WFA2-lib/wavefront/wavefront_penalties.c
+        WFA2-lib/wavefront/wavefront_plot.c
+        WFA2-lib/wavefront/wavefront_slab.c
+        WFA2-lib/wavefront/wavefront_unialign.c
+        WFA2-lib/wavefront/wavefront_unialign.h
+        WFA2-lib/wavefront/wavefront_bialigner.c
+        WFA2-lib/wavefront/wavefront_bialigner.h
+
+
+
+
+
+        WFA2-lib/alignment/affine2p_penalties.h
+        WFA2-lib/alignment/affine_penalties.h
+        WFA2-lib/alignment/cigar.h
+        WFA2-lib/alignment/linear_penalties.h
+        WFA2-lib/alignment/score_matrix.h
+        WFA2-lib/scripts/fasta2seq.sh
+        WFA2-lib/scripts/seq2fasta.sh
+        WFA2-lib/scripts/wfa.alg.cmp.score.sh
+        WFA2-lib/system/mm_allocator.h
+        WFA2-lib/system/mm_stack.h
+        WFA2-lib/system/profiler_counter.h
+        WFA2-lib/system/profiler_timer.h
+        WFA2-lib/utils/bitmap.h
+        WFA2-lib/utils/commons.h
+        WFA2-lib/utils/dna_text.h
+        WFA2-lib/utils/heatmap.h
+        WFA2-lib/utils/sequence_buffer.h
+        WFA2-lib/utils/string_padded.h
+        WFA2-lib/utils/vector.h
+        WFA2-lib/wavefront/wavefront_aligner.h
+        WFA2-lib/wavefront/wavefront_align.h
+        WFA2-lib/wavefront/wavefront_attributes.h
+        WFA2-lib/wavefront/wavefront_backtrace_buffer.h
+        WFA2-lib/wavefront/wavefront_backtrace.h
+        WFA2-lib/wavefront/wavefront_backtrace_offload.h
+        WFA2-lib/wavefront/wavefront_bialign.h
+        WFA2-lib/wavefront/wavefront_components.h
+        WFA2-lib/wavefront/wavefront_compute_affine2p.h
+        WFA2-lib/wavefront/wavefront_compute_affine.h
+        WFA2-lib/wavefront/wavefront_compute_edit.h
+        WFA2-lib/wavefront/wavefront_compute.h
+        WFA2-lib/wavefront/wavefront_compute_linear.h
+        WFA2-lib/wavefront/wavefront_debug.h
+        WFA2-lib/wavefront/wavefront_display.h
+        WFA2-lib/wavefront/wavefront_extend.h
+        WFA2-lib/wavefront/wavefront.h
+        WFA2-lib/wavefront/wavefront_heuristic.h
+        WFA2-lib/wavefront/wavefront_offset.h
+        WFA2-lib/wavefront/wavefront_pcigar.h
+        WFA2-lib/wavefront/wavefront_penalties.h
+        WFA2-lib/wavefront/wavefront_plot.h
+        WFA2-lib/wavefront/wavefront_slab.h
+
+        WFA2-lib/bindings/cpp/WFAligner.cpp
+        WFA2-lib/bindings/cpp/WFAligner.hpp
 
         minimap2/align.c
         minimap2/bseq.c
@@ -242,7 +252,7 @@ add_executable(anchorwave
 #        ksw2/ksw2_gg2_sse.c
 #        ksw2/ksw2_gg.c
 
-        src/service/Reformat.cpp src/service/Reformat.h src/service/evaluation.cpp src/service/evaluation.h src/version.h src/service/callVariantFromSamFile.h src/model/BlocksForMsa.cpp src/model/BlocksForMsa.h src/impl/readMafForMsa.cpp src/impl/readMafForMsa.h src/model/AlignmentBlock.cpp src/model/AlignmentBlock.h src/model/PhylogeneticTreeNode.cpp src/model/PhylogeneticTreeNode.h src/model/PhylogeneticTree.cpp src/model/PhylogeneticTree.h src/tests/model/PhylogeneticTree.cpp src/service/TreeManip.cpp src/service/TreeManip.h src/impl/reconstructAncestorUsingThree.cpp src/impl/reconstructAncestorUsingThree.h src/model/Range.cpp src/model/Range.h src/model/TwoVectorsOfRanges.cpp src/model/TwoVectorsOfRanges.h)
+        src/service/Reformat.cpp src/service/Reformat.h src/service/evaluation.cpp src/service/evaluation.h src/version.h src/service/callVariantFromSamFile.h src/model/BlocksForMsa.cpp src/model/BlocksForMsa.h src/impl/readMafForMsa.cpp src/impl/readMafForMsa.h src/model/AlignmentBlock.cpp src/model/AlignmentBlock.h src/model/PhylogeneticTreeNode.cpp src/model/PhylogeneticTreeNode.h src/model/PhylogeneticTree.cpp src/model/PhylogeneticTree.h src/tests/model/PhylogeneticTree.cpp src/service/TreeManip.cpp src/service/TreeManip.h src/model/Range.cpp src/model/Range.h src/model/TwoVectorsOfRanges.cpp src/model/TwoVectorsOfRanges.h src/impl/sequencesToKmerDIstanceMatrix.cpp src/impl/sequencesToKmerDIstanceMatrix.h)
 
 target_link_libraries(anchorwave gtest gtest_main ZLIB::ZLIB)
 

@@ -5,6 +5,7 @@
 
 #ifndef ANCHORWAVE_PHYLOGENETICTREENODE_H
 #define ANCHORWAVE_PHYLOGENETICTREENODE_H
+
 #include <string>
 #include <cstdint>
 #include <vector>
@@ -13,26 +14,36 @@
 
 class PhylogeneticTreeNode {
     friend class PhylogeneticTree;
+
 private:
     void clear();
-    PhylogeneticTreeNode * _left_child;
-    PhylogeneticTreeNode * _right_sib;
-    PhylogeneticTreeNode * _parent;
+
+    PhylogeneticTreeNode *_left_child;
+    PhylogeneticTreeNode *_right_sib;
+    PhylogeneticTreeNode *_parent;
     int _number;
     std::string _name;
     double _edge_length;
 
 public:
     PhylogeneticTreeNode();
+
     ~PhylogeneticTreeNode();
 
-    PhylogeneticTreeNode * getParent()     {return _parent;}
-    PhylogeneticTreeNode * getLeftChild()  {return _left_child;}
-    PhylogeneticTreeNode * getRightSib()   {return _right_sib;}
-    int getNumber() {return _number;}
-    std::string getName() {return _name;}
-    double              getEdgeLength() {return _edge_length;}
-    void                setEdgeLength(double v);
+    PhylogeneticTreeNode *getParent() { return _parent; }
+
+    PhylogeneticTreeNode *getLeftChild() { return _left_child; }
+
+    PhylogeneticTreeNode *getRightSib() { return _right_sib; }
+
+    int getNumber() { return _number; }
+
+    std::string getName() { return _name; }
+
+    double getEdgeLength() { return _edge_length; }
+
+    void setEdgeLength(double v);
+
     static const double _smallest_edge_length;
     typedef std::vector<PhylogeneticTreeNode> Vector;
     typedef std::vector<PhylogeneticTreeNode *> PtrVector;

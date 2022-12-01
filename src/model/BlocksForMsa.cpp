@@ -5,14 +5,15 @@
 #include "BlocksForMsa.h"
 
 
-std::vector<AlignmentBlock> &BlocksForMsa::getAlignmentBlocks()  {
+std::vector<AlignmentBlock> &BlocksForMsa::getAlignmentBlocks() {
     return alignmentBlocks;
 }
 
 void BlocksForMsa::setAlignmentBlocks(const std::vector<AlignmentBlock> &alignmentBlocks) {
     BlocksForMsa::alignmentBlocks = alignmentBlocks;
 }
-void BlocksForMsa::addAlignmentBlock(const AlignmentBlock & alignmentBlock){
+
+void BlocksForMsa::addAlignmentBlock(const AlignmentBlock &alignmentBlock) {
     this->alignmentBlocks.push_back(alignmentBlock);
 }
 

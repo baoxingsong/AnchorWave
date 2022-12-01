@@ -16,7 +16,6 @@
 
 the methods under this folder does not rely on any code from other folders
 
-
  ************************************************************************/
 
 

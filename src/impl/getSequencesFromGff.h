@@ -11,8 +11,8 @@
 #include "readFastaFile.h"
 #include "TranscriptUpdateInformation.h"
 
-void getSequences(const std::string& gffFile, const std::string& genome,
-                  const std::string& outputCdsSequences,  std::map<std::string, std::string>& parameters,
-                  const int & minIntron, const bool & exonModel);
+void getSequences(const std::string &gffFile, const std::string &genome,
+                  const std::string &outputCdsSequences, std::map<std::string, std::string> &parameters,
+                  const int &minIntron, const bool &exonModel);
 
 #endif //ANNOTATIONLIFTOVER_GETSEQUENCESFROMGFF_H

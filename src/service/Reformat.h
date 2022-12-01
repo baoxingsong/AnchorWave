@@ -15,8 +15,12 @@
 #include "../service/service.h"
 
 
-void mafTovcf( std::string & mafFile,  std::string & refGenomeFilePath, std::string & outputovcffile, const bool & gvcf );
-void samToMaf (const std::string& samFilePath, const std::string& refGenomeFile,  const std::string& queryGenomeFile, const std::string& output);
-void readSdiFile (const std::string& filePath, std::map<std::string, std::vector<Variant> >& variantsMap, const std::string& vcfFix, std::map<std::string, std::string>& referenceGenome);
-void sdiToMaf(std::string & fastaFilePath, std::string & targetFastaFilePath, std::string & sdiFile, std::string & outfile );
+void mafTovcf(std::string &mafFile, std::string &refGenomeFilePath, std::string &outputovcffile, const bool &gvcf);
+
+void samToMaf(const std::string &samFilePath, const std::string &refGenomeFile, const std::string &queryGenomeFile, const std::string &output);
+
+void readSdiFile(const std::string &filePath, std::map<std::string, std::vector<Variant> > &variantsMap, const std::string &vcfFix, std::map<std::string, std::string> &referenceGenome);
+
+void sdiToMaf(std::string &fastaFilePath, std::string &targetFastaFilePath, std::string &sdiFile, std::string &outfile);
+
 #endif //PROALI_REFORMAT_H

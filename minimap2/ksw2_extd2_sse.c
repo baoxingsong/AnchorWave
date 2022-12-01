@@ -356,11 +356,11 @@ void ksw_extd2_sse(void *km, int qlen, const uint8_t *query, int tlen, const uin
 						max_H = H[t], max_t = t;
 				}
 			} else H[0] = v8[0] - qe, max_H = H[0], max_t = 0; // special casing r==0
-			// update ez
-			if (en0 == tlen - 1 && H[en0] > ez->mte)
-				ez->mte = H[en0], ez->mte_q = r - en;
-			if (r - st0 == qlen - 1 && H[st0] > ez->mqe)
-				ez->mqe = H[st0], ez->mqe_t = st0;
+            // update ez
+            if (en0 == tlen - 1 && H[en0] >= ez->mte) // Baoxing changed this from  H[en0] > ez->mte;
+                ez->mte = H[en0], ez->mte_q = r - en0; // Baoxing changed this from ez->mte_q = r - en;    on 2022 Nov 22, searched mte_q, looks like it has not been used anywhere else
+            if (r - st0 == qlen - 1 && H[st0] >= ez->mqe) // Baoxing changed this from  H[st0] > ez->mqe
+                ez->mqe = H[st0], ez->mqe_t = st0;
 			if (ksw_apply_zdrop(ez, 1, max_H, r, max_t, zdrop, e2)) break;
 			if (r == qlen + tlen - 2 && en0 == tlen - 1)
 				ez->score = H[tlen - 1];

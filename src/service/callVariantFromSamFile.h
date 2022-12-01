@@ -20,5 +20,6 @@
 #include "../myImportandFunction/myImportantFunction.h"
 #include "../service/service.h"
 
-void samToVcf (const std::string& samFilePath, const std::string& refGenomeFile, const std::string& queryGenomeFile, const int32_t & range, const std::string& output);
+void samToVcf(const std::string &samFilePath, const std::string &refGenomeFile, const std::string &queryGenomeFile, const int32_t &range, const std::string &output);
+
 #endif //ANCHORWAVE_CALLVARIANTFROMSAMFILE_H

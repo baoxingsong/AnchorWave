@@ -34,27 +34,27 @@
 #include "./minimap2/minimap.h"
 #include "./minimap2/kseq.h"
 
-int main(int argc, char** argv){
-
+int main(int argc, char **argv) {
+//
 //    testing::InitGoogleTest(&argc, argv);
 //    RUN_ALL_TESTS();
 //    return 0;
 
-    if( argc<=1 ){
+    if (argc <= 1) {
         usage();
         return 1;
     }
     std::string program = argv[1];
-    if( program.compare("-h") == 0 || program.compare("--help") == 0 ){
+    if (program.compare("-h") == 0 || program.compare("--help") == 0) {
         usage();
         exit(1);
     }
-    InputParser inputParser (argc, argv);
+    InputParser inputParser(argc, argv);
     std::string parameterFile;
     std::string exepath = getexepath(argv);
-    if( inputParser.cmdOptionExists("-parameter")){
+    if (inputParser.cmdOptionExists("-parameter")) {
         parameterFile = inputParser.getCmdOption("-parameter");
-    }else{
+    } else {
         parameterFile = exepath + "/configure";
     }
     std::map<std::string, std::string> parameters = initialize_paramters(parameterFile, exepath);
@@ -72,28 +72,29 @@ int main(int argc, char** argv){
     std::cerr << "If you find anything abnormal, please contact us." << std::endl;
 #endif
 
-    if( program.compare("gff2seq") == 0 ) {
+    if (program.compare("gff2seq") == 0) {
         return gff2seq(--argc, ++argv, parameters);
-    } else if ( program.compare("proali") == 0 ) {
+    } else if (program.compare("proali") == 0) {
         return proportationalAlignment(--argc, ++argv, parameters);
-    } else if ( program.compare("genoAli") == 0 ) {
+    } else if (program.compare("genoAli") == 0) {
         return genomeAlignment(--argc, ++argv, parameters);
-    } else if ( program.compare("triAnc") == 0 ) {
+    } else if (program.compare("triAnc") == 0) {
         return tripleAncestral(--argc, ++argv, parameters);
-    } else if ( program.compare("maf2vcf") == 0 ) {
+    } else if (program.compare("maf2vcf") == 0) {
         return maf2vcf(--argc, ++argv, parameters);
-    } else if ( program.compare("sam2maf") == 0 ) {
+    } else if (program.compare("sam2maf") == 0) {
         return sam2maf(--argc, ++argv, parameters);
-    } else if ( program.compare("sam2vcf") == 0 ) {
+    } else if (program.compare("sam2vcf") == 0) {
         return sam2vcf(--argc, ++argv, parameters);
-    } else if ( program.compare("evaluateTEAlignment") == 0 ) {
+    } else if (program.compare("evaluateTEAlignment") == 0) {
         return evaluateTEAlignment(--argc, ++argv, parameters);
-    } else if ( program.compare("sdiToMaf") == 0 ) {
+    } else if (program.compare("sdiToMaf") == 0) {
         return sdiToMaf(--argc, ++argv, parameters);
-    } else if ( program.compare("ali") == 0 ) {
+    } else if (program.compare("ali") == 0) {
         return ali(--argc, ++argv, parameters);
-    } else{
+    } else {
         usage();
     }
+
     return 0;
 }

@@ -18,9 +18,53 @@
 
 
 
+TEST(needleAlignment, c20){
+
+    std::vector<std::string> align_queries;
+    std::vector<std::string> align_refs;
+
+    int32_t matchingScore = 0;
+    int32_t mismatchingPenalty = -3;
+    int32_t _open_gap_penalty1 = -4;
+    int32_t _extend_gap_penalty1 = -2;
+    int32_t _open_gap_penalty2 = -80;
+    int32_t _extend_gap_penalty2 = -1;
+
+    align_refs.push_back ("CCTATGGCACAGCGGTT---GCTTGCGCGGTCACCGGCGACTGGTCGATT");
+    align_refs.push_back ("CCTATGGCACAGCGGTTGGCGCTTGCGC---CACCGGCGACTGGTCGATT");
+    align_queries.push_back("CCTATGGCACAGCGGTTGGCGCTTGCGCACCGGCGACTGGTCGATT");
+    align_queries.push_back("CCTATGGCACAGCGGTTGGCG--CGGTCACCGGCGACTGGTCGATT");
+
+    std::vector<std::stack<char>> SQs(align_queries.size());
+    std::vector<std::stack<char>> SRs(align_refs.size());
+
+    int32_t score = needleAlignment(align_refs, align_queries, SQs, SRs, mismatchingPenalty,
+                                    _open_gap_penalty1,_extend_gap_penalty1, _open_gap_penalty2, _extend_gap_penalty2);
+    std::vector<std::string> _alignment_qs(align_queries.size());
+    std::vector<std::string> _alignment_ds(align_refs.size());
+    while (!SQs[0].empty()) {
+        for ( int k=0; k<align_refs.size(); ++k ){
+            _alignment_ds[k] += SRs[k].top();
+            SRs[k].pop();
+        }
+        for( int l=0; l<align_queries.size(); ++l ){
+            _alignment_qs[l] += SQs[l].top();
+            SQs[l].pop();
+        }
+    }
+    for ( int k=0; k<align_refs.size(); ++k ){
+        std::cout <<_alignment_ds[k]<< std::endl;
+    }
+    for( int l=0; l<align_queries.size(); ++l ) {
+        std::cout << _alignment_qs[l] << std::endl;
+    }
+
+    std::cout << score << std::endl;
+    ASSERT_EQ(0, 0);
+}
 
 
-
+/*
 
 TEST(WFA, c1){
 
@@ -223,7 +267,7 @@ TEST(WFA, c2){
     ASSERT_EQ(0, 0);
 }
 
-
+*/
 
 TEST(needleAlignment, c1){
 
@@ -302,7 +346,7 @@ TEST(alignSlidingWindow, c1){
 
     std::stack<char> SQ;
     std::stack<char> SD;
-    int32_t matchingScore = 1;
+    int32_t matchingScore = 0;
     int32_t mismatchingPenalty = -2;
     int32_t _open_gap_penalty1 = -4;
     int32_t _extend_gap_penalty1 = -2;
@@ -371,15 +415,6 @@ TEST(alignSlidingWindow, c2) {
     // 20000*3*20000*3*20/1000/1000/1000  20KB might cost 72GB RAM
     // 30000*2*30000*2*20/1000/1000/1000  30KB might cost 72GB RAM
     int64_t slidingWindowSize = 500;
-    mm_allocator_t *const mm_allocator = mm_allocator_new(BUFFER_SIZE_512M);
-    affine2p_penalties_t penalties = {
-            .match = 0,
-            .mismatch = -mismatchingPenalty + matchingScore,
-            .gap_opening1 = -open_gap_penalty1 + matchingScore,
-            .gap_extension1 = -extend_gap_penalty1 + matchingScore,
-            .gap_opening2 = -open_gap_penalty2 + matchingScore,
-            .gap_extension2 = -extend_gap_penalty2 + matchingScore,
-    };
 
     int32_t wfaSize = 20;
     int32_t min_wavefront_length = 10000;
@@ -388,7 +423,7 @@ TEST(alignSlidingWindow, c2) {
     std::map<std::string, std::string> parameters;
     for (int i=0; i<200; i++) {
         std::cout << "line 325" << std::endl;
-        int64_t thiScore = alignSlidingWindow(querySeq, refSeq, _alignment_q, _alignment_d, &penalties, mm_allocator,
+        int64_t thiScore = alignSlidingWindow(querySeq, refSeq, _alignment_q, _alignment_d,
                                               slidingWindowSize, wfaSize, matchingScore, mismatchingPenalty,
                                               open_gap_penalty1, extend_gap_penalty1, open_gap_penalty2,
                                               extend_gap_penalty2, min_wavefront_length, max_distance_threshold, m, parameters);
@@ -424,15 +459,7 @@ TEST(MSA, c1) {
     std::string _alignment_ref2;
     std::string _alignment_ref1;
     int64_t slidingWindowSize = 500;
-    mm_allocator_t *const mm_allocator = mm_allocator_new(BUFFER_SIZE_512M);
-    affine2p_penalties_t penalties = {
-            .match = 0,
-            .mismatch = -mismatchingPenalty + matchingScore,
-            .gap_opening1 = -open_gap_penalty1 + matchingScore,
-            .gap_extension1 = -extend_gap_penalty1 + matchingScore,
-            .gap_opening2 = -open_gap_penalty2 + matchingScore,
-            .gap_extension2 = -extend_gap_penalty2 + matchingScore,
-    };
+
 
     int32_t wfaSize = 250000;
     int32_t min_wavefront_length = 10000;
@@ -440,7 +467,7 @@ TEST(MSA, c1) {
     Scorei m(matchingScore, mismatchingPenalty);
     std::map<std::string, std::string> parameters;
     std::cout << "line 438" << std::endl;
-    int64_t thiScore = alignSlidingWindow(_dna_query, _dna_ref2, _alignment_query, _alignment_ref2, &penalties, mm_allocator,
+    int64_t thiScore = alignSlidingWindow(_dna_query, _dna_ref2, _alignment_query, _alignment_ref2,
                                           slidingWindowSize, wfaSize, matchingScore, mismatchingPenalty,
                                           open_gap_penalty1, extend_gap_penalty1, open_gap_penalty2,
                                           extend_gap_penalty2, min_wavefront_length, max_distance_threshold, m, parameters);
@@ -481,15 +508,6 @@ TEST(alignSlidingWindow, c3) {
     std::string _alignment_d;
 
     int64_t slidingWindowSize = 500;
-    mm_allocator_t *const mm_allocator = mm_allocator_new(BUFFER_SIZE_512M);
-    affine2p_penalties_t penalties = {
-            .match = 0,
-            .mismatch = -mismatchingPenalty + matchingScore,
-            .gap_opening1 = -open_gap_penalty1 + matchingScore,
-            .gap_extension1 = -extend_gap_penalty1 + matchingScore,
-            .gap_opening2 = -open_gap_penalty2 + matchingScore,
-            .gap_extension2 = -extend_gap_penalty2 + matchingScore,
-    };
 
     int32_t wfaSize = 250000;
     int32_t min_wavefront_length = 10000;
@@ -497,7 +515,7 @@ TEST(alignSlidingWindow, c3) {
     Scorei m(matchingScore, mismatchingPenalty);
     std::map<std::string, std::string> parameters;
     std::cout << "line 325" << std::endl;
-    int64_t thiScore = alignSlidingWindow(querySeq, refSeq, _alignment_q, _alignment_d, &penalties, mm_allocator,
+    int64_t thiScore = alignSlidingWindow(querySeq, refSeq, _alignment_q, _alignment_d,
                                           slidingWindowSize, wfaSize, matchingScore, mismatchingPenalty,
                                           open_gap_penalty1, extend_gap_penalty1, open_gap_penalty2,
                                           extend_gap_penalty2, min_wavefront_length, max_distance_threshold, m, parameters);

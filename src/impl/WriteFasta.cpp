@@ -5,7 +5,7 @@
 #include "WriteFasta.h"
 #include <iostream>
 
-void writeFasta(  std::ostream& out, const std::string& seqname, const std::string& sequence, const int& linewidth) {
+void writeFasta(std::ostream &out, const std::string &seqname, const std::string &sequence, const int &linewidth) {
     out << ">" << seqname << std::endl;
     std::size_t pos = 0;
     while (pos < sequence.length()) {

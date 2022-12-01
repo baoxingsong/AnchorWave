@@ -36,34 +36,32 @@ void TwoVectorsOfRanges::setAnEnd(int32_t anEnd) {
     end = anEnd;
 }
 
-
-void TwoVectorsOfRanges::addRange1( Range & ran){
+void TwoVectorsOfRanges::addRange1(Range &ran) {
     ranges1.insert(ran);
-    if( 1 == ranges1.size() && 0 == ranges2.size() ){
+    if (1 == ranges1.size() && 0 == ranges2.size()) {
         this->start = ran.getStart();
         this->end = ran.getEnd();
         return;
     }
-    if( ran.getStart() < this->start ){
+    if (ran.getStart() < this->start) {
         this->start = ran.getStart();
     }
-    if( ran.getEnd() > this->end ){
+    if (ran.getEnd() > this->end) {
         this->end = ran.getEnd();
     }
 }
 
-
-void TwoVectorsOfRanges::addRange2( Range & ran){
+void TwoVectorsOfRanges::addRange2(Range &ran) {
     ranges2.insert(ran);
-    if( 0 == ranges1.size() && 1 == ranges2.size() ){
+    if (0 == ranges1.size() && 1 == ranges2.size()) {
         this->start = ran.getStart();
         this->end = ran.getEnd();
         return;
     }
-    if( ran.getStart() < this->start ){
+    if (ran.getStart() < this->start) {
         this->start = ran.getStart();
     }
-    if( ran.getEnd() > this->end ){
+    if (ran.getEnd() > this->end) {
         this->end = ran.getEnd();
     }
 }
