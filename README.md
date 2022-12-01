@@ -41,8 +41,8 @@ GNU GCC >=7.0
 Cmake >= 3.0  
 [minimap2](https://github.com/lh3/minimap2) or [GMAP](http://research-pub.gene.com/gmap/)  
 Operating System: Linux  
-Architecture: x86_64 CPUs with SSE4.1  
-Memory: > 85 Gb  
+Architecture: x86_64 CPUs with SSE2  
+Memory: > 25 Gb  
   
 If you would like to take the advantage of modern CPU to speed up please refer [the document for advanced installation](./installation.md).
 Or you are using old x86_64 CPUs without SSE4.1 but with SSE2, please also refer [the document for advanced installation](./installation.md).
