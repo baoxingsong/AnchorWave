@@ -77,8 +77,8 @@ int genomeAlignment(int argc, char **argv, std::map<std::string, std::string> &p
     bool considerInversion = false;
     int32_t wfaSize = 15000;
     int32_t wfaSize2 = 50000;
-    int32_t wfaSize3 = 200000; // if the inter-anchor length is shorter than this value, stop trying to find new anchors
-    int64_t windownWidth = 38000;
+    int32_t wfaSize3 = 100000; // if the inter-anchor length is shorter than this value, stop trying to find new anchors
+    int64_t windownWidth = 100000;
     int expectedCopies = 1;
     double maximumSimilarity = 0.6; // the maximum simalarity between secondary hist the primary hit. If the second hit is too similary with primary hit, that is unwanted duplications
 
@@ -496,8 +496,8 @@ int proportationalAlignment(int argc, char **argv, std::map<std::string, std::st
 
     int32_t wfaSize = 15000;
     int32_t wfaSize2 = 50000;
-    int32_t wfaSize3 = 200000; // if the inter-anchor length is shorter than this value, stop trying to find new anchors
-    int64_t windownWidth = 38000;
+    int32_t wfaSize3 = 100000; // if the inter-anchor length is shorter than this value, stop trying to find new anchors
+    int64_t windownWidth = 100000;
     int expectedCopies = 1;
     double maximumSimilarity = 0.6;
     int32_t min_wavefront_length = 20;
@@ -1265,7 +1265,7 @@ int ali(int argc, char **argv, std::map<std::string, std::string> &parameters) {
 
     int32_t openGapPenalty2 = -75;
     int32_t extendGapPenalty2 = -1;
-    int64_t windowWidth = 38000;
+    int64_t windowWidth = 100000;
 
     std::stringstream usage;
     usage << "Usage: " << PROGRAMNAME
