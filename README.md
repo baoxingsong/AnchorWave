@@ -366,17 +366,8 @@ cat anchorwave.maf | python2 anchorwave-maf-swap.py >anchorwave_swap.maf
 maf-convert sam anchorwave_swap.maf | sed 's/[0-9]\+H//g' > anchorwave_swap.sam
 samtools view -O BAM --reference Zm-Mo17-REFERENCE-CAU-1.0.fa anchorwave_swap.sam | samtools sort - > anchorwave_swap.bam
 ```
-If you would like to reformat MAF files into wiggle format for sequence alignment coverage and identification
-```
-https://bitbucket.org/bucklerlab/biokotlin/src/develop/src/main/kotlin/biokotlin/genome/GetCovIDFromMAFMultiThread.kt
-Please message Lynn Johnson (lcj34@cornell.edu), if you have any question.
-```
-If you would like to reformat MAF files into (G)VCF or track the coordinates on query genome and the reference genome
-```
-https://bitbucket.org/bucklerlab/biokotlin/src/develop/src/main/kotlin/biokotlin/genome/MAFToGVCF.kt
-Please read https://bitbucket.org/bucklerlab/practicalhaplotypegraph/wiki/UserInstructions/CreatePHG_step2_MAFToGVCFPluginDetails.md for usage.
-```
-
+If you would like to reformat MAF files into (G)VCF or track the coordinates on query genome and the reference genome,
+please refer the MAF to G(VCF) [pipeline](https://github.com/baoxingsong/AnchorWave/blob/master/doc/GATK.md).
 
 ## Walkthrough guidelines
 A more detailed guideline for which algorithm to use, how to visualize the results and how to select parameters could be found at the [walkthrough guidelines](./doc/guideline.pdf).  
