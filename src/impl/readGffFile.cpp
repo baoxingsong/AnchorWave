@@ -9,12 +9,6 @@ void readGffFile(const std::string &filePath, std::map <std::string, std::vector
     readGffFile(filePath, transcriptHashSet, cdsParentRegex, minExon);
 }
 
-int32_t gffmin(const int32_t &a, const int32_t &b) {
-    if (a < b) {
-        return a;
-    }
-    return b;
-}
 void get_transcript_to_gene_map_from_gff(const std::string &filePath, std::map <std::string, std::string> &transcript_to_gene_map) {
     std::vector <std::string> transcriptParentRegex;
     transcriptParentRegex.push_back("ID=(\\S+?);.*Parent=(\\S+?);");
@@ -38,11 +32,11 @@ void get_transcript_to_gene_map_from_gff(const std::string &filePath, std::map <
         if (line[0] == '#') {
             continue;
         }
-        std::string subline = line.substr(0, gffmin(10000, line.size()));
+
         std::smatch match;
         for (size_t i = 0; i < regTranscriptParents.size(); i++) {
             std::regex reg = regTranscriptParents[i];
-            while (regex_search(subline, match, reg)) {
+            while (regex_search(line, match, reg)) {
                 std::string transcript_id = match[1];
                 std::string gene_id = match[2];
                 transcript_to_gene_map[transcript_id] = gene_id;
@@ -63,8 +57,7 @@ void get_transcript_to_gene_map_from_gff(const std::string &filePath, std::map <
 
         std::smatch match;
         std::regex reg("Parent=(\\S+?);ID=(\\S+?);");
-        std::string subline = line.substr(0, gffmin(10000, line.size()));
-        while (regex_search(subline, match, reg)) {
+        while (regex_search(line, match, reg)) {
             std::string transcript_id = match[2];
             std::string gene_id = match[1];
             transcript_to_gene_map[transcript_id] = gene_id;
@@ -81,7 +74,6 @@ void get_transcript_to_gene_map_from_gff(const std::string &filePath, std::map <
     }
 }
 
-
 void readGffFile(const std::string &filePath, std::map <std::string, std::vector<Transcript>> &transcriptHashSet, const std::string &cdsParentRegex, const int &minExon) {
     std::map <std::string, Transcript> transcriptHashMap;
     std::ifstream infile(filePath);
@@ -94,12 +86,11 @@ void readGffFile(const std::string &filePath, std::map <std::string, std::vector
     std::string line;
     while (std::getline(infile, line)) {
         std::smatch match;
-        std::string subline = line.substr(0, gffmin(10000, line.size()));
-        regex_search(subline, match, reg);
-        //std::cout << line << std::endl;
+        regex_search(line, match, reg);
+
         if (match.empty() || line[0] == '#' || line.size() < 9) {
         } else {
-            //std::cout << line << std::endl;
+//            std::cout << line << std::endl;
             int start = stoi(match[3]);
             int end = stoi(match[4]);
             if (start > end) {
@@ -109,7 +100,6 @@ void readGffFile(const std::string &filePath, std::map <std::string, std::vector
             }
             if ((end - start + 1) >= minExon) {
                 std::string information = match[9];
-                //std::cout << information << std::endl;
                 if (transcriptHashMap.find(information) != transcriptHashMap.end()) {
                 } else {
                     std::string chromosomeName = match[1];
@@ -156,8 +146,7 @@ void readGffFile_exon(const std::string &filePath, std::map <std::string, std::v
     std::string line;
     while (std::getline(infile, line)) {
         std::smatch match;
-        std::string subline = line.substr(0, gffmin(10000, line.size()));
-        regex_search(subline, match, reg);
+        regex_search(line, match, reg);
 
         if (match.empty() || line[0] == '#' || line.size() < 9) {
         } else {
