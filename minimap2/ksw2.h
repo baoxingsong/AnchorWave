@@ -5,10 +5,14 @@
 
 #include <string.h>
 #include <assert.h>
+#ifdef __SSE2NEON__
+#include "sse2neon.h"
+#else
 #include <immintrin.h>
 #include <x86intrin.h>
 #include <smmintrin.h>
 #include <emmintrin.h>
+#endif // __SSE2NEON__
 
 #define KSW_NEG_INF -0x40000000
 

@@ -7,7 +7,11 @@
 
 #include <string>
 #include <stack>
+#ifdef __SSE2NEON__
+#include "sse2neon.h"
+#else
 #include <immintrin.h>
+#endif // __SSE2NEON__
 #include <map>
 #include "../impl/impl.h"
 #include "../util/nucleotideCodeSubstitutionMatrix.h"
