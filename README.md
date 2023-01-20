@@ -95,6 +95,7 @@ Commands:
     gff2seq     get the longest full-length CDS for each gene
     genoAli     whole chromosome global alignment and variant calling
     proali      genome alignment with relocation variation, chromosome fusion or whole genome duplication
+    ali         perform global alignment for a pair of sequences using the 2-piece affine gap cost strategy
 ```
 
 ### Lift over the reference full-length CDS start/stop coordinates to the query genome (command 1-3)
@@ -169,12 +170,12 @@ gmap -t 10 -A -f samse -d ler -D ler/ cds.fa > ler.sam
 The `-m` setting of this command should be identical with the above `gff2seq` command
 ##### If minimap2 was used for lift over:
 ```
-anchorwave genoAli -i TAIR10_GFF3_genes.gff -as cds.fa -r tair10.fa -a ler.sam -ar ref.sam -s ler.fa -v ler.vcf -n ler.anchors -o ler.maf -f ler.f.maf > ler.log
+anchorwave genoAli -i TAIR10_GFF3_genes.gff -as cds.fa -r tair10.fa -a ler.sam -ar ref.sam -s ler.fa -n ler.anchors -o ler.maf -f ler.f.maf > ler.log
 ```
 
 ##### If GMAP was used for lift over:
 ```
-anchorwave genoAli -i TAIR10_GFF3_genes.gff -as cds.fa -r tair10.fa -a ler.sam -ar ref.sam -s ler.fa -v ler.vcf -n ler.anchors -o ler.maf -f ler.f.maf -m 0 > ler.log
+anchorwave genoAli -i TAIR10_GFF3_genes.gff -as cds.fa -r tair10.fa -a ler.sam -ar ref.sam -s ler.fa -n ler.anchors -o ler.maf -f ler.f.maf -m 0 > ler.log
 ```
 The output file ```ler.anchors``` could be used to visualize collinear anchors/blocks.  
 Please note: Under the global alignment model, if the block length is longer than a preset window size, the output alignment maybe a suboptimal alignment. While a large window size (larger values of parameters ```-w``` and ```-fa3```) would cost more memory.  
@@ -223,9 +224,9 @@ The output could be end-to-end sequence alignment for the whole chromosome in ma
 Maize B73 v4 reference genome and GFF3 annotation file;  
 Maize Mo17 assembly.
 ```
-wget ftp://ftp.ensemblgenomes.org/pub/plants/release-34/gff3/zea_mays/Zea_mays.AGPv4.34.gff3.gz
+wget https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-34/gff3/zea_mays/Zea_mays.AGPv4.34.gff3.gz
 gunzip Zea_mays.AGPv4.34.gff3.gz
-wget ftp://ftp.ensemblgenomes.org/pub/plants/release-34/fasta/zea_mays/dna/Zea_mays.AGPv4.dna.toplevel.fa.gz
+wget https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-34/fasta/zea_mays/dna/Zea_mays.AGPv4.dna.toplevel.fa.gz
 gunzip Zea_mays.AGPv4.dna.toplevel.fa.gz
 wget https://download.maizegdb.org/Zm-Mo17-REFERENCE-CAU-1.0/Zm-Mo17-REFERENCE-CAU-1.0.fa.gz
 gunzip Zm-Mo17-REFERENCE-CAU-1.0.fa.gz
