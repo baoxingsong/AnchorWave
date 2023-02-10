@@ -67,8 +67,6 @@ Test the installation: \
 ```docker run -it anchorwave anchorwave```
 ```docker run -it anchorwave anchorwave gff2seq```
 
-### I am hiring at Peking University Institute of Advanced Agricultural Sciences. If you are interested in the usage or development of AnchorWave and are looking for a postdoc/academic/programming position, please contact me (baoxing.song@pku-iaas.edu.cn).
-### Visiting scientist/student are also very welcome.
 
 
 ## Usage
