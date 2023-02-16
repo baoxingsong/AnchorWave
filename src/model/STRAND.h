@@ -18,11 +18,9 @@
 
 *************************************************************************/
 
+#pragma once
 
-#ifndef ANNOTATIONLIFTOVER_STRAND_H
-#define ANNOTATIONLIFTOVER_STRAND_H
-
-#include "map"
+#include <map>
 #include <ostream>
 
 enum STRAND {
@@ -30,6 +28,3 @@ enum STRAND {
 };
 
 std::ostream &operator<<(std::ostream &out, const STRAND value);
-
-
-#endif //ANNOTATIONLIFTOVER_STRAND_H

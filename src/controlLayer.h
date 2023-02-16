@@ -15,37 +15,24 @@
  * =====================================================================================
  */
 
-#ifndef _CONTROLLAYER_H
-#define _CONTROLLAYER_H
+#pragma once
 
-#include <iostream>
 #include "InputParser.h"
-#include <sstream>
-#include "./util/util.h"
-#include "./model/model.h"
-#include "./service/service.h"
-#include "./impl/impl.h"
-#include "./myImportandFunction/myImportantFunction.h"
+#include "./impl/getSequencesFromGff.h"
+#include "./impl/deNovoGenomeVariantCalling.h"
+#include "./model/AlignmentMatch.h"
+#include "./myImportandFunction/alignSlidingWindow.h"
+#include "./service/TransferGffWithNucmerResult.h"
 #include "./version.h"
 
-int gff2seq(int argc, char **argv, std::map<std::string, std::string> &parameters);
+#include <iostream>
+#include <sstream>
+#include <vector>
 
-int genomeAlignment(int argc, char **argv, std::map<std::string, std::string> &parameters);
+int gff2seq(int argc, char **argv);
 
-int proportationalAlignment(int argc, char **argv, std::map<std::string, std::string> &parameters);
+int genomeAlignment(int argc, char **argv);
 
-int tripleAncestral(int argc, char **argv, std::map<std::string, std::string> &parameters);
+int proportionalAlignment(int argc, char **argv);
 
-int maf2vcf(int argc, char **argv, std::map<std::string, std::string> &parameters);
-
-int sam2maf(int argc, char **argv, std::map<std::string, std::string> &parameters);
-
-int sam2vcf(int argc, char **argv, std::map<std::string, std::string> &parameters);
-
-int evaluateTEAlignment(int argc, char **argv, std::map<std::string, std::string> &parameters);
-
-int sdiToMaf(int argc, char **argv, std::map<std::string, std::string> &parameters);
-
-int ali(int argc, char **argv, std::map<std::string, std::string> &parameters);
-
-#endif
+int ali(int argc, char **argv);

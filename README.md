@@ -37,13 +37,12 @@ Table of Contents
 ## Installation
 ### Installation from source code
 #### Dependencies
-GNU GCC >=7.0  
-Cmake >= 3.0  
+GNU GCC >=6.0  
+Cmake >= 3.0
 [minimap2](https://github.com/lh3/minimap2) or [GMAP](http://research-pub.gene.com/gmap/)  
 Operating System: Linux  
-Architecture: x86_64 CPUs with SSE2  
-Memory: > 32 Gb  
-  
+Memory: > 20 Gb  
+
 If you would like to take the advantage of modern CPU to speed up please refer [the document for advanced installation](./installation.md).
 Or you are using old x86_64 CPUs without SSE4.1 but with SSE2, please also refer [the document for advanced installation](./installation.md).
 
@@ -54,7 +53,7 @@ cd anchorwave
 cmake ./
 make
 ```
-You will get an executable file named ```anchorwave ```. If you would like to move ```anchorwave``` to a new path, please always put ```configure``` and ```anchorwave``` into the same folder.
+You will get an executable file named ```anchorwave ```.
 The code has been tested under Ubuntu 20.2 and CentOS 7 with intel/AMD CPU. It should work well on other REDHAT or Debian based Linux Distributions.
 ### Installation using conda
 ```
@@ -274,7 +273,7 @@ The alignment depth thresholds are the parameters ‘-R’ and ‘-Q’. They ar
 The outputs of this function are end-to-end sequence alignments for each collinear block in maf format.  
   
 Data: maize B73 genome sequence and GFF3 annotation file from [http://plants.ensembl.org/Zea_mays/Info/Index](http://plants.ensembl.org/Zea_mays/Info/Index);  
-and sorghum genome sequence from [https://plants.ensembl.org/Sorghum_bicolor/Info/Index](https://plants.ensembl.org/Sorghum_bicolor/Info/Index]).  
+and sorghum genome sequence from [https://plants.ensembl.org/Sorghum_bicolor/Info/Index](https://plants.ensembl.org/Sorghum_bicolor/Info/Index).  
   
 This function does not need the reference and query genomes having identical chromosome names.
 #### Anchors lift over:

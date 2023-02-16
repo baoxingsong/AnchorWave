@@ -2,12 +2,9 @@
 // Created by baoxing on 10/10/17.
 //
 
-#ifndef ANNOTATIONLIFTOVER_TRANSCRIPTUPDATEINFORMATION_H
-#define ANNOTATIONLIFTOVER_TRANSCRIPTUPDATEINFORMATION_H
+#pragma once
 
-#include "../model/model.h"
 #include "getSubsequence.h"
+#include "../model/Transcript.h"
 
-void TranscriptUpdateCdsInformation(Transcript &transcript, std::map<std::string, std::string> &genome);
-
-#endif //ANNOTATIONLIFTOVER_TRANSCRIPTUPDATEINFORMATION_H
+void TranscriptUpdateCdsInformation(Transcript &transcript, std::map<std::string, std::tuple<std::string, long, long, int> > &genome);

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0)
-project(anchorwave)
+project(anchorwave-MSA)
 
 #include(CheckCXXCompilerFlag)
 set(CMAKE_CXX_STANDARD 14)
@@ -24,94 +24,57 @@ include_directories(googletest/googletest/include googletest/googletest)
 add_executable(anchorwave
         googletest
         googletest/googletest
-        #       ksw2_extz2_sse.c
-#       ksw2.h
-#       src/myImportandFunction/alignNeedlemanForTranscript_simd.cpp
-        src/model/GenomeBasicFeature.cpp
-        src/model/GenomeBasicFeature.h
+
+        main.cpp
+
         src/controlLayer.cpp
         src/controlLayer.h
         src/InputParser.cpp
         src/InputParser.h
-        src/model/model.h
-        src/util/myutil.cpp
-        src/util/myutil.h
-        src/util/nucleotideCodeSubstitutionMatrix.cpp
-        src/util/nucleotideCodeSubstitutionMatrix.h
-        src/util/parameters.cpp
-        src/util/parameters.h
-        main.cpp
-        src/model/variant.cpp
-        src/model/variant.h
-        src/model/Transcript.cpp
-        src/model/Transcript.h
-        src/model/Gene.cpp
-        src/model/Gene.h
-        src/model/Matrix.cpp
-        src/model/Matrix.h
-        src/model/FirstLastList.cpp
-        src/model/FirstLastList.h
-        src/model/STRAND.h
-        src/model/STRAND.cpp
-        src/model/Seed.h
-        src/model/Seed.cpp
-        src/model/PairedSimilarFragment.cpp
-        src/model/PairedSimilarFragment.h
-#        src/impl/sequenceAlignment.cpp
-#        src/impl/sequenceAlignment.h
-        src/impl/impl.h
-        src/impl/GetReverseComplementary.cpp
-        src/impl/GetReverseComplementary.h
-        src/impl/readFastaFile.cpp
-        src/impl/readFastaFile.h
-        src/util/util.h
-        src/impl/getSubsequence.cpp
-        src/impl/getSubsequence.h
-        src/impl/dynmatrix.cc
-        src/impl/dynmatrix.h
-        src/impl/readGffFile.cpp
-        src/impl/readGffFile.h
-        src/impl/getSequencesFromGff.cpp
-        src/impl/getSequencesFromGff.h
-        src/service/service.h
-        src/myImportandFunction/myImportantFunction.h
-        src/impl/TranscriptUpdateInformation.cpp
-        src/impl/TranscriptUpdateInformation.h
-        src/tests/impl/test_WFA.cpp
-        src/tests/impl/readMafForMsa.cpp
-        src/tests/impl/TEGffToAlignment.cpp
-        src/tests/impl/readGffFile.cpp
-        src/tests/impl/readFastaFile_test.cpp
-        src/tests/impl/sequencesToKmerCountMatrix.cpp
-        #        src/tests/impl/CompareSdiAlignmentWithMafFile
-        src/service/TransferGffWithNucmerResult.cpp
-        src/service/TransferGffWithNucmerResult.h
-        src/service/Reformat.cpp
-        src/service/Reformat.h
-        src/service/callVariantFromSamFile.h
-        src/service/callVariantFromSamFile.cpp
-        src/myImportandFunction/alignSlidingWindow.cpp
-        src/myImportandFunction/alignSlidingWindow.h
-        src/impl/CheckAndUpdateTranscriptsEnds.cpp
-        src/impl/CheckAndUpdateTranscriptsEnds.h
+        src/version.h
+
         src/impl/deNovoGenomeVariantCallingMultipleThreads.cpp
         src/impl/deNovoGenomeVariantCalling.h
-        src/impl/WriteFasta.cpp
-        src/impl/WriteFasta.h
-        src/model/AlignmentMatch.cpp
-        src/model/AlignmentMatch.h
-        src/model/Score.cpp
-        src/model/Score.h
         src/impl/geneSyntenic.cpp
         src/impl/geneSyntenic.h
-        src/impl/SequenceCharToUInt8.cpp
-        src/impl/SequenceCharToUInt8.h
+        src/impl/GetReverseComplementary.cpp
+        src/impl/GetReverseComplementary.h
+        src/impl/getSequencesFromGff.cpp
+        src/impl/getSequencesFromGff.h
+        src/impl/getSubsequence.cpp
+        src/impl/getSubsequence.h
+        src/impl/readFastaFile.cpp
+        src/impl/readFastaFile.h
+        src/impl/readGffFile.cpp
+        src/impl/readGffFile.h
+        src/impl/TranscriptUpdateInformation.cpp
+        src/impl/TranscriptUpdateInformation.h
+
+        src/model/AlignmentMatch.cpp
+        src/model/AlignmentMatch.h
+        src/model/GenomeBasicFeature.cpp
+        src/model/GenomeBasicFeature.h
+        src/model/Score.cpp
+        src/model/Score.h
+        src/model/STRAND.cpp
+        src/model/STRAND.h
+        src/model/Transcript.cpp
+        src/model/Transcript.h
+
+        src/myImportandFunction/alignSlidingWindow.cpp
+        src/myImportandFunction/alignSlidingWindow.h
+
+        src/service/TransferGffWithNucmerResult.cpp
+        src/service/TransferGffWithNucmerResult.h
+
+        src/util/myutil.cpp
+        src/util/myutil.h
+
 
         WFA2-lib/alignment/affine2p_penalties.c
         WFA2-lib/alignment/affine_penalties.c
         WFA2-lib/alignment/cigar.c
         WFA2-lib/alignment/score_matrix.c
-
         WFA2-lib/system/mm_allocator.c
         WFA2-lib/system/mm_stack.c
         WFA2-lib/system/profiler_counter.c
@@ -149,11 +112,6 @@ add_executable(anchorwave
         WFA2-lib/wavefront/wavefront_unialign.h
         WFA2-lib/wavefront/wavefront_bialigner.c
         WFA2-lib/wavefront/wavefront_bialigner.h
-
-
-
-
-
         WFA2-lib/alignment/affine2p_penalties.h
         WFA2-lib/alignment/affine_penalties.h
         WFA2-lib/alignment/cigar.h
@@ -196,9 +154,9 @@ add_executable(anchorwave
         WFA2-lib/wavefront/wavefront_penalties.h
         WFA2-lib/wavefront/wavefront_plot.h
         WFA2-lib/wavefront/wavefront_slab.h
-
         WFA2-lib/bindings/cpp/WFAligner.cpp
         WFA2-lib/bindings/cpp/WFAligner.hpp
+
 
         minimap2/align.c
         minimap2/bseq.c
@@ -236,25 +194,8 @@ add_executable(anchorwave
         minimap2/minimap.h
         minimap2/mmpriv.h
         minimap2/sdust.h
-#
-#        ksw2/kalloc.h
-#        ksw2/kseq.h
-#        ksw2/ksw2.h
-#//        ksw2/cli.c
-#        ksw2/kalloc.c
-#        ksw2/ksw2_extd2_sse.c
-#        ksw2/ksw2_extd.c
-#        ksw2/ksw2_extf2_sse.c
-#        ksw2/ksw2_exts2_sse.c
-#        ksw2/ksw2_extz2_sse.c
-#        ksw2/ksw2_extz.c
-#        ksw2/ksw2_gg2.c
-#        ksw2/ksw2_gg2_sse.c
-#        ksw2/ksw2_gg.c
-
-        src/service/Reformat.cpp src/service/Reformat.h src/service/evaluation.cpp src/service/evaluation.h src/version.h src/service/callVariantFromSamFile.h src/model/BlocksForMsa.cpp src/model/BlocksForMsa.h src/impl/readMafForMsa.cpp src/impl/readMafForMsa.h src/model/AlignmentBlock.cpp src/model/AlignmentBlock.h src/model/PhylogeneticTreeNode.cpp src/model/PhylogeneticTreeNode.h src/model/PhylogeneticTree.cpp src/model/PhylogeneticTree.h src/tests/model/PhylogeneticTree.cpp src/service/TreeManip.cpp src/service/TreeManip.h src/model/Range.cpp src/model/Range.h src/model/TwoVectorsOfRanges.cpp src/model/TwoVectorsOfRanges.h src/impl/sequencesToKmerDIstanceMatrix.cpp src/impl/sequencesToKmerDIstanceMatrix.h)
+        )
 
 target_link_libraries(anchorwave gtest gtest_main ZLIB::ZLIB)
 
 install(TARGETS anchorwave DESTINATION bin)
-install(FILES configure DESTINATION bin)

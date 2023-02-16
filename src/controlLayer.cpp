@@ -17,8 +17,7 @@
 
 #include "controlLayer.h"
 
-
-int gff2seq(int argc, char **argv, std::map<std::string, std::string> &parameters) {
+int gff2seq(int argc, char **argv) {
     std::stringstream usage;
     usage << "Usage: " << PROGRAMNAME << " gff2seq -i inputGffFile -r inputGenome -o outputSequences " << std::endl <<
           "Options" << std::endl <<
@@ -30,33 +29,175 @@ int gff2seq(int argc, char **argv, std::map<std::string, std::string> &parameter
           " -m INT    minimum exon length to output (default: 20)" << std::endl << std::endl;
 
     InputParser inputParser(argc, argv);
-    if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help")) {
-        std::cerr << usage.str();
-    } else if (inputParser.cmdOptionExists("-i") && inputParser.cmdOptionExists("-r") && inputParser.cmdOptionExists("-o")) {
-        std::string inputGffFile = inputParser.getCmdOption("-i");
-        std::string genome = inputParser.getCmdOption("-r");
-        std::string outputCdsSequences = inputParser.getCmdOption("-o");
-
-        int minExon;
-        if (inputParser.cmdOptionExists("-m")) {
-            minExon = std::stoi(inputParser.getCmdOption("-m"));
-        } else {
-            minExon = 20;
-        }
-        bool exonModel = false;
-        if (inputParser.cmdOptionExists("-x")) {
-            exonModel = true;
-        }
-        getSequences(inputGffFile, genome, outputCdsSequences, parameters, minExon, exonModel);
-        return 0;
-    } else {
+    if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help") || !inputParser.cmdOptionExists("-i") || !inputParser.cmdOptionExists("-r") || !inputParser.cmdOptionExists("-o")) {
         std::cerr << usage.str();
     }
+
+    std::string inputGffFile = inputParser.getCmdOption("-i");
+    std::string genome = inputParser.getCmdOption("-r");
+    std::string outputCdsSequences = inputParser.getCmdOption("-o");
+
+    int minExon;
+    if (inputParser.cmdOptionExists("-m")) {
+        minExon = std::stoi(inputParser.getCmdOption("-m"));
+    } else {
+        minExon = 20;
+    }
+
+    bool exonModel = false;
+    if (inputParser.cmdOptionExists("-x")) {
+        exonModel = true;
+    }
+
+    getSequences(inputGffFile, genome, outputCdsSequences, minExon, exonModel);
+
     return 0;
 }
 
+// generate alignmentMatchsMap for genomeAlignment from anchors file.
+bool genGenoMapFromFile(std::string path_anchors, std::string wholeCommand, std::map<std::string, std::vector<AlignmentMatch>> & map_v_am) {
+    std::ifstream infile_anchors(path_anchors);
 
-int genomeAlignment(int argc, char **argv, std::map<std::string, std::string> &parameters) {
+    std::string line;
+    bool same_command = false;
+    bool has_begin = false;
+    bool has_end = false;
+    int count_begin = 0;
+    int count_end = 0;
+    int line_no = 0;
+
+    while (std::getline(infile_anchors, line)) {
+        if(line_no++ == 0) {
+            if(line == std::string("#" + std::string(PROGRAMNAME) + " " + wholeCommand)) {
+                same_command = true;
+            }
+            else {
+                break;
+            }
+        }
+
+        if (line[0] != '#') {
+            continue;
+        }
+
+        if(line.find("#block begin")) {
+            has_begin = true;
+            count_begin++;
+        }
+
+        if(line.find("#block end")) {
+            has_end = true;
+            count_end++;
+        }
+    }
+
+    // has generated anchors file before.
+    if(same_command && has_begin && has_end && (count_begin == count_end)) {
+        // get alignmentMatchsMap from anchors file.
+        std::ifstream infile(path_anchors);
+        if (!infile.good()) {
+            std::cerr << "error in opening anchors file " << path_anchors << std::endl;
+        }
+
+        std::vector <AlignmentMatch> v_am;
+        std::string line;
+        bool flag_begin = false;
+        int line_std_n_no = 0;
+        int line_std_p_no = 0;
+        STRAND last_strand = POSITIVE;
+
+        while (std::getline(infile, line)) {
+            // --line like :    5B	387734189	387739576	GWHBJBH00000005	293115001	293120759	+	transcript:TraesCS5B02G214600.2	1	0.99872
+            // refChr	referenceStart	referenceEnd	queryChr	queryStart	queryEnd	strand	gene	score
+            if (!flag_begin && line.find("#block begin") != std::string::npos) {
+                flag_begin = true;
+                line_std_n_no = 0;
+                line_std_p_no = 0;
+                continue;
+            }
+
+            if (!flag_begin) {
+                continue;
+            }
+
+            if (line.find("#block end") != std::string::npos) {
+                map_v_am[v_am[0].getRefChr()] = v_am;
+                v_am.clear();
+                flag_begin = false;
+            }
+
+            int size = line.size();
+
+            char refChr[size];
+            uint32_t referenceStart, referenceEnd;
+            uint32_t last_referenceEnd;
+            char queryChr[size];
+            uint32_t queryStart, queryEnd;
+            uint32_t last_queryStart;
+            char strand_[size];
+            char c_gene[size];
+            char c_score[size];
+
+            int ret = sscanf(line.c_str(), "%s%d%d%s%d%d%s%s%*s%s", refChr, &referenceStart, &referenceEnd, queryChr, &queryStart, &queryEnd, strand_, c_gene, c_score);
+
+            if (ret == 9) {
+                STRAND strand;
+                if (strand_[0] == '-') {
+                    strand = NEGATIVE;
+                } else {
+                    strand = POSITIVE;
+                }
+
+                if (last_strand != strand) {
+                    if (strand == POSITIVE) {
+                        line_std_p_no = 0;
+                        line_std_p_no++;
+                    } else {
+                        line_std_n_no = 0;
+                        line_std_n_no++;
+                    }
+                    last_strand = strand;
+                } else {
+                    if (strand == POSITIVE) {
+                        int r = line_std_p_no++ % 2;
+                        if (r != 0) {
+                            last_referenceEnd = referenceEnd;
+                            last_queryStart = queryStart;
+                            continue;
+                        }
+                    } else {
+                        bool b_2 = (last_referenceEnd < referenceStart) && (last_queryStart > queryEnd);
+                        if (b_2) {
+                            if (line_std_n_no++ % 2 == 1) {
+                                last_referenceEnd = referenceEnd;
+                                last_queryStart = queryStart;
+                                continue;
+                            }
+                        }
+                    }
+                }
+
+                double score = 1;
+                if (std::string(c_score) != "1") {
+                    score = 0;
+                }
+
+                last_referenceEnd = referenceEnd;
+                last_queryStart = queryStart;
+
+                AlignmentMatch am = AlignmentMatch(std::string(refChr), std::string(queryChr), referenceStart, referenceEnd, queryStart, queryEnd, score, strand, std::string(c_gene), "");
+                v_am.push_back(am);
+            }
+        }
+
+        infile.close();
+        return true;
+    }
+
+    return false;
+}
+
+int genomeAlignment(int argc, char **argv) {
     std::stringstream usage;
 
     int32_t matchingScore = 0;
@@ -72,32 +213,16 @@ int genomeAlignment(int argc, char **argv, std::map<std::string, std::string> &p
     double minimumSimilarity2 = 0.2;
 
     double inversion_PENALTY = -1;
-//    double MIN_ALIGNMENT_SCORE = 3000; // to be optimized
     double MIN_ALIGNMENT_SCORE = 2;
     bool considerInversion = false;
-    int32_t wfaSize = 15000;
-    int32_t wfaSize2 = 50000;
+
     int32_t wfaSize3 = 100000; // if the inter-anchor length is shorter than this value, stop trying to find new anchors
-    int64_t windownWidth = 100000;
+    int64_t windowWidth = 100000;
     int expectedCopies = 1;
     double maximumSimilarity = 0.6; // the maximum simalarity between secondary hist the primary hit. If the second hit is too similary with primary hit, that is unwanted duplications
 
-    int32_t min_wavefront_length = 20;
-    int32_t max_distance_threshold = 100;
-
-    int32_t seed_window_size = 38;
-    int32_t mini_cns_score = 30;
-    int32_t step_size = 8;
-    int32_t matrix_boundary_distance = 0;
     bool searchForNewAnchors = true;
 
-    int k = 12;
-    int mw = 1;
-    bool H = false;
-
-    int32_t scoreThreshold = 54;
-    int32_t w2 = 10;  //this is the band width for band sequence alignments
-    int32_t xDrop = 20;
     int threads = 1;
     bool exonModel = false;
 
@@ -115,18 +240,12 @@ int genomeAlignment(int argc, char **argv, std::map<std::string, std::string> &p
           " -o   FILE    output file in maf format" << std::endl <<
           " -f   FILE    output sequence alignment for each anchor/inter-anchor region in maf format" << std::endl <<
           " -t   INT     number of threads (default: " << threads << ")" << std::endl <<
-          " -v   FILE    output variant calling in vcf format (conflict with -IV)" << std::endl <<
-          //          " -l   FILE    output local alignment for each anchor and inter-anchor region" << std::endl <<
           " -m   INT     minimum exon length to use (default: " << minExon << ", should be identical with the setting of gff2seq function)" << std::endl <<
           " -mi  DOUBLE  minimum full-length CDS anchor hit similarity to use (default:" << minimumSimilarity << ")" << std::endl <<
           " -mi2 DOUBLE  minimum novel anchor hit similarity to use (default:" << minimumSimilarity2 << ")" << std::endl <<
           " -ar  FILE    sam file generated by mapping conserved sequence to reference genome" << std::endl <<
-          //          " -fa  INT     if fragment length is smaller than this value in inter-anchor region, use WFA to align (default: " << wfaSize << ")" << std::endl <<
-          //          " -fa2 INT     if fragment length is smaller than this value in anchor region, use WFA to align (default: " << wfaSize2 << ")" << std::endl <<
-          " -w   INT     sequence alignment window width (default: " << windownWidth << ")" << std::endl <<
-          //"              If the fragment length is longer than -fa/-fa2, ProAli perform sequence alignment using a sliding window approach"  << std::endl <<
+          " -w   INT     sequence alignment window width (default: " << windowWidth << ")" << std::endl <<
           " -fa3 INT     if the inter-anchor length is shorter than this value, stop trying to find new anchors (default: " << wfaSize3 << ")" << std::endl <<
-          //          " -A   INT     matching score (default: " << matchingScore << ")" << std::endl <<
           " -B   INT     mismatching penalty (default: " << mismatchingPenalty << ")" << std::endl <<
           " -O1  INT     gap open penalty (default: " << openGapPenalty1 << ")" << std::endl <<
           " -E1  INT     gap extension penalty (default: " << extendGapPenalty1 << ")" << std::endl <<
@@ -139,38 +258,26 @@ int genomeAlignment(int argc, char **argv, std::map<std::string, std::string> &p
           " -e   INT     maximum expected copy number of each gene on each chromosome (default: " << expectedCopies << ")" << std::endl << // this is used to duplicated anchors from the sam file
           "              This prevents using tandem duplicated genes to identify collinear block" << std::endl <<
           " -y   DOUBLE  minimal ratio of e+1 similarity to 1 similarity to drop an anchor (default: " << maximumSimilarity << ")" << std::endl <<
-          //          " If you have enough memory on your computer and expect better alignment, please set large value for -w, -fa, -fa2 and -fa3 "  << std::endl <<
-          //          " -wl  INT     min wavefront length (default: "<< min_wavefront_length << ")" << std::endl <<
-          //          " -wd  INT     max distance threshold (default: "<< max_distance_threshold << ")" << std::endl <<
-          //          "              -wl and -wd are parameters for WFA-Adaptive"  << std::endl <<
           " -ns          do not search for new anchors (default: false)" << std::endl <<
-          " -x           use exon records instead of CDS from the GFF file (should be identical with the setting of gff2seq function)" << std::endl <<
-          //          " Following parameters are for minimap2 library, useful to identify novel anchors when -ns is not set" << std::endl<<
-          //          " -H	         Use homopolymer-compressed (HPC) minimizers. An HPC sequence is constructed by contracting homopolymer runs to a single base. An HPC minimizer is a minimizer on the HPC sequence." << std::endl<<
-          //          " -k   INT	 Minimizer k-mer length (default: "<<k<<")" << std::endl<<
-          //          " -mw  INT	 Minimizer window size(default: " << mw << "). A minimizer is the smallest k-mer in a window of w consecutive k-mers." << std::endl << std::endl <<
-          //          " Following parameters are useful for local alignment when -l is set" << std::endl<<
-          //          " -sw  INT     the windows size used to run the smith-waterman algorithm to get the alignment seed (default: "<<seed_window_size<<")" << std::endl <<
-          //          " -c   INT     minimum seeds score to trigger a local alignment extension (default: " << mini_cns_score << ")" << std::endl <<
-          //          " -st  INT     step size for sliding the smith-waterman seeds alignment window (default: " << step_size << ")" << std::endl <<
-          //          " -ms  INT     minimum score to report a local sequence alignment (default: "<<scoreThreshold<<")" << std::endl <<
-          //          " -x   INT     x-drop for local alignment (default: " << xDrop << ")" << std::endl <<
-          //          " -u   INT     local alignment band width (default: " << w2 << ")" << std::endl <<
-          std::endl;
+          " -x           use exon records instead of CDS from the GFF file (should be identical with the setting of gff2seq function)" << std::endl
+          << std::endl;
 
     InputParser inputParser(argc, argv);
+
     if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help")) {
         std::cerr << usage.str();
-    } else if (inputParser.cmdOptionExists("-i") && inputParser.cmdOptionExists("-r") &&
+    }
+    else if (inputParser.cmdOptionExists("-i") && inputParser.cmdOptionExists("-r") &&
                inputParser.cmdOptionExists("-a") && inputParser.cmdOptionExists("-s") && inputParser.cmdOptionExists("-as") &&
-               (inputParser.cmdOptionExists("-n") || inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-v") || inputParser.cmdOptionExists("-o") || inputParser.cmdOptionExists("-l"))) {
+               (inputParser.cmdOptionExists("-n") || inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-o") || inputParser.cmdOptionExists("-l"))) {
 
         std::string refGffFilePath = inputParser.getCmdOption("-i");
-        std::string referenceGenomeSequence = inputParser.getCmdOption("-r");
+        std::string path_ref_GenomeSequence = inputParser.getCmdOption("-r");
         std::string cdsSequenceFile = inputParser.getCmdOption("-as");
         std::string samFilePath = inputParser.getCmdOption("-a");
-        std::string targetGenomeSequence = inputParser.getCmdOption("-s");
+        std::string path_target_GenomeSequence = inputParser.getCmdOption("-s");
         std::string outPutMafFile;
+
         if (inputParser.cmdOptionExists("-o")) {
             outPutMafFile = inputParser.getCmdOption("-o");
         }
@@ -179,23 +286,10 @@ int genomeAlignment(int argc, char **argv, std::map<std::string, std::string> &p
         if (inputParser.cmdOptionExists("-f")) {
             outPutFragedFile = inputParser.getCmdOption("-f");
         }
+
         if (inputParser.cmdOptionExists("-t")) {
             threads = std::stoi(inputParser.getCmdOption("-t"));
         }
-
-        std::string outPutVcfFile;
-        if (inputParser.cmdOptionExists("-v")) {
-            outPutVcfFile = inputParser.getCmdOption("-v");
-            if (inputParser.cmdOptionExists("-IV")) {
-                std::cout << "please do not set -v and -IV together" << std::endl;
-                return 1;
-            }
-        }
-//
-//        std::string outPutLocalalignmentFile;
-//        if (inputParser.cmdOptionExists("-l") ){
-//            outPutLocalalignmentFile = inputParser.getCmdOption("-l");
-//        }
 
         if (inputParser.cmdOptionExists("-m")) {
             minExon = std::stoi(inputParser.getCmdOption("-m"));
@@ -212,28 +306,10 @@ int genomeAlignment(int argc, char **argv, std::map<std::string, std::string> &p
             referenceSamFilePath = inputParser.getCmdOption("-ar");
         }
 
-//        if( inputParser.cmdOptionExists("-fa") ){
-//            wfaSize = std::stoi( inputParser.getCmdOption("-fa") );
-//        }
-//        if( inputParser.cmdOptionExists("-fa2")){
-//            wfaSize2 = std::stoi(inputParser.getCmdOption("-fa2"));
-//        }
         if (inputParser.cmdOptionExists("-fa3")) {
             wfaSize3 = std::stoi(inputParser.getCmdOption("-fa3"));
         }
-//        if ( wfaSize2 < wfaSize ){
-//            std::cout << "fa2 should be larger than fa" << std::endl;
-//            return 1;
-//        }
 
-//
-//        if( inputParser.cmdOptionExists("-A") ){
-//            matchingScore = std::stoi( inputParser.getCmdOption("-A") );
-//            if( matchingScore<0 ){
-//                std::cout << "parameter of A should be a positive value" << std::endl;
-//                return 1;
-//            }
-//        }
         if (inputParser.cmdOptionExists("-B")) {
             mismatchingPenalty = std::stoi(inputParser.getCmdOption("-B"));
             if (mismatchingPenalty >= 0) {
@@ -241,6 +317,7 @@ int genomeAlignment(int argc, char **argv, std::map<std::string, std::string> &p
                 return 1;
             }
         }
+
         if (inputParser.cmdOptionExists("-O1")) {
             openGapPenalty1 = std::stoi(inputParser.getCmdOption("-O1"));
             if (openGapPenalty1 >= 0) {
@@ -248,6 +325,7 @@ int genomeAlignment(int argc, char **argv, std::map<std::string, std::string> &p
                 return 1;
             }
         }
+
         if (inputParser.cmdOptionExists("-E1")) {
             extendGapPenalty1 = std::stoi(inputParser.getCmdOption("-E1"));
             if (extendGapPenalty1 >= 0) {
@@ -263,6 +341,7 @@ int genomeAlignment(int argc, char **argv, std::map<std::string, std::string> &p
                 return 1;
             }
         }
+
         if (inputParser.cmdOptionExists("-E2")) {
             extendGapPenalty2 = std::stoi(inputParser.getCmdOption("-E2"));
             if (extendGapPenalty2 > 0) {
@@ -270,6 +349,7 @@ int genomeAlignment(int argc, char **argv, std::map<std::string, std::string> &p
                 return 1;
             }
         }
+
         if (inputParser.cmdOptionExists("-IV")) {
             considerInversion = true;
         }
@@ -280,6 +360,7 @@ int genomeAlignment(int argc, char **argv, std::map<std::string, std::string> &p
                 return 1;
             }
         }
+
         if (inputParser.cmdOptionExists("-I")) {
             MIN_ALIGNMENT_SCORE = std::stod(inputParser.getCmdOption("-I"));
         }
@@ -296,187 +377,304 @@ int genomeAlignment(int argc, char **argv, std::map<std::string, std::string> &p
             maximumSimilarity = std::stod(inputParser.getCmdOption("-y"));
         }
         if (inputParser.cmdOptionExists("-w")) {
-            windownWidth = std::stoi(inputParser.getCmdOption("-w"));
-        }
-        if (inputParser.cmdOptionExists("-wl")) {
-            min_wavefront_length = std::stoi(inputParser.getCmdOption("-wl"));
+            windowWidth = std::stoi(inputParser.getCmdOption("-w"));
         }
 
-        if (inputParser.cmdOptionExists("-wd")) {
-            max_distance_threshold = std::stoi(inputParser.getCmdOption("-wd"));
-        }
         if (inputParser.cmdOptionExists("-ns")) {
             searchForNewAnchors = false;
         }
-        if (inputParser.cmdOptionExists("-H")) {
-            H = true;
-        }
-        if (inputParser.cmdOptionExists("-k")) {
-            k = std::stoi(inputParser.getCmdOption("-k"));
-        }
 
-        if (inputParser.cmdOptionExists("-mw")) {
-            mw = std::stoi(inputParser.getCmdOption("-mw"));
-        }
-        if (inputParser.cmdOptionExists("-sw")) {
-            seed_window_size = std::stoi(inputParser.getCmdOption("-sw"));
-        }
-        if (inputParser.cmdOptionExists("-c")) {
-            mini_cns_score = std::stoi(inputParser.getCmdOption("-c"));
-        }
-        if (inputParser.cmdOptionExists("-st")) {
-            step_size = std::stoi(inputParser.getCmdOption("-st"));
-        }
-        if (inputParser.cmdOptionExists("-ms")) {
-            scoreThreshold = std::stoi(inputParser.getCmdOption("-ms"));
-        }
-//
-//        if( inputParser.cmdOptionExists("-x") ){
-//            xDrop = std::stoi( inputParser.getCmdOption("-x") );
-//        }
-        if (inputParser.cmdOptionExists("-u")) {
-            w2 = std::stoi(inputParser.getCmdOption("-u"));
-        }
         if (inputParser.cmdOptionExists("-x")) {
             exonModel = true;
         }
 
-        std::map<std::string, std::string> referenceGenome;
-        readFastaFile(referenceGenomeSequence, referenceGenome);
+        std::map<std::string, std::tuple<std::string, long, long, int> > map_ref;
+        readFastaFile(path_ref_GenomeSequence, map_ref);
 
-        std::map<std::string, std::string> queryGenome;
-        readFastaFile(targetGenomeSequence, queryGenome);
+        std::map<std::string, std::tuple<std::string, long, long, int> > map_qry;
+        readFastaFile(path_target_GenomeSequence, map_qry);
 
-        std::map<std::string, std::vector<AlignmentMatch>> alignmentMatchsMap;
-        setupAnchorsWithSpliceAlignmentResult(refGffFilePath, cdsSequenceFile, samFilePath, alignmentMatchsMap,
-                                              inversion_PENALTY, MIN_ALIGNMENT_SCORE, considerInversion, minExon, windownWidth, minimumSimilarity, minimumSimilarity2, parameters, referenceGenome,
-                                              queryGenome, expectedCopies, maximumSimilarity, referenceSamFilePath, wfaSize3, searchForNewAnchors, exonModel
-                /*, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, k, mw, H*/);
+        std::cout << "setupAnchorsWithSpliceAlignmentResult begin " << std::endl;
+        std::map<std::string, std::vector<AlignmentMatch>> map_v_am;
 
+        std::string path_anchors = inputParser.getCmdOption("-n");
 
-        //        std::cout << "control line 363" << std::endl;
-
-        for (std::map<std::string, std::vector<AlignmentMatch>>::iterator it = alignmentMatchsMap.begin(); it != alignmentMatchsMap.end(); ++it) {
-            //         std::cout << "control line 365\t" << it->first << "\t" << it->first.size() << std::endl;
-            myAlignmentMatchSort(it->second, inversion_PENALTY, MIN_ALIGNMENT_SCORE, false, false);
-            //          std::cout << "control line 367" << std::endl;
-        }
-        //    std::cout << "control line 369" << std::endl;
-        if (inputParser.cmdOptionExists("-n")) {
+        bool flag_CanGen = false;
+        std::ifstream infile_anchors(path_anchors);
+        if (infile_anchors.good()) {
             std::string wholeCommand = argv[0];
             for (int i = 1; i < argc; ++i) {
                 wholeCommand = wholeCommand + " " + argv[i];
             }
-//            std::cout << "control line 375" << std::endl;
-            std::ofstream ofile;
-            ofile.open(inputParser.getCmdOption("-n"));
-            ofile << "#" << PROGRAMNAME << " " << wholeCommand << std::endl;
-            int blockIndex = 0;
-            ofile << "refChr" << "\t"
-                  << "referenceStart" << "\t"
-                  << "referenceEnd" << "\t"
-                  << "queryChr" << "\t"
-                  << "queryStart" << "\t"
-                  << "queryEnd" << "\t"
-                  << "strand" << "\t"
-                  << "gene" << "\t"
-                  << "blockIndex" << "\tscore" << std::endl;
 
-            for (std::map<std::string, std::vector<AlignmentMatch>>::iterator it = alignmentMatchsMap.begin(); it != alignmentMatchsMap.end(); ++it) {
-                ofile << "#block begin" << std::endl;
-                blockIndex++;
-                bool hasInversion = false;
-                for (int rangeIndex = 0; rangeIndex < it->second.size(); ++rangeIndex) {
-                    if (rangeIndex > 0) {
-                        if (it->second[rangeIndex].getStrand() == POSITIVE && it->second[rangeIndex - 1].getStrand() == POSITIVE) {
-                            ofile << it->second[rangeIndex].getRefChr() << "\t"
-                                  << it->second[rangeIndex - 1].getRefEndPos() + 1 << "\t"
-                                  << it->second[rangeIndex].getRefStartPos() - 1 << "\t"
-                                  << it->second[rangeIndex].getQueryChr() << "\t"
-                                  << it->second[rangeIndex - 1].getQueryEndPos() + 1 << "\t"
-                                  << it->second[rangeIndex].getQueryStartPos() - 1 << "\t"
-                                  << "+" << "\t"
-                                  << "interanchor" << "\t" <<
-                                  blockIndex << "\tNA" << std::endl;
-                        } else if (it->second[rangeIndex].getStrand() == NEGATIVE && it->second[rangeIndex - 1].getStrand() == NEGATIVE
-                                   && it->second[rangeIndex - 1].getRefEndPos() < it->second[rangeIndex].getRefStartPos()
-                                   && it->second[rangeIndex - 1].getQueryStartPos() > it->second[rangeIndex].getQueryEndPos()
-//                        && it->second[rangeIndex-1].getRefEndPos() != it->second[rangeIndex].getRefStartPos()-1 && it->second[rangeIndex-1].getQueryStartPos() -1  != it->second[rangeIndex].getQueryEndPos()
-//                                && it->second[rangeIndex-1].getRefStartPos() > it->second[rangeIndex].getRefEndPos()
-//                                && it->second[rangeIndex-1].getQueryEndPos() < it->second[rangeIndex].getQueryStartPos()
-                                ) {
-                            ofile << it->second[rangeIndex].getRefChr() << "\t"
-                                  << it->second[rangeIndex - 1].getRefEndPos() + 1 << "\t"
-                                  << it->second[rangeIndex].getRefStartPos() - 1 << "\t"
-                                  << it->second[rangeIndex].getQueryChr() << "\t"
-                                  << it->second[rangeIndex].getQueryEndPos() + 1 << "\t"
-                                  << it->second[rangeIndex - 1].getQueryStartPos() - 1 << "\t"
-                                  << "-" << "\t"
-                                  << "interanchor" << "\t" <<
-                                  blockIndex << "\tNA" << std::endl;
+            flag_CanGen = genGenoMapFromFile(path_anchors, wholeCommand, map_v_am);
+            std::cout << "map_v_am generated!" << std::endl;
+        }
+
+        if(!flag_CanGen) {
+            setupAnchorsWithSpliceAlignmentResult(refGffFilePath, cdsSequenceFile, samFilePath, map_v_am,
+                                                  inversion_PENALTY, MIN_ALIGNMENT_SCORE, considerInversion, minExon, windowWidth, minimumSimilarity, minimumSimilarity2,
+                                                  map_ref, map_qry,
+                                                  expectedCopies, maximumSimilarity, referenceSamFilePath, wfaSize3, searchForNewAnchors, exonModel);
+
+            std::cout << "setupAnchorsWithSpliceAlignmentResult done!" << std::endl;
+
+            for (std::map < std::string, std::vector < AlignmentMatch >> ::iterator it = map_v_am.begin(); it != map_v_am.end(); ++it) {
+                myAlignmentMatchSort(it->second, inversion_PENALTY, MIN_ALIGNMENT_SCORE, false, false);
+            }
+
+            std::cout << "myAlignmentMatchSort done!" << std::endl;
+
+            if (inputParser.cmdOptionExists("-n")) {
+                std::string wholeCommand = argv[0];
+                for (int i = 1; i < argc; ++i) {
+                    wholeCommand = wholeCommand + " " + argv[i];
+                }
+
+                std::ofstream ofile;
+                ofile.open(inputParser.getCmdOption("-n"));
+                ofile << "#" << PROGRAMNAME << " " << wholeCommand << std::endl;
+                int blockIndex = 0;
+                ofile << "refChr" << "\t"
+                      << "referenceStart" << "\t"
+                      << "referenceEnd" << "\t"
+                      << "queryChr" << "\t"
+                      << "queryStart" << "\t"
+                      << "queryEnd" << "\t"
+                      << "strand" << "\t"
+                      << "gene" << "\t"
+                      << "blockIndex" << "\tscore" << std::endl;
+
+                for (std::map < std::string, std::vector < AlignmentMatch >> ::iterator it = map_v_am.begin(); it != map_v_am.end(); ++it) {
+                    ofile << "#block begin" << std::endl;
+                    std::vector < AlignmentMatch > v_am = it->second;
+                    blockIndex++;
+                    bool hasInversion = false;
+                    for (size_t i = 0; i < v_am.size(); ++i) {
+                        if (i > 0) {
+                            if (v_am[i].getStrand() == POSITIVE && v_am[i - 1].getStrand() == POSITIVE) {
+                                ofile << v_am[i].getRefChr() << "\t"
+                                      << v_am[i - 1].getRefEndPos() + 1 << "\t"
+                                      << v_am[i].getRefStartPos() - 1 << "\t"
+                                      << v_am[i].getQueryChr() << "\t"
+                                      << v_am[i - 1].getQueryEndPos() + 1 << "\t"
+                                      << v_am[i].getQueryStartPos() - 1 << "\t"
+                                      << "+" << "\t"
+                                      << "interanchor" << "\t"
+                                      << blockIndex << "\tNA" << std::endl;
+                            } else if (v_am[i].getStrand() == NEGATIVE && v_am[i - 1].getStrand() == NEGATIVE
+                                       && v_am[i - 1].getRefEndPos() < v_am[i].getRefStartPos()
+                                       && v_am[i - 1].getQueryStartPos() > v_am[i].getQueryEndPos()) {
+
+                                ofile << v_am[i].getRefChr() << "\t"
+                                      << v_am[i - 1].getRefEndPos() + 1 << "\t"
+                                      << v_am[i].getRefStartPos() - 1 << "\t"
+                                      << v_am[i].getQueryChr() << "\t"
+                                      << v_am[i].getQueryEndPos() + 1 << "\t"
+                                      << v_am[i - 1].getQueryStartPos() - 1 << "\t"
+                                      << "-" << "\t"
+                                      << "interanchor" << "\t"
+                                      << blockIndex << "\tNA" << std::endl;
+                            }
+                        }
+
+                        std::string thisStrand = "+";
+                        if (v_am[i].getStrand() == NEGATIVE) {
+                            thisStrand = "-";
+                            hasInversion = true;
+                        }
+
+                        ofile <<  v_am[i].getRefChr() << "\t"
+                              << v_am[i].getRefStartPos() << "\t"
+                              << v_am[i].getRefEndPos() << "\t"
+                              << v_am[i].getQueryChr() << "\t"
+                              << v_am[i].getQueryStartPos() << "\t"
+                              << v_am[i].getQueryEndPos() << "\t"
+                              << thisStrand << "\t"
+                              << v_am[i].getReferenceGeneName() << "\t";
+
+                        if (v_am[i].getReferenceGeneName().find("localAlignment") == std::string::npos) {
+                            ofile << blockIndex << "\t" << v_am[i].getScore() << std::endl;
+                        } else {
+                            ofile << blockIndex << "\t" << "NA" << std::endl;
                         }
                     }
-                    std::string thisStrand = "+";
-                    if (it->second[rangeIndex].getStrand() == NEGATIVE) {
-                        thisStrand = "-";
-                        hasInversion = true;
+
+                    int i = v_am.size() - 1;
+                    if (!hasInversion) {
+                        size_t size_sr2 = getSequenceSizeFromPath2(map_ref[v_am[i].getRefChr()]);
+                        size_t size_sq2 = getSequenceSizeFromPath2(map_qry[v_am[i].getQueryChr()]);
+
+                        ofile << v_am[i].getRefChr() << "\t"
+                              << v_am[i].getRefEndPos() + 1 << "\t"
+                              << size_sr2 << "\t"
+                              << v_am[i].getQueryChr() << "\t"
+                              << v_am[i].getQueryEndPos() + 1 << "\t"
+                              << size_sq2 << "\t"
+                              << "+" << "\t"
+                              << "interanchor" << "\t"
+                              << blockIndex << "\tNA" << std::endl;
                     }
 
-                    ofile << it->second[rangeIndex].getRefChr() << "\t"
-                          << it->second[rangeIndex].getRefStartPos() << "\t"
-                          << it->second[rangeIndex].getRefEndPos() << "\t"
-                          << it->second[rangeIndex].getQueryChr() << "\t"
-                          << it->second[rangeIndex].getQueryStartPos() << "\t"
-                          << it->second[rangeIndex].getQueryEndPos() << "\t"
-                          << thisStrand << "\t"
-                          << it->second[rangeIndex].getReferenceGeneName() << "\t";
-
-                    if (it->second[rangeIndex].getReferenceGeneName().find("localAlignment") == std::string::npos) {
-                        ofile << blockIndex << "\t" << it->second[rangeIndex].getScore() << std::endl;
-                    } else {
-                        ofile << blockIndex << "\t" << "NA" << std::endl;
-                    }
-//                          blockIndex <<"\t" << it->second[rangeIndex].getScore() << std::endl;
+                    ofile << "#block end" << std::endl;
                 }
-
-                int rangeIndex = it->second.size() - 1;
-                if (!hasInversion) {
-                    ofile << it->second[rangeIndex].getRefChr() << "\t"
-                          << it->second[rangeIndex].getRefEndPos() + 1 << "\t"
-                          << referenceGenome[it->second[rangeIndex].getRefChr()].size() << "\t"
-                          << it->second[rangeIndex].getQueryChr() << "\t"
-                          << it->second[rangeIndex].getQueryEndPos() + 1 << "\t"
-                          << queryGenome[it->second[rangeIndex].getQueryChr()].size() << "\t"
-                          << "+" << "\t"
-                          << "interanchor" << "\t" <<
-                          blockIndex << "\tNA" << std::endl;
-                }
-                ofile << "#block end" << std::endl;
+                ofile.close();
             }
-            ofile.close();
+
+            std::cout << "anchors generate done!" << std::endl;
         }
 
-        if (inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-v")
-            || inputParser.cmdOptionExists("-o") || inputParser.cmdOptionExists("-l")) {
-
-            genomeAlignmentAndVariantCalling(alignmentMatchsMap, referenceGenomeSequence, targetGenomeSequence,
-                                             windownWidth, wfaSize, wfaSize2,
-                                             outPutMafFile, outPutVcfFile, outPutFragedFile, /*outPutLocalalignmentFile,*/
+        if (inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-o") || inputParser.cmdOptionExists("-l")) {
+            genomeAlignmentAndVariantCalling(map_v_am, path_ref_GenomeSequence, path_target_GenomeSequence,
+                                             windowWidth,
+                                             outPutMafFile, outPutFragedFile,
                                              matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1,
-                                             openGapPenalty2, extendGapPenalty2, min_wavefront_length, max_distance_threshold,
-                                             seed_window_size, mini_cns_score, step_size, matrix_boundary_distance,
-                                             scoreThreshold, w2, xDrop, threads, parameters);
+                                             openGapPenalty2, extendGapPenalty2,
+                                             threads);
+
             std::cout << "AnchorWave done!" << std::endl;
         }
-        return 0;
-    } else {
+    }
+    else {
         std::cerr << usage.str();
     }
+
     return 0;
 }
 
-int proportationalAlignment(int argc, char **argv, std::map<std::string, std::string> &parameters) {
-    bool useAlignmentScore = false;
+// generate alignmentMatchsMap for proportionalAlignment from anchors file.
+bool genProVectorFromFile(std::string path_anchors, std::string wholeCommand, std::vector<std::vector<AlignmentMatch>> & v_v_am) {
+    std::ifstream infile_anchors(path_anchors);
+
+    std::string line;
+    bool same_command = false;
+    bool has_begin = false;
+    bool has_end = false;
+    int count_begin = 0;
+    int count_end = 0;
+    int line_no = 0;
+
+    while (std::getline(infile_anchors, line)) {
+        if(line_no++ == 0) {
+            if(line == std::string("#" + std::string(PROGRAMNAME) + " " + wholeCommand)) {
+                same_command = true;
+            }
+            else {
+                break;
+            }
+        }
+
+        if (line[0] != '#') {
+            continue;
+        }
+
+        if(line.find("#block begin")) {
+            has_begin = true;
+            count_begin++;
+        }
+
+        if(line.find("#block end")) {
+            has_end = true;
+            count_end++;
+        }
+    }
+
+    // has generated anchors file before.
+    if(same_command && has_begin && has_end && (count_begin == count_end)) {
+        // get alignmentMatchsMap from anchors file.
+        std::ifstream infile(path_anchors);
+        if (!infile.good()) {
+            std::cerr << "error in opening anchors file " << path_anchors << std::endl;
+        }
+
+        std::vector <AlignmentMatch> v_am;
+        std::string line;
+        bool flag_begin = false;
+        int line_std_n_no = 0;
+        int line_std_p_no = 0;
+        STRAND last_strand = POSITIVE;
+
+        while (std::getline(infile, line)) {
+            // --line like :    5B	387734189	387739576	GWHBJBH00000005	293115001	293120759	+	transcript:TraesCS5B02G214600.2	1	0.99872
+            // refChr	referenceStart	referenceEnd	queryChr	queryStart	queryEnd	strand	gene	score
+            if (!flag_begin && line.find("#block begin") != std::string::npos) {
+                flag_begin = true;
+                line_std_n_no = 0;
+                line_std_p_no = 0;
+                continue;
+            }
+
+            if (!flag_begin) {
+                continue;
+            }
+
+            if (line.find("#block end") != std::string::npos) {
+                v_v_am.push_back(v_am);
+                v_am.clear();
+                flag_begin = false;
+            }
+
+            int size = line.size();
+
+            char refChr[size];
+            uint32_t referenceStart, referenceEnd;
+            char queryChr[size];
+            uint32_t queryStart, queryEnd;
+            char strand_[size];
+            char c_gene[size];
+            char c_score[size];
+
+            int ret = sscanf(line.c_str(), "%s%d%d%s%d%d%s%s%*s%s", refChr, &referenceStart, &referenceEnd, queryChr, &queryStart, &queryEnd, strand_, c_gene, c_score);
+
+            if (ret == 9) {
+                STRAND strand;
+                if (strand_[0] == '-') {
+                    strand = NEGATIVE;
+                } else {
+                    strand = POSITIVE;
+                }
+
+                if (last_strand != strand) {
+                    if (strand == POSITIVE) {
+                        line_std_p_no = 0;
+                        line_std_p_no++;
+                    } else {
+                        line_std_n_no = 0;
+                        line_std_n_no++;
+                    }
+                    last_strand = strand;
+                } else {
+                    if (strand == POSITIVE) {
+                        int r = line_std_p_no++ % 2;
+                        if (r != 0) {
+                            continue;
+                        }
+                    } else {
+                        if (line_std_n_no++ % 2 == 1) {
+                            continue;
+                        }
+                    }
+                }
+
+                double score = 1;
+                if (std::string(c_score) != "1") {
+                    score = 0;
+                }
+
+                AlignmentMatch am = AlignmentMatch(std::string(refChr), std::string(queryChr), referenceStart, referenceEnd, queryStart, queryEnd, score, strand, std::string(c_gene), "");
+                v_am.push_back(am);
+            }
+        }
+
+        infile.close();
+
+        return true;
+    }
+
+    return false;
+}
+
+int proportionalAlignment(int argc, char **argv) {
 
     int32_t matchingScore = 0;
     int32_t mismatchingPenalty = -4;
@@ -486,51 +684,31 @@ int proportationalAlignment(int argc, char **argv, std::map<std::string, std::st
     int32_t openGapPenalty2 = -80;
     int32_t extendGapPenalty2 = -1;
 
-    //double MIN_ALIGNMENT_SCORE = 6000;
-
     double MIN_ALIGNMENT_SCORE = 2;
 
     int minExon = 20;
     double minimumSimilarity = 0;
     double minimumSimilarity2 = 0;
 
-    int32_t wfaSize = 15000;
-    int32_t wfaSize2 = 50000;
     int32_t wfaSize3 = 100000; // if the inter-anchor length is shorter than this value, stop trying to find new anchors
-    int64_t windownWidth = 100000;
+    int64_t windowWidth = 100000;
     int expectedCopies = 1;
     double maximumSimilarity = 0.6;
-    int32_t min_wavefront_length = 20;
-    int32_t max_distance_threshold = 100;
 
-    int32_t seed_window_size = 38;
-    int32_t mini_cns_score = 30;
-    int32_t step_size = 8;
-    int32_t matrix_boundary_distance = 0;
     bool searchForNewAnchors = true;
 
-    int k = 12;
-    int mw = 1;
-    bool H = false;
-
-    int32_t scoreThreshold = 54;
-    int32_t w2 = 10;  //this is the band width for band sequence alignments
-    int32_t xDrop = 20;
-
     double calculateIndelDistance = 3;
-
     double GAP_OPEN_PENALTY = -0.03;
     double INDEL_SCORE = -0.01;
 
     int MAX_DIST_BETWEEN_MATCHES = 25;  // between maize and sorghum set it as 25*3000
     int refMaximumTimes = 1;
     int queryMaximumTimes = 2;
-    bool outPutAlignmentForEachInterval = false;
-//    bool localAlignment = false;
 
     int threads = 1;
     bool exonModel = false;
     std::stringstream usage;
+
     usage << "Usage: " << PROGRAMNAME
           << " proali -i refGffFile -r refGenome -a cds.sam -as cds.fa -ar ref.sam -s targetGenome -n outputAnchorFile -o output.maf -f output.fragmentation.maf -R 1 -Q 1" << std::endl <<
           "Options" << std::endl <<
@@ -544,19 +722,10 @@ int proportationalAlignment(int argc, char **argv, std::map<std::string, std::st
           " -o   FILE    output file in maf format" << std::endl <<
           " -f   FILE    output sequence alignment for each anchor/inter-anchor region in maf format" << std::endl <<
           " -t   INT     number of threads (default: " << threads << ")" << std::endl <<
-          //          " -l   FILE    output local alignment for each anchor and inter-anchor region" << std::endl <<
-          //          " -fa  INT     if fragment length is smaller than this value in inter-anchor region, use WFA to align (default: " << wfaSize << ")" << std::endl <<
-          //          " -fa2 INT     if fragment length is smaller than this value in anchor region, use WFA to align (default: " << wfaSize2 << ")" << std::endl <<
           " -fa3 INT     if the inter-anchor length is shorter than this value, stop trying to find new anchors (default: " << wfaSize3 << ")" << std::endl <<
-          " -w   INT     sequence alignment window width (default: " << windownWidth << ")" << std::endl <<
-          //          "              If the fragment length is longer than -fa/-fa2, ProAli perform sequence alignment using a sliding window approach"  << std::endl <<
-          //          "              If you have enough memory on your computer and expect better alignment, please set large value for -w, -fa, -fa2 and -fa3 "  << std::endl  <<
-          //          " -wl  INT     min wavefront length (default: "<< min_wavefront_length << ")" << std::endl <<
-          //          " -wd  INT     max distance threshold (default: "<< max_distance_threshold << ")" << std::endl <<
-          //          "              -wl and -wd are parameters for WFA-Adaptive"  << std::endl <<
+          " -w   INT     sequence alignment window width (default: " << windowWidth << ")" << std::endl <<
           " -R   INT     reference genome maximum alignment coverage " << std::endl <<
           " -Q   INT     query genome maximum alignment coverage " << std::endl <<
-          //          " -A   INT     matching score (default: " << matchingScore << ")" << std::endl <<
           " -B   INT     mismatching penalty (default: " << mismatchingPenalty << ")" << std::endl <<
           " -O1  INT     open gap penalty (default: " << openGapPenalty1 << ")" << std::endl <<
           " -E1  INT     extend gap penalty (default: " << extendGapPenalty1 << ")" << std::endl <<
@@ -578,30 +747,14 @@ int proportationalAlignment(int argc, char **argv, std::map<std::string, std::st
           " -D   INT     maximum gap size for chain (default: " << MAX_DIST_BETWEEN_MATCHES << ")" << std::endl <<
           " -ns          do not search for new anchors (default: false)" << std::endl <<
           " -x           use exon records instead of CDS from the GFF file (should be identical with the setting of gff2seq function)" << std::endl <<
-          //          " -ua          use alignment score to identify collinear blocks (default: false)" << std::endl <<
-          //          "              by default, we use proportion of sequence similarity as score to identify collinear block." << std::endl <<
-          //          "              if this parameter is set true, we use the sequence alignment score instead.  " << std::endl << std::endl<<
-          //          " Following parameters are for minimap2 library, useful to identify novel anchors when -ns is not set" << std::endl<<
-          //          " -H	         Use homopolymer-compressed (HPC) minimizers. An HPC sequence is constructed by contracting homopolymer runs to a single base. An HPC minimizer is a minimizer on the HPC sequence." << std::endl<<
-          //          " -k   INT	 Minimizer k-mer length (default: "<<k<<")" << std::endl<<
-          //          " -mw  INT	 Minimizer window size(default: " << mw << "). A minimizer is the smallest k-mer in a window of w consecutive k-mers." << std::endl<< std::endl<<
-          //          " Following parameters are useful for local alignment when -l is set" << std::endl<<
-          //          " -sw  INT     the windows size used to run the smith-waterman algorithm to get the alignment seed (default: "<<seed_window_size<<")" << std::endl <<
-          //          " -c   INT     minimum seeds score to trigger a local alignment extension (default: " << mini_cns_score << ")" << std::endl <<
-          //          " -st  INT     step size for sliding the smith-waterman seeds alignment window (default: " << step_size << ")" << std::endl <<
-          //          " -ms  INT     minimum score to report a local sequence alignment (default: "<<scoreThreshold<<")" << std::endl <<
-          //          " -x   INT     x-drop for local alignment (default: " << xDrop << ")" << std::endl <<
-          //          " -u   INT     local alignment band width (default: " << w2 << ")" << std::endl <<
           std::endl;
 
     InputParser inputParser(argc, argv);
     if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help")) {
         std::cerr << usage.str();
     } else if (inputParser.cmdOptionExists("-i") && inputParser.cmdOptionExists("-r") &&
-               inputParser.cmdOptionExists("-a") && inputParser.cmdOptionExists("-s") &&
-               inputParser.cmdOptionExists("-as") && (inputParser.cmdOptionExists("-n")
-                                                      || inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-v")
-                                                      || inputParser.cmdOptionExists("-o")  /*|| inputParser.cmdOptionExists("-l")  */)) {
+               inputParser.cmdOptionExists("-a") && inputParser.cmdOptionExists("-s") && inputParser.cmdOptionExists("-as")
+               && (inputParser.cmdOptionExists("-n") || inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-o") ) ) {
 
         std::string refGffFilePath = inputParser.getCmdOption("-i");
         std::string referenceGenomeSequence = inputParser.getCmdOption("-r");
@@ -618,39 +771,17 @@ int proportationalAlignment(int argc, char **argv, std::map<std::string, std::st
         if (inputParser.cmdOptionExists("-f")) {
             outPutFragedFile = inputParser.getCmdOption("-f");
         }
+
         if (inputParser.cmdOptionExists("-t")) {
             threads = std::stoi(inputParser.getCmdOption("-t"));
         }
 
-//
-//        std::string outPutLocalalignmentFile;
-//        if (inputParser.cmdOptionExists("-l") ){
-//            outPutLocalalignmentFile = inputParser.getCmdOption("-l");
-//        }
-
-//        if( inputParser.cmdOptionExists("-fa")){
-//            wfaSize = std::stoi(inputParser.getCmdOption("-fa"));
-//        }
-//        if( inputParser.cmdOptionExists("-fa2")){
-//            wfaSize2 = std::stoi(inputParser.getCmdOption("-fa2"));
-//        }
         if (inputParser.cmdOptionExists("-fa3")) {
             wfaSize3 = std::stoi(inputParser.getCmdOption("-fa3"));
         }
-//        if ( wfaSize2 < wfaSize ){
-//            std::cout << "fa2 should be larger than fa" << std::endl;
-//            return 1;
-//        }
+
         if (inputParser.cmdOptionExists("-w")) {
-            windownWidth = std::stoi(inputParser.getCmdOption("-w"));
-        }
-
-        if (inputParser.cmdOptionExists("-wl")) {
-            min_wavefront_length = std::stoi(inputParser.getCmdOption("-wl"));
-        }
-
-        if (inputParser.cmdOptionExists("-wd")) {
-            max_distance_threshold = std::stoi(inputParser.getCmdOption("-wd"));
+            windowWidth = std::stoi(inputParser.getCmdOption("-w"));
         }
 
         if (inputParser.cmdOptionExists("-R")) {
@@ -668,14 +799,7 @@ int proportationalAlignment(int argc, char **argv, std::map<std::string, std::st
             std::cerr << usage.str();
             return 1;
         }
-//
-//        if( inputParser.cmdOptionExists("-A") ){
-//            matchingScore = std::stoi( inputParser.getCmdOption("-A") );
-//            if( matchingScore<0 ){
-//                std::cout << "parameter of A should be a positive value" << std::endl;
-//                return 1;
-//            }
-//        }
+
         if (inputParser.cmdOptionExists("-B")) {
             mismatchingPenalty = std::stoi(inputParser.getCmdOption("-B"));
             if (mismatchingPenalty >= 0) {
@@ -723,7 +847,6 @@ int proportationalAlignment(int argc, char **argv, std::map<std::string, std::st
             minimumSimilarity2 = std::stod(inputParser.getCmdOption("-mi2"));
         }
 
-
         if (inputParser.cmdOptionExists("-e")) {
             expectedCopies = std::stoi(inputParser.getCmdOption("-e"));
         }
@@ -731,17 +854,11 @@ int proportationalAlignment(int argc, char **argv, std::map<std::string, std::st
         if (inputParser.cmdOptionExists("-y")) {
             maximumSimilarity = std::stod(inputParser.getCmdOption("-y"));
         }
-//
-//        if( localAlignment && outPutAlignmentForEachInterval ){
-//            std::cout << "please do not perform local alignment and global alignment for each interval at the same time" << std::endl;
-//            return 1;
-//        }
 
         std::string referenceSamFilePath;
         if (inputParser.cmdOptionExists("-ar")) {
             referenceSamFilePath = inputParser.getCmdOption("-ar");
         }
-
 
         if (inputParser.cmdOptionExists("-d")) {
             calculateIndelDistance = std::stod(inputParser.getCmdOption("-d"));
@@ -767,154 +884,133 @@ int proportationalAlignment(int argc, char **argv, std::map<std::string, std::st
             GAP_OPEN_PENALTY = -4;
             INDEL_SCORE = -2;
             MAX_DIST_BETWEEN_MATCHES = 25;
-            useAlignmentScore = true;
         }
 
-        if (inputParser.cmdOptionExists("-H")) {
-            H = true;
-        }
+        std::vector<std::vector<AlignmentMatch>> v_v_am;
 
+        std::map<std::string, std::tuple<std::string, long, long, int> > map_ref;
+        readFastaFile(referenceGenomeSequence, map_ref);
 
-        if (inputParser.cmdOptionExists("-f")) {
-            outPutAlignmentForEachInterval = true;
-        }
-//        if( inputParser.cmdOptionExists("-l")){
-//            localAlignment = true;
-//        }
-
-        if (inputParser.cmdOptionExists("-k")) {
-            k = std::stoi(inputParser.getCmdOption("-k"));
-        }
-
-        if (inputParser.cmdOptionExists("-mw")) {
-            mw = std::stoi(inputParser.getCmdOption("-mw"));
-        }
-
-        if (inputParser.cmdOptionExists("-sw")) {
-            seed_window_size = std::stoi(inputParser.getCmdOption("-sw"));
-        }
-        if (inputParser.cmdOptionExists("-c")) {
-            mini_cns_score = std::stoi(inputParser.getCmdOption("-c"));
-        }
-        if (inputParser.cmdOptionExists("-st")) {
-            step_size = std::stoi(inputParser.getCmdOption("-st"));
-        }
-        if (inputParser.cmdOptionExists("-ms")) {
-            scoreThreshold = std::stoi(inputParser.getCmdOption("-ms"));
-        }
-//        if( inputParser.cmdOptionExists("-x") ){
-//            xDrop = std::stoi( inputParser.getCmdOption("-x") );
-//        }
-        if (inputParser.cmdOptionExists("-u")) {
-            w2 = std::stoi(inputParser.getCmdOption("-u"));
-        }
-
-        std::vector<std::vector<AlignmentMatch>> alignmentMatchsMap;
-        std::map<std::string, std::string> referenceGenome;
-        readFastaFile(referenceGenomeSequence, referenceGenome);
-        std::map<std::string, std::string> queryGenome;
-        readFastaFile(targetGenomeSequence, queryGenome);
+        std::map<std::string, std::tuple<std::string, long, long, int> > map_qry;
+        readFastaFile(targetGenomeSequence, map_qry);
 
         if (inputParser.cmdOptionExists("-x")) {
             exonModel = true;
         }
 
-        setupAnchorsWithSpliceAlignmentResultQuota(refGffFilePath, samFilePath, cdsSequenceFile, alignmentMatchsMap, INDEL_SCORE, GAP_OPEN_PENALTY, MIN_ALIGNMENT_SCORE,
-                                                   MAX_DIST_BETWEEN_MATCHES, refMaximumTimes, queryMaximumTimes,
-                                                   calculateIndelDistance, minExon, windownWidth, minimumSimilarity, minimumSimilarity2, parameters, referenceGenome, queryGenome,
-                                                   expectedCopies, wfaSize3, maximumSimilarity, referenceSamFilePath,
-                /*matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, k, mw, H,*/ searchForNewAnchors, exonModel);
+        std::string path_anchors = inputParser.getCmdOption("-n");
 
-        if (inputParser.cmdOptionExists("-n")) {
+        bool flag_CanGen = false;
+        std::ifstream infile_anchors(path_anchors);
+        if (infile_anchors.good()) {
             std::string wholeCommand = argv[0];
             for (int i = 1; i < argc; ++i) {
                 wholeCommand = wholeCommand + " " + argv[i];
             }
+            flag_CanGen = genProVectorFromFile(path_anchors, wholeCommand, v_v_am);
+        }
 
-            std::ofstream ofile;
-            ofile.open(inputParser.getCmdOption("-n"));
-            ofile << "#" << PROGRAMNAME << " " << wholeCommand << std::endl;
-            ofile << "refChr" << "\t"
-                  << "referenceStart" << "\t"
-                  << "referenceEnd" << "\t"
-                  << "queryChr" << "\t"
-                  << "queryStart" << "\t"
-                  << "queryEnd" << "\t"
-                  << "strand" << "\t"
-                  << "gene" << "\t"
-                  << "blockIndex" << "\t"
-                  << "score" << std::endl;
+        if(!flag_CanGen) {
+            std::cout << "setupAnchorsWithSpliceAlignmentResultQuota begin!" << std::endl;
+            // generate alignmentMatchsMap.
+            setupAnchorsWithSpliceAlignmentResultQuota(refGffFilePath, samFilePath, cdsSequenceFile, v_v_am, INDEL_SCORE, GAP_OPEN_PENALTY, MIN_ALIGNMENT_SCORE,
+                                                       MAX_DIST_BETWEEN_MATCHES, refMaximumTimes, queryMaximumTimes,
+                                                       calculateIndelDistance, minExon, windowWidth, minimumSimilarity, minimumSimilarity2,
+                                                       map_ref, map_qry,
+                                                       expectedCopies, wfaSize3, maximumSimilarity, referenceSamFilePath,
+                                                       searchForNewAnchors, exonModel);
 
-            size_t totalAnchors = 0;
-            int blockIndex = 0;
-            for (std::vector<AlignmentMatch> alignmentMatchs: alignmentMatchsMap) {
-                ofile << "#block begin" << std::endl;
-                blockIndex++;
-                for (int rangeIndex = 0; rangeIndex < alignmentMatchs.size(); ++rangeIndex) {
+            // generated anchors file.
+            if (inputParser.cmdOptionExists("-n")) {
+                std::string wholeCommand = argv[0];
+                for (int i = 1; i < argc; ++i) {
+                    wholeCommand = wholeCommand + " " + argv[i];
+                }
 
-                    std::string thisStrand = "+";
-                    if (alignmentMatchs[rangeIndex].getStrand() == NEGATIVE) {
-                        thisStrand = "-";
-                    }
+                std::ofstream ofile;
+                ofile.open(inputParser.getCmdOption("-n"));
+                ofile << "#" << PROGRAMNAME << " " << wholeCommand << std::endl;
+                ofile << "refChr" << "\t"
+                      << "referenceStart" << "\t"
+                      << "referenceEnd" << "\t"
+                      << "queryChr" << "\t"
+                      << "queryStart" << "\t"
+                      << "queryEnd" << "\t"
+                      << "strand" << "\t"
+                      << "gene" << "\t"
+                      << "blockIndex" << "\t"
+                      << "score" << std::endl;
 
-                    if (rangeIndex > 0) {
-                        if (alignmentMatchs[rangeIndex].getStrand() == POSITIVE &&
-                            alignmentMatchs[rangeIndex - 1].getStrand() == POSITIVE) {
-                            ofile << alignmentMatchs[rangeIndex].getRefChr() << "\t"
-                                  << alignmentMatchs[rangeIndex - 1].getRefEndPos() + 1 << "\t"
-                                  << alignmentMatchs[rangeIndex].getRefStartPos() - 1 << "\t"
-                                  << alignmentMatchs[rangeIndex].getQueryChr() << "\t"
-                                  << alignmentMatchs[rangeIndex - 1].getQueryEndPos() + 1 << "\t"
-                                  << alignmentMatchs[rangeIndex].getQueryStartPos() - 1 << "\t"
-                                  << "+" << "\t" <<
-                                  "interanchor" << "\t" <<
-                                  blockIndex << "\tNA" << std::endl;
-                        } else if (alignmentMatchs[rangeIndex].getStrand() == NEGATIVE &&
-                                   alignmentMatchs[rangeIndex - 1].getStrand() == NEGATIVE) {
-                            ofile << alignmentMatchs[rangeIndex].getRefChr() << "\t"
-                                  << alignmentMatchs[rangeIndex - 1].getRefEndPos() + 1 << "\t"
-                                  << alignmentMatchs[rangeIndex].getRefStartPos() - 1 << "\t"
-                                  << alignmentMatchs[rangeIndex].getQueryChr() << "\t"
-                                  << alignmentMatchs[rangeIndex].getQueryEndPos() + 1 << "\t"
-                                  << alignmentMatchs[rangeIndex - 1].getQueryStartPos() - 1 << "\t"
-                                  << "-" << "\t" <<
-                                  "interanchor" << "\t" <<
-                                  blockIndex << "\tNA" << std::endl;
+                size_t totalAnchors = 0;
+                int blockIndex = 0;
+                for (std::vector <AlignmentMatch> v_am: v_v_am) {
+                    ofile << "#block begin" << std::endl;
+                    blockIndex++;
+
+                    for (size_t i = 0; i < v_am.size(); i++) {
+                        std::string thisStrand = "+";
+                        if (v_am[i].getStrand() == NEGATIVE) {
+                            thisStrand = "-";
+                        }
+
+                        if (i > 0) {
+                            if (v_am[i].getStrand() == POSITIVE && v_am[i - 1].getStrand() == POSITIVE) {
+                                ofile << v_am[i].getRefChr() << "\t"
+                                      << v_am[i - 1].getRefEndPos() + 1 << "\t"
+                                      << v_am[i].getRefStartPos() - 1 << "\t"
+                                      << v_am[i].getQueryChr() << "\t"
+                                      << v_am[i - 1].getQueryEndPos() + 1 << "\t"
+                                      << v_am[i].getQueryStartPos() - 1 << "\t"
+                                      << "+" << "\t"
+                                      << "interanchor" << "\t"
+                                      << blockIndex << "\tNA"
+                                      << std::endl;
+                            } else if (v_am[i].getStrand() == NEGATIVE && v_am[i - 1].getStrand() == NEGATIVE) {
+                                ofile << v_am[i].getRefChr() << "\t"
+                                      << v_am[i - 1].getRefEndPos() + 1 << "\t"
+                                      << v_am[i].getRefStartPos() - 1 << "\t"
+                                      << v_am[i].getQueryChr() << "\t"
+                                      << v_am[i].getQueryEndPos() + 1 << "\t"
+                                      << v_am[i - 1].getQueryStartPos() - 1 << "\t"
+                                      << "-" << "\t"
+                                      << "interanchor" << "\t"
+                                      << blockIndex << "\tNA"
+                                      << std::endl;
+                            }
+                        }
+
+                        ofile << v_am[i].getRefChr() << "\t"
+                              << v_am[i].getRefStartPos() << "\t"
+                              << v_am[i].getRefEndPos() << "\t"
+                              << v_am[i].getQueryChr() << "\t"
+                              << v_am[i].getQueryStartPos() << "\t"
+                              << v_am[i].getQueryEndPos() << "\t"
+                              << thisStrand << "\t"
+                              << v_am[i].getReferenceGeneName() << "\t";
+
+                        if (v_am[i].getReferenceGeneName().find("localAlignment") == std::string::npos) {
+                            totalAnchors++;
+                            ofile << blockIndex << "\t" << v_am[i].getScore() << std::endl;
+                        } else {
+                            ofile << blockIndex << "\t" << "NA" << std::endl;
                         }
                     }
-
-                    ofile << alignmentMatchs[rangeIndex].getRefChr() << "\t"
-                          << alignmentMatchs[rangeIndex].getRefStartPos() << "\t"
-                          << alignmentMatchs[rangeIndex].getRefEndPos() << "\t"
-                          << alignmentMatchs[rangeIndex].getQueryChr() << "\t"
-                          << alignmentMatchs[rangeIndex].getQueryStartPos() << "\t"
-                          << alignmentMatchs[rangeIndex].getQueryEndPos() << "\t"
-                          << thisStrand << "\t"
-                          << alignmentMatchs[rangeIndex].getReferenceGeneName() << "\t";
-
-                    if (alignmentMatchs[rangeIndex].getReferenceGeneName().find("localAlignment") == std::string::npos) {
-                        totalAnchors++;
-                        ofile << blockIndex << "\t" << alignmentMatchs[rangeIndex].getScore() << std::endl;
-                    } else {
-                        ofile << blockIndex << "\t" << "NA" << std::endl;
-                    }
+                    ofile << "#block end" << std::endl;
                 }
-                ofile << "#block end" << std::endl;
+
+                ofile.close();
+                std::cout << "totalAnchors:" << totalAnchors << std::endl;
             }
 
-            ofile.close();
-            std::cout << "totalAnchors:" << totalAnchors << std::endl;
+            std::cout << "anchors generate done!" << std::endl;
         }
 
-        if (inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-v") || inputParser.cmdOptionExists("-o") || inputParser.cmdOptionExists("-l")) {
-            genomeAlignment(alignmentMatchsMap, referenceGenomeSequence, targetGenomeSequence, windownWidth, wfaSize, wfaSize2,
-                            outPutMafFile, outPutFragedFile, /*outPutLocalalignmentFile,*/ matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1,
-                            openGapPenalty2, extendGapPenalty2, seed_window_size, mini_cns_score, step_size, matrix_boundary_distance,
-                            scoreThreshold, w2, xDrop, min_wavefront_length, max_distance_threshold, threads, parameters);
+        if (inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-o") || inputParser.cmdOptionExists("-l")) {
+            genomeAlignment(v_v_am, referenceGenomeSequence, targetGenomeSequence, windowWidth,
+                            outPutMafFile, outPutFragedFile, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1,
+                            openGapPenalty2, extendGapPenalty2, threads);
             std::cout << "AnchorWave done!" << std::endl;
         }
-
-        return 0;
     }
     else {
         std::cerr << usage.str();
@@ -923,340 +1019,7 @@ int proportationalAlignment(int argc, char **argv, std::map<std::string, std::st
     return 0;
 }
 
-int tripleAncestral(int argc, char **argv, std::map<std::string, std::string> &parameters) {
-
-    int32_t matchingScore = 0;
-    int32_t mismatchingPenalty = -4;
-    int32_t openGapPenalty1 = -4;
-    int32_t extendGapPenalty1 = -2;
-
-    int32_t openGapPenalty2 = -80;
-    int32_t extendGapPenalty2 = -1;
-
-    int64_t windownWidth = 30000;
-
-    int32_t wfaSize = 15000;
-
-    int32_t min_wavefront_length = 20;
-    int32_t max_distance_threshold = 100;
-
-    int miniInsertionSize = 15;
-    int maxDistance = 25;
-
-    std::stringstream usage;
-    usage << "Usage: " << PROGRAMNAME
-          << " proali triAnc -r1 ref1Genome -r2 ref2Genome -r1r2 r1r2.maf -r1q r1q.maf -r2q r2q.maf -o ancestor.fa " << std::endl <<
-          "Options" << std::endl <<
-          " -h           produce help message" << std::endl <<
-          " -r1   FILE   reference 1 genome sequence" << std::endl <<
-          " -r2   FILE   reference 2 genome sequence" << std::endl <<
-          " -r1r2 FILE   reference 1 to reference 2 alignment (output from the genoAli or proali command)" << std::endl <<
-          " -r1q  FILE   reference 1 to query alignment (output from the genoAli or proali command)" << std::endl <<
-          " -r2q  FILE   reference 2 to query alignment (output from the genoAli or proali command)" << std::endl <<
-          " -o    FILE   output file in FASTA format" << std::endl <<
-          " Following parameters are for realign insertions" << std::endl <<
-          " -n   INT     minimum insertion size for realignment (default: " << miniInsertionSize << ")" << std::endl <<
-          " -m   INT     maximum distance for neighbour insertions to merge together for realignment (default: " << maxDistance << ")" << std::endl <<
-          " -w   INT     sequence alignment window width (default: " << windownWidth << ")" << std::endl <<
-          " -B   INT     mismatching penalty (default: " << mismatchingPenalty << ")" << std::endl <<
-          " -O1  INT     open gap penalty (default: " << openGapPenalty1 << ")" << std::endl <<
-          " -E1  INT     extend gap penalty (default: " << extendGapPenalty1 << ")" << std::endl <<
-          " -O2  INT     open gap penalty 2 (default: " << openGapPenalty2 << ")" << std::endl <<
-          " -E2  INT     extend gap penalty 2 (default: " << extendGapPenalty2 << ")" << std::endl << std::endl;
-
-    InputParser inputParser(argc, argv);
-    if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help")) {
-        std::cerr << usage.str();
-    }
-    else if (inputParser.cmdOptionExists("-r1") && inputParser.cmdOptionExists("-r2") &&
-               inputParser.cmdOptionExists("-r1r2") && inputParser.cmdOptionExists("-r1q") &&
-               inputParser.cmdOptionExists("-r2q")) {
-
-        std::string reference1GenomeSequence = inputParser.getCmdOption("-r1");
-        std::string reference2GenomeSequence = inputParser.getCmdOption("-r2");
-        std::string ref1Ref2Maf = inputParser.getCmdOption("-r1r2");
-        std::string ref1QueryMaf = inputParser.getCmdOption("-r1q");
-        std::string ref2QueryMaf = inputParser.getCmdOption("-r2q");
-        std::string outPutFile = inputParser.getCmdOption("-o");
-        if (inputParser.cmdOptionExists("-n")) {
-            miniInsertionSize = std::stoi(inputParser.getCmdOption("-n"));
-            if (miniInsertionSize <= 0) {
-                std::cout << "parameter of -n should be a positive value" << std::endl;
-                return 1;
-            }
-        }
-
-        if (inputParser.cmdOptionExists("-m")) {
-            maxDistance = std::stoi(inputParser.getCmdOption("-m"));
-            if (maxDistance <= 0) {
-                std::cout << "parameter of -m should be a positive value" << std::endl;
-                return 1;
-            }
-        }
-
-        if (inputParser.cmdOptionExists("-w")) {
-            windownWidth = std::stoi(inputParser.getCmdOption("-w"));
-        }
-
-        if (inputParser.cmdOptionExists("-B")) {
-            mismatchingPenalty = std::stoi(inputParser.getCmdOption("-B"));
-            if (mismatchingPenalty >= 0) {
-                std::cout << "parameter of B should be a negative value" << std::endl;
-                return 1;
-            }
-        }
-
-        if (inputParser.cmdOptionExists("-O1")) {
-            openGapPenalty1 = std::stoi(inputParser.getCmdOption("-O1"));
-            if (openGapPenalty1 >= 0) {
-                std::cout << "parameter of O1 should be a negative value" << std::endl;
-                return 1;
-            }
-        }
-
-        if (inputParser.cmdOptionExists("-E1")) {
-            extendGapPenalty1 = std::stoi(inputParser.getCmdOption("-E1"));
-            if (extendGapPenalty1 >= 0) {
-                std::cout << "parameter of E1 should be a negative value" << std::endl;
-                return 1;
-            }
-        }
-
-        if (inputParser.cmdOptionExists("-O2")) {
-            openGapPenalty2 = std::stoi(inputParser.getCmdOption("-O2"));
-            if (openGapPenalty2 >= 0) {
-                std::cout << "parameter of O1 should be a negative value" << std::endl;
-                return 1;
-            }
-        }
-
-        if (inputParser.cmdOptionExists("-E2")) {
-            extendGapPenalty2 = std::stoi(inputParser.getCmdOption("-E2"));
-            if (extendGapPenalty2 > 0) {
-                std::cout << "parameter of E1 should be a negative value" << std::endl;
-                return 1;
-            }
-        }
-
-        std::vector<BlocksForMsa> ref1Ref2BlocksForMsas;
-        readMafForMsa(ref1Ref2Maf, ref1Ref2BlocksForMsas);
-
-        std::vector<BlocksForMsa> ref1QueryBlocksForMsas;
-        readMafForMsa(ref1QueryMaf, ref1QueryBlocksForMsas);
-
-        std::vector<BlocksForMsa> ref2QueryBlocksForMsas;
-        readMafForMsa(ref2QueryMaf, ref2QueryBlocksForMsas);
-
-        std::map<std::string, std::string> reference1Genome;
-        readFastaFile(reference1GenomeSequence, reference1Genome);
-
-        std::map<std::string, std::string> reference2Genome;
-        readFastaFile(reference2GenomeSequence, reference2Genome);
-
-        ancestorInversion(ref1Ref2BlocksForMsas, ref1QueryBlocksForMsas, ref2QueryBlocksForMsas);
-        ancestorLink(ref1Ref2BlocksForMsas, ref1QueryBlocksForMsas, ref2QueryBlocksForMsas); //for this dataset, there is relocation, so no need to run this runction
-
-        generateMsa(ref1Ref2BlocksForMsas, ref1QueryBlocksForMsas, ref2QueryBlocksForMsas, reference1Genome, reference2Genome,
-                    matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1,
-                    openGapPenalty2, extendGapPenalty2, windownWidth, wfaSize,
-                    min_wavefront_length, max_distance_threshold, miniInsertionSize, maxDistance);
-        outputAncestral(ref1Ref2BlocksForMsas, ref1QueryBlocksForMsas, ref2QueryBlocksForMsas, reference1Genome, reference2Genome, outPutFile);
-
-        return 0;
-    } else {
-        std::cerr << usage.str();
-    }
-
-    return 0;
-}
-
-
-// the following functions were developped for evaluation aim. some of them have hard codes and or output file might have compatible problems with other applications
-int maf2vcf(int argc, char **argv, std::map<std::string, std::string> &parameters) {
-    std::stringstream usage;
-    usage << "Usage: " << PROGRAMNAME
-          << " maf2vcf -r refGenome -m mafFile -o output " << std::endl <<
-          "Options" << std::endl <<
-          " -h           produce help message" << std::endl <<
-          " -o   FILE    output file" << std::endl <<
-          " -r   FILE    reference genome sequence" << std::endl <<
-          " -m   FILE    input file in maf format" << std::endl <<
-          " -O   STRING  VCF/GVCF" << std::endl <<
-          std::endl;
-
-    InputParser inputParser(argc, argv);
-    if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help")) {
-        std::cerr << usage.str();
-    } else if (inputParser.cmdOptionExists("-r") && inputParser.cmdOptionExists("-m") &&
-               inputParser.cmdOptionExists("-o")) {
-        std::string fastaFilePath = inputParser.getCmdOption("-r");
-        std::string outputovcffile = inputParser.getCmdOption("-o");
-        std::string mafFile = inputParser.getCmdOption("-m");
-        bool gvcf = false;
-        if (inputParser.cmdOptionExists("-O")) {
-            if (inputParser.getCmdOption("-O").compare("VCF") == 0) {
-
-            } else if (inputParser.getCmdOption("-O").compare("GVCF") == 0) {
-                gvcf = true;
-            } else {
-                std::cerr << "the value of parameter O should be VCF or GVCF" << std::endl;
-                return 1;
-            }
-        }
-        mafTovcf(mafFile, fastaFilePath, outputovcffile, gvcf);
-    } else {
-        std::cerr << usage.str();
-    }
-    return 0;
-}
-
-int sam2vcf(int argc, char **argv, std::map<std::string, std::string> &parameters) {
-    std::stringstream usage;
-    int32_t range = 30;
-    usage << "Usage: " << PROGRAMNAME
-          << " maf2vcf -r refGenome -m mafFile -o output " << std::endl <<
-          "Options" << std::endl <<
-          " -h           produce help message" << std::endl <<
-          " -s   FILE    input file in sam format" << std::endl <<
-          " -r   FILE    reference genome sequence" << std::endl <<
-          " -q   FILE    query genome sequence" << std::endl <<
-          " -d   INT     range of interval to output (default: " << range << ")" << std::endl <<
-          " -o   FILE    output file" << std::endl << std::endl;
-
-    InputParser inputParser(argc, argv);
-    if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help")) {
-        std::cerr << usage.str();
-    } else if (inputParser.cmdOptionExists("-r") && inputParser.cmdOptionExists("-s") &&
-               inputParser.cmdOptionExists("-o") && inputParser.cmdOptionExists("-q")) {
-        std::string refGenomeFile = inputParser.getCmdOption("-r");
-        std::string queryGenomeFile = inputParser.getCmdOption("-q");
-        std::string outputovcffile = inputParser.getCmdOption("-o");
-        if (inputParser.cmdOptionExists("-d")) {
-            range = std::stoi(inputParser.getCmdOption("-d"));
-        }
-        std::string samFile = inputParser.getCmdOption("-s");
-        samToVcf(samFile, refGenomeFile, queryGenomeFile, range, outputovcffile);
-    } else {
-        std::cerr << usage.str();
-    }
-    return 0;
-}
-
-int sam2maf(int argc, char **argv, std::map<std::string, std::string> &parameters) {
-    std::stringstream usage;
-    usage << "Usage: " << PROGRAMNAME
-          << " sam2maf -r refGenome -q queryGenome -s samFile -o output " << std::endl <<
-          "Options" << std::endl <<
-          " -h           produce help message" << std::endl <<
-          " -o   FILE    output file" << std::endl <<
-          " -r   FILE    reference genome sequence" << std::endl <<
-          " -q   FILE    query genome sequence" << std::endl <<
-          " -s   FILE    input file in sam format" << std::endl <<
-          std::endl;
-
-    InputParser inputParser(argc, argv);
-    if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help")) {
-        std::cerr << usage.str();
-    } else if (inputParser.cmdOptionExists("-r") && inputParser.cmdOptionExists("-s") &&
-               inputParser.cmdOptionExists("-o") && inputParser.cmdOptionExists("-q")) {
-        std::string referenceFastaFilePath = inputParser.getCmdOption("-r");
-        std::string outputFilePath = inputParser.getCmdOption("-o");
-        std::string queryFastaFilePath = inputParser.getCmdOption("-q");
-        std::string samFilePath = inputParser.getCmdOption("-s");
-        samToMaf(samFilePath, referenceFastaFilePath, queryFastaFilePath, outputFilePath);
-    } else {
-        std::cerr << usage.str();
-    }
-    return 0;
-}
-
-
-int evaluateTEAlignment(int argc, char **argv, std::map<std::string, std::string> &parameters) {
-    std::stringstream usage;
-    usage << "Usage: " << PROGRAMNAME
-          << " evaluateTEAlignment -c chromosome -r refGenome -v vcfFile -g TEannotation -o output " << std::endl <<
-          "Options" << std::endl <<
-          " -h           produce help message" << std::endl <<
-          " -c   chr     which chromosome to compare file" << std::endl <<
-          " -o   FILE    output file" << std::endl <<
-          " -r   FILE    reference genome sequence" << std::endl <<
-          " -v   FILE    input vcf file" << std::endl <<
-          " -g   FILE    TE annotation file in gff format" << std::endl <<
-          std::endl;
-
-    InputParser inputParser(argc, argv);
-    if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help")) {
-        std::cerr << usage.str();
-    } else if (inputParser.cmdOptionExists("-c") && inputParser.cmdOptionExists("-r") &&
-               inputParser.cmdOptionExists("-o") && inputParser.cmdOptionExists("-v") && inputParser.cmdOptionExists("-g")) {
-        std::string chr = inputParser.getCmdOption("-c");
-        std::string fastaFilePath = inputParser.getCmdOption("-r");
-        std::map<std::string, std::string> referenceGenome;
-        readFastaFile(fastaFilePath, referenceGenome);
-        std::cout << "genome reading done" << std::endl;
-        std::string outputFilePath = inputParser.getCmdOption("-o");
-
-        std::ofstream ofile;
-
-        ofile.open(outputFilePath);
-        std::string vcfFilePath = inputParser.getCmdOption("-v");
-
-        std::map<std::string, std::vector<Variant>> variants;
-        vcfToVariant(vcfFilePath, variants, chr);
-        std::cout << "vcf to variant done" << std::endl;
-
-        std::string gffFile = inputParser.getCmdOption("-g");
-        std::vector<Variant> benchmarkVariants;
-        gffToVariant(fastaFilePath, gffFile, chr, benchmarkVariants);
-
-        std::cout << "gff to variant done" << std::endl;
-        for (Variant v: benchmarkVariants) {
-            if (variantWith(v, variants, referenceGenome)) {
-                ofile << "good\t" << v.getChromosome() << "\t" << v.getPosition() << "\t" << v.getChanginglength() << "\t" + v.getReference() << "\t" << v.getAlternative() << std::endl;
-            } else {
-                ofile << "bad\t" << v.getChromosome() << "\t" << v.getPosition() << "\t" << v.getChanginglength() << "\t" + v.getReference() << "\t" << v.getAlternative() << std::endl;
-            }
-        }
-        ofile.close();
-    } else {
-        std::cerr << usage.str();
-    }
-    return 0;
-}
-
-int sdiToMaf(int argc, char **argv, std::map<std::string, std::string> &parameters) {
-    std::stringstream usage;
-    usage << "Usage: " << PROGRAMNAME
-          << " sdiToMaf -s sdiFile -r refGenome -q syntheticGenome -o output mafFile " << std::endl <<
-          "Options" << std::endl <<
-          " -h           produce help message" << std::endl <<
-          " -o   FILE    output file" << std::endl <<
-          " -r   FILE    reference genome sequence" << std::endl <<
-          " -s   FILE    sdi file" << std::endl <<
-          " -q   FILE    synthetic genome sequence" << std::endl <<
-          std::endl;
-
-    InputParser inputParser(argc, argv);
-    if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help")) {
-        std::cerr << usage.str();
-    }
-    else if (inputParser.cmdOptionExists("-s") && inputParser.cmdOptionExists("-r") &&
-               inputParser.cmdOptionExists("-o") && inputParser.cmdOptionExists("-q")) {
-        std::string fastaFilePath = inputParser.getCmdOption("-r");
-        std::string targetFastaFilePath = inputParser.getCmdOption("-q");
-        std::string sdiFile = inputParser.getCmdOption("-s");
-        std::string outfile = inputParser.getCmdOption("-o");
-        sdiToMaf(fastaFilePath, targetFastaFilePath, sdiFile, outfile);
-    }
-    else {
-        std::cerr << usage.str();
-    }
-
-    return 0;
-}
-
-
-int ali(int argc, char **argv, std::map<std::string, std::string> &parameters) {
+int ali(int argc, char **argv) {
 
     int32_t matchingScore = 0;
     int32_t mismatchingPenalty = -6;
@@ -1265,12 +1028,11 @@ int ali(int argc, char **argv, std::map<std::string, std::string> &parameters) {
 
     int32_t openGapPenalty2 = -75;
     int32_t extendGapPenalty2 = -1;
-    int64_t windowWidth = 100000;
+    int64_t windowWidth = 38000;
 
     std::stringstream usage;
-    usage << "Usage: " << PROGRAMNAME
-          << " ali -r refSeq.fa -s querySeq.fa"
-          << std::endl <<
+    usage << "Usage: " << PROGRAMNAME <<
+          " ali -r refSeq.fa -s querySeq.fa" << std::endl <<
           "Options" << std::endl <<
           " -h           produce help message" << std::endl <<
           " -r   FILE    reference sequence (single sequence in FASTA format)" << std::endl <<
@@ -1283,92 +1045,81 @@ int ali(int argc, char **argv, std::map<std::string, std::string> &parameters) {
           " -E2  INT     extend gap penalty 2 (default: " << extendGapPenalty2 << ")" << std::endl << std::endl;
 
     InputParser inputParser(argc, argv);
-    if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help")) {
-        std::cerr << usage.str();
-    } else if (inputParser.cmdOptionExists("-r") && inputParser.cmdOptionExists("-s")) {
-
-        std::string referenceGenomeSequence = inputParser.getCmdOption("-r");
-        std::string targetGenomeSequence = inputParser.getCmdOption("-s");
-
-        if (inputParser.cmdOptionExists("-w")) {
-            windowWidth = std::stoi(inputParser.getCmdOption("-w"));
-        }
-
-        if (inputParser.cmdOptionExists("-B")) {
-            mismatchingPenalty = std::stoi(inputParser.getCmdOption("-B"));
-            if (mismatchingPenalty >= 0) {
-                std::cout << "parameter of B should be a negative value" << std::endl;
-                return 1;
-            }
-        }
-
-        if (inputParser.cmdOptionExists("-O1")) {
-            openGapPenalty1 = std::stoi(inputParser.getCmdOption("-O1"));
-            if (openGapPenalty1 >= 0) {
-                std::cout << "parameter of O1 should be a negative value" << std::endl;
-                return 1;
-            }
-        }
-        if (inputParser.cmdOptionExists("-E1")) {
-            extendGapPenalty1 = std::stoi(inputParser.getCmdOption("-E1"));
-            if (extendGapPenalty1 >= 0) {
-                std::cout << "parameter of E1 should be a negative value" << std::endl;
-                return 1;
-            }
-        }
-
-        if (inputParser.cmdOptionExists("-O2")) {
-            openGapPenalty2 = std::stoi(inputParser.getCmdOption("-O2"));
-            if (openGapPenalty2 >= 0) {
-                std::cout << "parameter of O1 should be a negative value" << std::endl;
-                return 1;
-            }
-        }
-        if (inputParser.cmdOptionExists("-E2")) {
-            extendGapPenalty2 = std::stoi(inputParser.getCmdOption("-E2"));
-            if (extendGapPenalty2 > 0) {
-                std::cout << "parameter of E1 should be a negative value" << std::endl;
-                return 1;
-            }
-        }
-
-        std::map<std::string, std::string> referenceSeq;
-        readFastaFile(referenceGenomeSequence, referenceSeq);
-
-        std::map<std::string, std::string> querySeq;
-        readFastaFile(targetGenomeSequence, querySeq);
-
-        if (referenceSeq.size() != 1) {
-            std::cerr << "There should be one and only one sequence in the reference FASTA file" << std::endl;
-        }
-
-        if (querySeq.size() != 1) {
-            std::cerr << "There should be one and only one sequence in the query FASTA file" << std::endl;
-        }
-
-        std::string _alignment_q;
-        std::string _alignment_d;
-
-        int32_t min_wavefront_length = 20;
-        int32_t max_distance_threshold = 100;
-        int32_t wfaSize = 15000;
-        Scorei m(matchingScore, mismatchingPenalty);
-        std::string refSeqStr = referenceSeq.begin()->second;
-        std::string querySeqStr = querySeq.begin()->second;
-        int64_t thiScore = alignSlidingWindow(querySeqStr, refSeqStr, _alignment_q, _alignment_d,
-                                              windowWidth, wfaSize, matchingScore, mismatchingPenalty, openGapPenalty1,
-                                              extendGapPenalty1, openGapPenalty2, extendGapPenalty2,
-                                              min_wavefront_length, max_distance_threshold, m, parameters);
-        std::cout << ">" << referenceSeq.begin()->first << std::endl;
-        std::cout << _alignment_d << std::endl;
-        std::cout << ">" << querySeq.begin()->first << std::endl;
-        std::cout << _alignment_q << std::endl;
-
-        return 0;
-    } else {
+    if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help") || !inputParser.cmdOptionExists("-r") || !inputParser.cmdOptionExists("-s")) {
         std::cerr << usage.str();
     }
 
+    std::string referenceGenomeSequence = inputParser.getCmdOption("-r");
+    std::string targetGenomeSequence = inputParser.getCmdOption("-s");
+
+    if (inputParser.cmdOptionExists("-w")) {
+        windowWidth = std::stoi(inputParser.getCmdOption("-w"));
+    }
+
+    if (inputParser.cmdOptionExists("-B")) {
+        mismatchingPenalty = std::stoi(inputParser.getCmdOption("-B"));
+        if (mismatchingPenalty >= 0) {
+            std::cout << "parameter of B should be a negative value" << std::endl;
+            return 1;
+        }
+    }
+
+    if (inputParser.cmdOptionExists("-O1")) {
+        openGapPenalty1 = std::stoi(inputParser.getCmdOption("-O1"));
+        if (openGapPenalty1 >= 0) {
+            std::cout << "parameter of O1 should be a negative value" << std::endl;
+            return 1;
+        }
+    }
+    if (inputParser.cmdOptionExists("-E1")) {
+        extendGapPenalty1 = std::stoi(inputParser.getCmdOption("-E1"));
+        if (extendGapPenalty1 >= 0) {
+            std::cout << "parameter of E1 should be a negative value" << std::endl;
+            return 1;
+        }
+    }
+
+    if (inputParser.cmdOptionExists("-O2")) {
+        openGapPenalty2 = std::stoi(inputParser.getCmdOption("-O2"));
+        if (openGapPenalty2 >= 0) {
+            std::cout << "parameter of O1 should be a negative value" << std::endl;
+            return 1;
+        }
+    }
+    if (inputParser.cmdOptionExists("-E2")) {
+        extendGapPenalty2 = std::stoi(inputParser.getCmdOption("-E2"));
+        if (extendGapPenalty2 > 0) {
+            std::cout << "parameter of E1 should be a negative value" << std::endl;
+            return 1;
+        }
+    }
+
+    std::map<std::string, std::tuple<std::string, long, long, int> > map_ref;
+    readFastaFile(referenceGenomeSequence, map_ref);
+
+    if (map_ref.size() != 1) {
+        std::cerr << "There should be one and only one sequence in the reference FASTA file" << std::endl;
+    }
+
+    std::map<std::string, std::tuple<std::string, long, long, int> > map_qry;
+    readFastaFile(referenceGenomeSequence, map_qry);
+
+    if (map_qry.size() != 1) {
+        std::cerr << "There should be one and only one sequence in the query FASTA file" << std::endl;
+    }
+
+    std::string _alignment_q;
+    std::string _alignment_d;
+
+    std::string refSeqStr = getSubsequence2(map_ref, map_ref.begin()->first);
+    std::string querySeqStr = getSubsequence2(map_qry, map_qry.begin()->first);
+
+    alignSlidingWindow(querySeqStr, refSeqStr, _alignment_q, _alignment_d, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
+
+    std::cout << ">" << map_ref.begin()->first << std::endl;
+    std::cout << _alignment_d << std::endl;
+    std::cout << ">" << map_qry.begin()->first << std::endl;
+    std::cout << _alignment_q << std::endl;
+
     return 0;
 }
-

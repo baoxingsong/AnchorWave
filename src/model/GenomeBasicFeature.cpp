@@ -21,7 +21,6 @@ no matter which strand it is on, it always start with the smaller coordinate
 
  ************************************************************************/
 
-#include <iostream>
 #include "GenomeBasicFeature.h"
 
 GenomeBasicFeature::GenomeBasicFeature(const int &start, const int &end) {

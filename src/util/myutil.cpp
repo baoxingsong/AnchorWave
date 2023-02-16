@@ -13,20 +13,9 @@
 //
 // =====================================================================================
 
-
-#include <string>
-#include <vector>
-#include <regex>
 #include "myutil.h"
-#include <stdlib.h>
 
-#ifdef __unix
-
-#include <linux/limits.h>
-
-#endif
-
-void split(const std::string &s, char &delim, std::vector<std::string> &elems) {
+void split(const std::string &s, char &delim, std::vector <std::string> &elems) {
     std::stringstream ss(s);
     std::string item;
     while (std::getline(ss, item, delim)) {
@@ -36,25 +25,15 @@ void split(const std::string &s, char &delim, std::vector<std::string> &elems) {
     }
 }
 
-std::string songStrReplaceAll(std::string &str, const std::string &pattern, const std::string &pattern2) {
-    std::regex vowel_re(pattern);
-    str = std::regex_replace(str, vowel_re, pattern2);
-    return str;
-}
+void splitCIGAR(std::string str, std::vector <std::string> &cigarElems) {
+    while (str.length() > 0) {
+        size_t p_d = str.find_first_of("1234567890");
+        size_t p_c = str.find_first_of("MIDNSHPX=");
 
-int32_t min(const int32_t &a, const int32_t &b) {
-    if (a < b) {
-        return a;
-    }
-
-    return b;
-}
-
-void splitCIGAR(std::string cigarString, std::vector<std::string> &cigarElems) {
-    std::regex reg("([0-9]+[MIDNSHPX=])");
-    std::smatch match;
-    while (regex_search(cigarString, match, reg)) {
-        cigarElems.push_back(match[1]);
-        cigarString = match.suffix().str();
+        if(p_c > p_d) {
+            std::string s = str.substr(p_d, p_c + 1);
+            cigarElems.push_back(s);
+        }
+        str = str.substr(p_c + 1);
     }
 }

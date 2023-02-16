@@ -27,7 +27,6 @@ Transcript::Transcript() {
     this->_strand = POSITIVE;
     this->_start = std::numeric_limits<int>::max();
     this->_end = 0;
-//    _cdsHashSet=std::set<GenomeBasicFeature>();
 }
 
 const std::string &Transcript::getName() const {

@@ -14,7 +14,7 @@
  *
  * =====================================================================================
  */
-#include <iostream>
+
 #include "InputParser.h"
 
 InputParser::InputParser(int &argc, char **argv) {
@@ -53,7 +53,6 @@ void usage() {
               "    gff2seq     get the longest full-length CDS for each gene" << std::endl <<
               "    genoAli     whole chromosome global alignment and variant calling" << std::endl <<
               "    proali      genome alignment with relocation variation, chromosome fusion or whole genome duplication" << std::endl <<
-              "    ali         perform global alignment for a pair of sequences using the 2-piece affine gap cost strategy" << std::endl/*<<
-        "    triAnc      generate an ancestral genome from two inner group genomes and an outgroup genome" << std::endl*/
+              "    ali         perform global alignment for a pair of sequences using the 2-piece affine gap cost strategy" << std::endl
             ;
 }

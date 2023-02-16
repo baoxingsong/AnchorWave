@@ -22,56 +22,19 @@ Reading the score from configure and provide score query functions
 
  ************************************************************************/
 
-#ifndef WSA_SCORE_H
-#define WSA_SCORE_H
+#pragma once
 
-#include <map>
-#include <string>
-#include <iostream>
-#include <sstream>
-#include <fstream>
-#include <cstdlib>
-#include <cassert>
-#include <utility>
-
-class Score {
-private:
-    std::map<int16_t, int32_t **> m;
-    std::map<int16_t, int32_t> openGapPenalty1;
-    std::map<int16_t, int32_t> extendGapPenalty1;
-    std::map<int16_t, int32_t> openGapPenalty2;
-    std::map<int16_t, int32_t> extendGapPenalty2;
-    std::map<int16_t, int32_t> zdrop;
-public:
-    Score(const std::string &folder);
-
-    ~Score();
-
-    int32_t **getM(const int16_t &category);
-
-    int32_t &getOpenGapPenalty1(const int16_t &category);
-
-    int32_t &getExtendGapPenalty1(const int16_t &category);
-
-    int32_t &getOpenGapPenalty2(const int16_t &category);
-
-    int32_t &getExtendGapPenalty2(const int16_t &category);
-
-    int32_t &getZdrop(const int16_t &category);
-};
-
+#include <algorithm>
 
 class Scorei {
 private:
-    int8_t **m;
+    signed char **m;
 public:
-    Scorei(const int8_t &matchingScore, const int8_t &mismatchingPenalty);
+    Scorei(const signed char &matchingScore, const signed char &mismatchingPenalty);
 
     ~Scorei();
 
-    const int8_t &getScore(const int8_t &a, const int8_t &b) const;
+    const signed char &getScore(const signed char &a, const signed char &b) const;
 
-    int8_t **getScore() const;
+    signed char **getScore() const;
 };
-
-#endif //WSA_SCORE_H

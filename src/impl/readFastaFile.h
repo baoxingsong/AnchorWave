@@ -2,19 +2,13 @@
 // Created by baoxing on 10/10/17.
 //
 
-#ifndef ANNOTATIONLIFTOVER_READFASTAFILE_H
-#define ANNOTATIONLIFTOVER_READFASTAFILE_H
+#pragma once
 
+#include <algorithm>
 #include <fstream>
 #include <iostream>
-#include <string>
 #include <map>
-#include "../model/model.h"
 #include <sstream>
+#include <unistd.h>
 
-void readFastaFile(const std::string &filePath, std::map<std::string, std::string> &sequences);
-
-//void readFastaFileWorkWithIUPACcode( const std::string& filePath, std::map<std::string, Fasta>& sequences);
-void readFastaFileWorkWithIUPACcode(const std::string &filePath, std::map<std::string, std::string> &sequences);
-
-#endif //ANNOTATIONLIFTOVER_READFASTAFILE_H
+void readFastaFile(const std::string &filePath, std::map<std::string, std::tuple<std::string, long, long, int> > &map);

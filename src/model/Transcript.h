@@ -18,16 +18,12 @@
 
 *************************************************************************/
 
+#pragma once
 
-#ifndef ANNOTATIONLIFTOVER_TRANSCRIPT_H
-#define ANNOTATIONLIFTOVER_TRANSCRIPT_H
-
-#include <string>
 #include "GenomeBasicFeature.h"
 #include "STRAND.h"
 #include <vector>
 #include <set>
-#include <map>
 #include <algorithm>
 #include <limits>
 
@@ -66,7 +62,6 @@ public:
 
     void set_ifThreePrimerUtr(bool _ifThreePrimerUtr);
 
-    //        Transcript(std::string name, std::set<GenomeBasicFeature> cdsHashSet, STRAND strand, string chromeSomeName);
     Transcript();
 
     Transcript(const std::string &name, const std::string &chromeSomeName, const STRAND &strand);
@@ -237,5 +232,3 @@ public:
         }
     }
 };
-
-#endif //ANNOTATIONLIFTOVER_TRANSCRIPT_H

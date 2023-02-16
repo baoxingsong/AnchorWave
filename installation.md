@@ -63,10 +63,10 @@ minimap2 -x splice -t 80 -k 12 -a -p 0.4 -N 20 Zea_mays.AGPv4.dna.toplevel.fa cd
 ```
 Then we run the following 4 commands on the same computer simultaneously:
 ```
-/usr/bin/time ./anchorwave_sse2 genoAli -i Zea_mays.AGPv4.34.gff3 -as cds.fa -r Zea_mays.AGPv4.dna.toplevel.fa -a cds.sam -ar ref.sam -s Zm-Mo17-REFERENCE-CAU-1.0.fa -n sse2.anchors -o sse2.anchorwave.maf -f sse2.anchorwave.f.maf -w 100000 -fa3 100000 -B -6 -O1 -8 -E1 -2 -O2 -75 -E2 -1 -t 2 -IV >sse2.log 2>&1
-/usr/bin/time ./anchorwave_sse4.1 genoAli -i Zea_mays.AGPv4.34.gff3 -as cds.fa -r Zea_mays.AGPv4.dna.toplevel.fa -a cds.sam -ar ref.sam -s Zm-Mo17-REFERENCE-CAU-1.0.fa -n sse4.1.anchors -o sse4.1.anchorwave.maf -f sse4.1.anchorwave.f.maf -w 100000 -fa3 100000 -B -6 -O1 -8 -E1 -2 -O2 -75 -E2 -1 -t 2 -IV >sse4.1.log 2>&1
-/usr/bin/time ./anchorwave_avx2 genoAli -i Zea_mays.AGPv4.34.gff3 -as cds.fa -r Zea_mays.AGPv4.dna.toplevel.fa -a cds.sam -ar ref.sam -s Zm-Mo17-REFERENCE-CAU-1.0.fa -n avx2.anchors -o avx2.anchorwave.maf -f avx2.anchorwave.f.maf -w 100000 -fa3 100000 -B -6 -O1 -8 -E1 -2 -O2 -75 -E2 -1 -t 2 -IV >avx2.log 2>&1
-/usr/bin/time ./anchorwave_avx512 genoAli -i Zea_mays.AGPv4.34.gff3 -as cds.fa -r Zea_mays.AGPv4.dna.toplevel.fa -a cds.sam -ar ref.sam -s Zm-Mo17-REFERENCE-CAU-1.0.fa -n avx512.anchors -o avx512.anchorwave.maf -f avx512.anchorwave.f.maf -w 100000 -fa3 100000 -B -6 -O1 -8 -E1 -2 -O2 -75 -E2 -1 -t 2 -IV >avx512.log 2>&1
+/usr/bin/time ./anchorwave_sse2 genoAli -i Zea_mays.AGPv4.34.gff3 -as cds.fa -r Zea_mays.AGPv4.dna.toplevel.fa -a cds.sam -ar ref.sam -s Zm-Mo17-REFERENCE-CAU-1.0.fa -n sse2.anchors -o sse2.anchorwave.maf -f sse2.anchorwave.f.maf -t 1 -IV >sse2.log 2>&1
+/usr/bin/time ./anchorwave_sse4.1 genoAli -i Zea_mays.AGPv4.34.gff3 -as cds.fa -r Zea_mays.AGPv4.dna.toplevel.fa -a cds.sam -ar ref.sam -s Zm-Mo17-REFERENCE-CAU-1.0.fa -n sse4.1.anchors -o sse4.1.anchorwave.maf -f sse4.1.anchorwave.f.maf -t 1 -IV >sse4.1.log 2>&1
+/usr/bin/time ./anchorwave_avx2 genoAli -i Zea_mays.AGPv4.34.gff3 -as cds.fa -r Zea_mays.AGPv4.dna.toplevel.fa -a cds.sam -ar ref.sam -s Zm-Mo17-REFERENCE-CAU-1.0.fa -n avx2.anchors -o avx2.anchorwave.maf -f avx2.anchorwave.f.maf -t 1 -IV >avx2.log 2>&1
+/usr/bin/time ./anchorwave_avx512 genoAli -i Zea_mays.AGPv4.34.gff3 -as cds.fa -r Zea_mays.AGPv4.dna.toplevel.fa -a cds.sam -ar ref.sam -s Zm-Mo17-REFERENCE-CAU-1.0.fa -n avx512.anchors -o avx512.anchorwave.maf -f avx512.anchorwave.f.maf -t 1 -IV >avx512.log 2>&1
 ```
 Compare the output alignments:
 ```
@@ -98,9 +98,9 @@ Different compiling ways generated identical alignments
 ## RAM and wall time cost comparison
 |             | peak memory (Gb) | wall time |
 | ----------- |------------------|-----------| 
-| SSE2        | 32.4             | 26:01:26  |
-| SSE4.1      | 32.2             | 23:17:17  |
-| AVX2        | 32.4             | 20:02:14  |
-| AVX512      | 32.2             | 17:22:57  |
+| SSE2        | 20.2             | 26:01:26  |
+| SSE4.1      | 20.1             | 23:17:17  |
+| AVX2        | 20.2             | 20:02:14  |
+| AVX512      | 20.1             | 13:35:58  |
 
 *the cost comparison was performed for once (did not perform multiple times and calculate the average)

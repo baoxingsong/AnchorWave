@@ -37,9 +37,6 @@ struct Path {
 };
 // since we will change pairedSimilarFragments, so do not use reference C++ data type here
 
-
-
-
 /**
  * this function try to keep those genes in the syntenic region using a longest path algorithm
  * which is a kind of global alignment method
@@ -170,7 +167,6 @@ void myAlignmentMatchSort(std::vector<AlignmentMatch> &pairedSimilarFragments, c
     }
 }
 
-
 void longestPath(std::vector<AlignmentMatch> &pairedSimilarFragments, std::vector<AlignmentMatch> &sortedOrthologPairs, const bool &keepTandemDuplication, double &scoreThreshold) { //double checked used for self to self alignment
     double maxSore = 0;
     int bestEnd = 0;
@@ -241,16 +237,6 @@ void longestPath(std::vector<AlignmentMatch> &pairedSimilarFragments, std::vecto
 //    std::cout << "line 238 sortedOrthologPairs size:" << sortedOrthologPairs.size() << std::endl;
     for (int32_t i = 0; i < sortedOrthologPairs.size(); ++i) {
 
-//        std::cout << "line:242\ti:" << i << "\t" << sortedOrthologPairs[i].getRefChr() << "\t"
-//                  << sortedOrthologPairs[i].getRefStartPos() << "\t"
-//                  << sortedOrthologPairs[i].getRefEndPos() << "\t"
-//                  << sortedOrthologPairs[i].getQueryChr() << "\t"
-//                  << sortedOrthologPairs[i].getQueryStartPos() << "\t"
-//                  << sortedOrthologPairs[i].getQueryEndPos() << "\t"
-//                  << sortedOrthologPairs[i].getStrand() << "\t"
-//                  << sortedOrthologPairs[i].getReferenceGeneName() << "\t" <<
-//                  i <<"\t" << sortedOrthologPairs[i].getScore() << std::endl;
-
         if (sortedOrthologPairs[i].getStrand() == NEGATIVE &&
             (i == 0 || (sortedOrthologPairs[i - 1].getStrand() == POSITIVE) ||
              (sortedOrthologPairs[i - 1].getStrand() == NEGATIVE && sortedOrthologPairs[i - 1].getRefStartPos() > sortedOrthologPairs[i].getRefEndPos()
@@ -261,28 +247,6 @@ void longestPath(std::vector<AlignmentMatch> &pairedSimilarFragments, std::vecto
             score += sortedOrthologPairs[i].getScore();
             thisRoundOfInversions.push_back(i);
         } else {
-//            std::cout << "line 264" << std::endl;
-//            bool b = sortedOrthologPairs[i].getStrand() == NEGATIVE;
-//            std::cout << b << std::endl;
-//
-//            b = i==0 ;
-//            std::cout << b << std::endl;
-//
-//            b = (sortedOrthologPairs[i-1].getStrand() == POSITIVE) ;
-//            std::cout << b << std::endl;
-//
-//            b = sortedOrthologPairs[i-1].getStrand() == NEGATIVE ;
-//            std::cout << b << std::endl;
-//
-//            b = sortedOrthologPairs[i-1].getRefStartPos() > sortedOrthologPairs[i].getRefEndPos() ;
-//            std::cout << b << std::endl;
-//            if( !b ){
-//                std::cout << sortedOrthologPairs[i-1].getRefStartPos() << "\t" << sortedOrthologPairs[i].getRefEndPos() << std::endl;
-//            }
-//            b = sortedOrthologPairs[i-1].getQueryEndPos() < sortedOrthologPairs[i].getQueryStartPos() ;
-//            std::cout << b << std::endl;
-
-
             if (score <= scoreThreshold) {
                 for (int j: thisRoundOfInversions) {
                     toRemoveIndex.push_back(j);
@@ -293,6 +257,7 @@ void longestPath(std::vector<AlignmentMatch> &pairedSimilarFragments, std::vecto
             score = 0;
         }
     }
+
     // in case the last one is an inversion begin
     if (score > 0 && score <= scoreThreshold) {
         for (int j: thisRoundOfInversions) {
@@ -327,7 +292,7 @@ void longestPathQuotav2(std::vector<AlignmentMatch> pairedSimilarFragments, std:
                         std::map<std::string, std::map<int64_t, AlignmentMatch>> &refIndexMap /*chr, index, AlignmentMatch*/, std::map<std::string, std::map<int64_t, AlignmentMatch>> &queryIndexMap,
                         double &INDEL_SCORE, double &GAP_OPEN_PENALTY,
                         double &MIN_ALIGNMENT_SCORE, const int &MAX_DIST_BETWEEN_MATCHES, int &refMaximumTimes, int &queryMaximumTimes,
-                        double &calculateIndelDistance, bool withNovelAnchros) {
+                        double &calculateIndelDistance, bool withNovelAnchors) {
     sortedOrthologPairChains.clear();
     std::map<std::string, int64_t> refTimes;
     std::map<std::string, std::map<int64_t, int64_t>> queryTimes;  // key is the id set above
@@ -708,56 +673,4 @@ void longestPathQuotav2(std::vector<AlignmentMatch> pairedSimilarFragments, std:
 //            std::cout << "line 703 size: " <<  pairedSimilarFragments.size() << std::endl;
         }
     } while (!done);
-}
-
-
-// longestIncreasingSubsequenceLAGAN and syntenic is used to filter local sequence alignemnt result, so that no fragments would overlap
-std::vector<PairedSimilarFragment> longestIncreasingSubsequenceLAGAN(std::vector<PairedSimilarFragment> &pairedSimilarFragments) {
-    // then for the seed-to-chain should check the overlap of pairedSimilarFragment
-    int32_t maxSore = pow(pairedSimilarFragments[0].getScore(), 2), bestEnd = 0;
-    int32_t DP[pairedSimilarFragments.size()];
-    int prev[pairedSimilarFragments.size()];
-    DP[0] = pow(pairedSimilarFragments[0].getScore(), 2);
-    prev[0] = -1;
-    for (int i = 1; i < pairedSimilarFragments.size(); ++i) {
-        DP[i] = pow(pairedSimilarFragments[i].getScore(), 2);
-        prev[i] = -1;
-        for (int j = i - 1; j >= 0; --j) {
-            if (DP[j] + pow(pairedSimilarFragments[i].getScore(), 2) > DP[i] &&
-                pairedSimilarFragments[j].getEnd2() < pairedSimilarFragments[i].getStart2() &&
-                pairedSimilarFragments[j].getEnd1() < pairedSimilarFragments[i].getStart1()) {
-                DP[i] = DP[j] + pow(pairedSimilarFragments[i].getScore(), 2);
-                prev[i] = j;
-            }
-        }
-        if (DP[i] > maxSore) {
-            bestEnd = i;
-            maxSore = DP[i];
-        }
-    }
-
-    std::vector<PairedSimilarFragment> sorted_pairedSimilarFragments;
-    int i = bestEnd;
-    sorted_pairedSimilarFragments.push_back(pairedSimilarFragments[i]);
-    int j = prev[i];
-    while (j >= 0) {
-        sorted_pairedSimilarFragments.push_back(pairedSimilarFragments[j]);
-        j = prev[j];
-    }
-
-    std::vector<PairedSimilarFragment> filtered_sorted_pairedSimilarFragments;
-    for (i = sorted_pairedSimilarFragments.size() - 1; i >= 0; --i) {
-        filtered_sorted_pairedSimilarFragments.push_back(sorted_pairedSimilarFragments[i]);
-    }
-    return filtered_sorted_pairedSimilarFragments;
-}
-
-std::vector<PairedSimilarFragment> syntenic(std::vector<PairedSimilarFragment> &pairedSimilarFragments) {
-    if (pairedSimilarFragments.size() == 0) {
-        return pairedSimilarFragments;
-    }
-    std::sort(pairedSimilarFragments.begin(), pairedSimilarFragments.end(), [](PairedSimilarFragment a, PairedSimilarFragment b) {
-        return a.getStart1() < b.getStart1();
-    });
-    return longestIncreasingSubsequenceLAGAN(pairedSimilarFragments);
 }

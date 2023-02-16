@@ -2,10 +2,7 @@
 // Created by bs674 on 2/13/21.
 //
 
-#ifndef ANCHORWAVE_VERSION_H
-#define ANCHORWAVE_VERSION_H
+#pragma once
 
-#define VERSION "1.1.1"
+#define VERSION "1.2.0"
 #define PROGRAMNAME "anchorwave"
-#endif //ANCHORWAVE_VERSION_H
-

@@ -21,8 +21,7 @@ The class if designed for genetic elements CDS, i.e. from gff file
 
  ************************************************************************/
 
-#ifndef _CDS_H
-#define _CDS_H
+#pragma once
 
 #include <string>
 
@@ -98,5 +97,3 @@ public:
         return true;
     }
 };
-
-#endif

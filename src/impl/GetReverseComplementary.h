@@ -2,13 +2,9 @@
 // Created by baoxing on 10/10/17.
 //
 
-#ifndef ANNOTATIONLIFTOVER_GETREVERSECOMPLEMENTARY_H
-#define ANNOTATIONLIFTOVER_GETREVERSECOMPLEMENTARY_H
+#pragma once
 
-#include <string>
 #include <sstream>
-
+#include <string>
 
 std::string getReverseComplementary(const std::string &sequence);
-
-#endif //ANNOTATIONLIFTOVER_GETREVERSECOMPLEMENTARY_H

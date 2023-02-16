@@ -2,8 +2,7 @@
 // Created by Baoxing Song on 2019-03-13.
 //
 
-#ifndef PROALI_OrthologPair_H
-#define PROALI_OrthologPair_H
+#pragma once
 
 #include <string>
 #include "STRAND.h"
@@ -122,5 +121,3 @@ public:
         return true;
     }
 };
-
-#endif //PROALI_OrthologPair_H

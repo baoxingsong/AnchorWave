@@ -2,11 +2,7 @@
 // Created by song on 9/19/18.
 //
 
-
 #include "../../googletest/googletest/include/gtest/gtest.h"
-
-
-
 #include <string>
 #include <iostream>
 #include <sstream>
@@ -15,8 +11,6 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
-
-
 
 TEST(needleAlignment, c20){
 
@@ -62,212 +56,6 @@ TEST(needleAlignment, c20){
     std::cout << score << std::endl;
     ASSERT_EQ(0, 0);
 }
-
-
-/*
-
-TEST(WFA, c1){
-
-//    for (int ii=0; ii<500000; ii++) {
-//        char *pattern = "ATTGCCTTCTTCACCGGAACGGCGACGACATTGAAATCGAATACTCAGTAAAACGCACCGTTCGTTCCCCATTGACCTGACCCGGTTATTGATATTTCAATCCCAACAAACCGATAAATATATTCTCAACCAAATTGATATACCAATGAATCAGATGTTTTGTTAAAACGCAGCGTTTCGTTCGTCAATATGCTCTAAGTTTAAACCAGATCGGTGCGAATATTAAACCGAACCGGTTCATGTCAATGTCTTCTTTGTAGAAAGAGACTTTCCTGATCGACCTTCCACTACTAACAGATCCACAAATTTCATAAGGTT";
-//        char *text = "GTTCCCCATTGACCTGACCCGGTTATTGATATTTCAATCCCAACAAACCGATAAATATATTCTCAACCAAATTGATATACCAATGAATCAGATGTTTTGTTAAAACGCAGCGTTTCGTTCGTCAATATGCTCTAAGTTTAAACCAGATCGGTGCGAATATTAAACCGAACCGGTTCATGTCAATGTCTTCTTTGTAGAAAGAGACTTTCCTGATCGACCTTCCACTACTAACAGATCCACAAATTTCATAAGGTTCAGAGCAAATCGGAGAGAGAGAG";
-//
-//    char * pattern = "GCAATAAGGTATCTGTCTCCAGCATCATCTGAAAAACAGATTGCTAATTTCATTAACATAA";
-//    char * text = "AC";
-//
-        char * text = "GG";
-        char * pattern = "AAGACAAGATTTATTTTTTCATTGATAACTGAGTAAA";
-
-    affine2p_penalties_t penalties = {
-                .match = 0,
-                .mismatch = 4,
-                .gap_opening1 = 7,
-                .gap_extension1 = 2,
-                .gap_opening2 = 81,
-                .gap_extension2 = 1,
-        };
-
-        mm_allocator_t *const mm_allocator = mm_allocator_new(BUFFER_SIZE_512M);
-        // Allocate
-        affine2p_wavefronts_t *const affine2p_wavefronts =
-                affine2p_wavefronts_new_complete(
-                        strlen(pattern), strlen(text),
-                        &penalties, mm_allocator);
-        // Align
-        affine2p_wavefronts_align(affine2p_wavefronts,
-                                  pattern, strlen(pattern), text, strlen(text));
-
-        cigar_t *const edit_cigar = &(affine2p_wavefronts->cigar);
-        int totalScore = cigar_score_gap_affine2p(edit_cigar, &penalties);
-
-        char *const operations = edit_cigar->operations;
-
-        char lastCigar = '-';
-        int cigarLength = 0;
-        int i;
-        for (i = edit_cigar->begin_offset; i < edit_cigar->end_offset; ++i) {
-            if (operations[i] == lastCigar) {
-                cigarLength = cigarLength + 1;
-            } else {
-                if (i > edit_cigar->begin_offset) {
-                    std::cout << cigarLength << lastCigar;
-                }
-                cigarLength = 1;
-                lastCigar = operations[i];
-            }
-        }
-        std::cout << cigarLength << lastCigar << std::endl;
-
-
-        std::string dSeq(pattern);
-        std::string qSeq(text);
-
-        std::string _alignment_q;
-        std::string _alignment_d;
-
-        int pattern_pos = 0, text_pos = 0;
-
-        lastCigar = '-';
-        for (i = edit_cigar->begin_offset; i < edit_cigar->end_offset; ++i) {
-            if (operations[i] == 'M') {
-                _alignment_q += qSeq[text_pos];
-                _alignment_d += dSeq[pattern_pos];
-                pattern_pos++;
-                text_pos++;
-            } else if (operations[i] == 'X') {
-                _alignment_q += qSeq[text_pos];
-                _alignment_d += dSeq[pattern_pos];
-                pattern_pos++;
-                text_pos++;
-            } else if (operations[i] == 'I') {
-                _alignment_q += qSeq[text_pos];
-                _alignment_d += '-';
-                text_pos++;
-            } else if (operations[i] == 'D') {
-                _alignment_q += '-';
-                _alignment_d += dSeq[pattern_pos];
-                pattern_pos++;
-            }
-            lastCigar = operations[i];
-        }
-
-
-        affine2p_wavefronts_delete(affine2p_wavefronts);
-        mm_allocator_delete(mm_allocator);
-
-        std::cout << _alignment_d << std::endl;
-        std::cout << _alignment_q << std::endl;
-        std::cout << totalScore << std::endl;
-//    }
-    ASSERT_EQ(0, 0);
-}
-
-
-TEST(WFA, c2){
-
-    mm_allocator_t* const mm_allocator = mm_allocator_new(BUFFER_SIZE_512M);
-
-//    affine2p_penalties_t penalties = {
-//            .match = 0,
-//            .mismatch = 7,
-//            .gap_opening1 = 21,
-//            .gap_extension1 = 2,
-//            .gap_opening2 = 21,
-//            .gap_extension2 = 2,
-//    };
-
-    affine2p_penalties_t penalties = {
-            .match = 0,
-            .mismatch = 3,
-            .gap_opening1 = 4,
-            .gap_extension1 = 2,
-            .gap_opening2 = 24,
-            .gap_extension2 = 1,
-    };
-
-    char* pattern = "GCAATAAGGTATCTGTCTCCAGCATCATCTGAAAAACAGATTGCTAATTTCATTAACATAA";
-    char* text  =   "AC";
-    std::cout << "match:" << penalties.match << std::endl;
-    std::cout << "mismatch:" << penalties.mismatch << std::endl;
-    std::cout << "gap_opening1:" << penalties.gap_opening1 << std::endl;
-    std::cout << "gap_extension1:" << penalties.gap_extension1 << std::endl;
-    std::cout << "gap_opening2:" << penalties.gap_opening2 << std::endl;
-    std::cout << "gap_extension2:" << penalties.gap_extension2 << std::endl;
-
-    std::string dSeq(pattern);
-    std::string qSeq(text);
-
-    // Allocate
-    affine2p_wavefronts_t* const affine2p_wavefronts =
-            affine2p_wavefronts_new_complete(
-                    strlen(pattern),strlen(text),
-                    &penalties,mm_allocator);
-    // Align
-    affine2p_wavefronts_align(affine2p_wavefronts,
-                              pattern,strlen(pattern),text,strlen(text));
-
-    cigar_t *const edit_cigar = &(affine2p_wavefronts->cigar);
-    int totalScore = cigar_score_gap_affine2p(edit_cigar, & penalties);
-
-    char *const operations = edit_cigar->operations;
-
-    std::string _alignment_q;
-    std::string _alignment_d;
-
-    int i, pattern_pos = 0, text_pos = 0;
-
-    char lastCigar = '-';
-    for (i = edit_cigar->begin_offset; i < edit_cigar->end_offset; ++i) {
-        if (operations[i] == 'M') {
-            _alignment_q += qSeq[text_pos];
-            _alignment_d += dSeq[pattern_pos];
-            pattern_pos++;
-            text_pos++;
-        }else if (operations[i] == 'X') {
-            _alignment_q += qSeq[text_pos];
-            _alignment_d += dSeq[pattern_pos];
-            pattern_pos++;
-            text_pos++;
-        }else if (operations[i] == 'I') {
-            _alignment_q += qSeq[text_pos];
-            _alignment_d += '-';
-            text_pos++;
-        }  else if (operations[i] == 'D') {
-            _alignment_q += '-';
-            _alignment_d += dSeq[pattern_pos];
-            pattern_pos++;
-        }
-        lastCigar = operations[i];
-    }
-
-    lastCigar = '-';
-    int cigarLength = 0;
-    for (i = edit_cigar->begin_offset; i < edit_cigar->end_offset; ++i) {
-        if (operations[i] == lastCigar){
-            cigarLength = cigarLength + 1;
-        }else{
-            if( i > edit_cigar->begin_offset ) {
-                std::cout << cigarLength << lastCigar;
-            }
-            cigarLength=1;
-            lastCigar = operations[i];
-        }
-    }
-    std::cout << cigarLength << lastCigar << std::endl;
-
-
-    affine2p_wavefronts_delete(affine2p_wavefronts);
-    std::cout << "line 125" << std::endl;
-    mm_allocator_delete(mm_allocator);
-    std::cout << "line 127" << std::endl;
-
-    std::cout << _alignment_d << std::endl;
-    std::cout << _alignment_q << std::endl;
-    std::cout << totalScore << std::endl;
-    ASSERT_EQ(0, 0);
-}
-
-*/
 
 TEST(needleAlignment, c1){
 
@@ -323,8 +111,6 @@ TEST(needleAlignment, c2){
     std::string _dna_d = "CCTATGGCACAGCGGTTGGCGCTTGCGCGGTCACCGGCGACTGGTCGATTGGCTTGTTAAATGCGTATGGGACATATCTTAAGCAAAGTCATGAGTGTGCATGAGATAGTCGCAGTTCTTTGACACAGTATTAATTTCAATCCTAACTAAGACCAATAACATCCAGAAGGTCGTACTCAACAGCGGGTACGTTTGACGTGTGATCTAGTTTGGCTCCCGCCAGCATATAGATGGTAAAGCATGTCTAAGATCAGGCTCTTCCCTATGCCTGGCATATGGTCATCGCGTGATTGAGTCTCCAGGGTTCAATAACGACGCCTTTGATGTTTTATTGTACCGACTGAGGTTTTCACGACTGTAGAGAGTATAGGAACTATCTAGCCTCGCTGCTTAAACATTCGAGCGGATTGAAATATTGCGGATTCTTCCATTGGATTCAAAGCATCTCCCGAGCTTCATTCGTGTGTGGCAACAAGCGAAAGTCCGACCGTAAGTGAATGCCCTTGACGGACTTCGGTGTTAAGGGCTATGGACTTCTCGGTTTCGTATGGATCTGCGGAATTGCTGTAGATACATAGGGAGAGTGGGCAACGATCTCCCGCGGTAGAGTGGTATGTGTGACCGGTGAAGTTTTAGTCATCTATTATTCCTCCCGGCATCGAAGCGCTCAGCCACTGCTTATCACATGATCTGTCCCAGCGTTGGCGCCTTATCGGAAAATTACTCTCCGCGCCATGTCTTCAGTAGATACATAACGATTTGTATGACGGTTGGACCGTAACGTAATTGAGAGGGTTAGCGGCATGCTGTTGCGGATCTCAGTGAAGGGCTGTCTATATCTTGAACCCTAGAATACTGGTTACAGGAGCTCCGCGTTCCACCGAGTAATCCTAATTCGTCCCAGAGATATGTTCGAAAACTAGTCCGGCATGCCCGTGTATCTCAACAATGGATATGTCCTTGCATCGGTGGGCGCCGGTATTGGAGCAGTTATCCCGGCTACAATGGAGATTTAGAACTATATGCCTTTACAAGGCTAACCTCGACTTTAGTGTGCCCATCTCGAACAGTTTGCGGTGAATGGCTCTCACAGTTTCACTGGCCAAGTTGCCTAATAACGCAGCCCCTAGTTACAAAGAGACCACAATTGACCTGCATCAGTTCACATACCAGATTCGATTTTGTACCACCCGCGTTGGTGGAGTCGCCGAACGCCCGGAAACGGCTCCGCGCAGCAGCTTTTTCGGTAGCTCTGATAGACAGGCATGACGTTAGTTAGTTGAATTAAACCAAGGAGGAACGGCGTTGCGGGCCACGCCTTCAGACAGAAGGCTTGAATTTTGGACGCATTCAATCTAATATGAGCTCACTGTCACATCGACGAAGAGCTGGACAGCGTACTTGCCGATTTGGGAACAGATTACCGTACCGATGAAGGAAAGATCTGTGACCTATATTTCCGAATCTTTCCGCTATTTCTAAGTAAAAACCGTGAAGACAATGTTCCCGGGCCACTGGTACTGATCCCCGGGCCCAGCACGGAGGTCAGCTCAAGGGTCCGTTCTTGGTTTGCTACAGTCGCTTTTTTATCGCACCTCGCCCATGGACACTTGTGAATGTACTCTATTCCGTCTGAGTTTCGTCTAATGCTCCTACCCATTACGTGCTATGACGGCGGCAGCTAATAAGGTTCATGAATATCGGTCAAAGAGGACTGCTTAATAACAGGAGACTTTAACCCTAGAGTGTCAGATAAAAGACTCTCGAAGCTGCGTAACAATCTGTGACCCGGCACGGTTAGTCAACACCCTTGTCAACATAAGCGGCAGCACACGCGAAGTTAGGAAGCAGACCGCTGATTCGTATGCTAGTCTTCCAAGACGTAGGTTTCACCTTCATGGGACCCGGACCCGGGTTAGATTACTAAATCGGGTATCAGTAGCTGTAAGTGAATTAGGAGTACTCTGACCTATACGCAGAGCGTGAGTCCCCACTGCCCG";
     std::string _dna_q = "AGTATCCCGACGCGGTTACTGCTTAAGCGGCTAACGTCCGCCGTTCCATGGGCTTCCTAGATTCCAAGGGATCTTGCGCTCTCATGAGGCATTTGAGAGGGCGTGGTGGTTCCAATTCTTGGTAATAGCGTGCCTTAGAATCCTGGCTCAGAACGAAGCGATCGATGTGGTAGTGCTGGCTTGATGGCACAGGAGATTCGCGTTCATTATATGCGCCCGGTCCCAGAGATATGGAAAATCGCACAGGAGATAGGACTCATCTACTTGGGTAGCGTCAGGGAATTTCTAGATAGAGTCACTCAGGATAGTTACAGACGGCTGCGATGGTATAGTTCACTGAAATATCTTCCGCCGACTCCAGCCTATGCGTCAACCCAACCGCCAGTGGGCAGACTCACACCGGTAGATTGACATGGTGCGGATTCTACTATTGGGCAATGAGGATCTCCGGCTCTTCTTTCGTGTCTGTTACACGGCGAAAGACCGAACATTCTGGTACGAGAACGCCGGACTACTACATTAACGGCGGGCTAGTTTTTCGTCTTAATGAGAGCTGCGGGACCGCGGCTCATACCTAGCCAACTTCTTGCACTATCAAACTGCGTAGATTGGCAGGAGTGTACAAAGCTGATATAGGCACTATTTAGGGTTCGCGAAATTTGACCGCTCTACGTCAGCTGATAGCAATGTGCTTGCCAGTGATGGGCCCTAAGGGTGCAATTACGCTACGGGCCAGTACTCTAGTAATTACAGAGTGATCAGTTCGTCGTGTGTACACCGACGAAAGGGAATTAATAGACTGCATGGGTGTACAGCCACACGGTACCTACCGATGATAACTGCAACCGTCAGCGTGTGGTGTCCGCTACGGCGACCGCCAGCTAATAATCGTACTCCTTCAGGTAGGTACCTAATTCGACTAGTTGGGAATTCACGCTTTGGGCACCCACGGACTTGATAGTACTTTGCTGTTGGGCGGCGACGTCGCAGTCGTGCGGGGTGCTATTAAACGGTTCCCCTTAATGGTCCGTCTCGGTAAATCTAAGTTTTGGGGGGACCATGCCTATGACTTTGCACTCAACCCCTTTGCCAGGTGTGGATGCGATGTTGGTTCATTTGACAGCTCCTAAGATCACACCATTCGAGAGGGACCAGTGTTCGTTAGAATTACACTGTCCATCTTGTACCATCCGCGAGTATGCAGGAGTAGAAAGCTTCCGGTCTGCTGTACGAGCGCGCGTTGTACGTAGACTTGTCAGGTCCCCTTGACGCTAGTCAAAGGAGTTAAAATAAGTTGGAACGCTCTTCCCGTGCAAGCTCCCCCACTGTCGGCTCGGTTTTTGGATAGAGTTGTTCGATCTACTGCCTAATCCACCATGAATATTCATAGTTACATACTAATCGCCGTGTGGGGGCGACCTTCAAGTATCGATTTCCAAGGTCGTACTACCAGTTAATTTCGGAGCTCTTCGGTATTGCTCAGGGGTCTCCGTGTGGACATAGAGCGCTGATTGGTCATTGTGGTCCGGGGTGGGATCGCGTAGGCGAGCTTGAACAACCGTTCCACTCTCACTACTGAAGTCTTTTAATCGCAAGAAGCCTCTCGACACCCGAGAATAAACTAGTTTCCGTTGTAATAGCCTCAAAACGGAACAGACTTTACGTGCCCGGAGACCGCCACCCAACTACCTGCCCGAATGAAGGTACGTGTTCACCGCTTAATAACGCATGCATGTAAAGACAGCGTGCCCGATGTCGATCTCTCGTATGTGTCCAGCAGTCCGTGCGTCCGAACTTGTAGGCGACTACGCAATATCTTTAGTAGCTGACGAGCGTACGGTGAGGCAGCAGTTCGCGTCAGCGTTTGCTTGCCGACCTTAACGCACGTCTCAATATCATACGGCGCCGGGAGCACATACATCAGGAAGTGGGGTAACCATACCGTTACTGGTCGGGTGAATAATCAGAGTTATCCACAGCACGGGATTCCCCGCTCGAGG";
 
-
-
     //_dna_q = getReverseComplementary(_dna_q);
     int32_t score = needleAlignment(_dna_q, _dna_d, SQ, SD, mismatchingPenalty,  _open_gap_penalty1, _extend_gap_penalty1, _open_gap_penalty2, _extend_gap_penalty2);
     std::string _alignment_q;
@@ -340,7 +126,6 @@ TEST(needleAlignment, c2){
     std::cout << score << std::endl;
     ASSERT_EQ(0, 0);
 }
-
 
 TEST(alignSlidingWindow, c1){
 
@@ -370,7 +155,6 @@ TEST(alignSlidingWindow, c1){
     std::cout << _alignment_d << std::endl;
     std::cout << _alignment_q << std::endl;
     std::cout << score << std::endl;
-
 
     score = alignSlidingWindow_minimap2( querySeq, refSeq, _length_of_q, _length_of_d,
                                          _alignment_q, _alignment_d, slidingWindowSize,
@@ -420,21 +204,18 @@ TEST(alignSlidingWindow, c2) {
     int32_t min_wavefront_length = 10000;
     int32_t max_distance_threshold = 10000;
     Scorei m(matchingScore, mismatchingPenalty);
-    std::map<std::string, std::string> parameters;
     for (int i=0; i<200; i++) {
         std::cout << "line 325" << std::endl;
         int64_t thiScore = alignSlidingWindow(querySeq, refSeq, _alignment_q, _alignment_d,
                                               slidingWindowSize, wfaSize, matchingScore, mismatchingPenalty,
                                               open_gap_penalty1, extend_gap_penalty1, open_gap_penalty2,
-                                              extend_gap_penalty2, min_wavefront_length, max_distance_threshold, m, parameters);
+                                              extend_gap_penalty2, min_wavefront_length, max_distance_threshold, m);
         std::cout << _alignment_d << std::endl;
         std::cout << _alignment_q << std::endl;
         std::cout << thiScore << std::endl;
     }
     ASSERT_EQ(0, 0);
 }
-
-
 
 TEST(MSA, c1) {
 
@@ -451,26 +232,20 @@ TEST(MSA, c1) {
     std::string _dna_ref2 = "AGTATCCCGACGCGGTTACTGCTTAAGCGGCTAACGTCCGCCGTTCCATGGGCTTCCTAGATTCCAAGGGATCTTGCGCTCTCATGAGGCATTTGGGCGTGGTGGTTCCAATTCTTGGTAATAGCGTGCCTTAGAATCCTGGCTCAGAACGAAGCGATCGATGTGGTAGTGCTGGCTTGATGGCACAGGAGATTCGCGTTCATTATATGCGCCCGGTCCCAGAGATATGGAAAATCGCACAGGAGATAGGACTCATCTACTTGGGTAGCGTCAGGGAATTTCTAGATAGAGTCACTCAGGATAGTTACAGACGGCTGCGATGGTATAGTTCACTGAAATATCTTCCGCCGACTCCAGCCTATGCGTCAACCCAACCGCCAGTGGGCAGACTCACACCGGTAGATTGACATGGTGCGGATTCTACTATTGGGCAATGAGGATCTCCGGCTCTTCTTTCGTGTCTGTTACACGGCGAAAGACCGAACATTCTGGTACGAGAACGCCGGACTACTACATTAACGGCGGGCTAGTTTTTCGTCTTAATGAGAGCTGCGGGACCGCGGCTCATACCTAGCCAACTTCTTGCACTATCAAACTGCGTAGATTGGCAGGAGTGTACAAAGCTGATATAGGCACTATTTAGGGTTCGCGAAATTTGACCGCTCTACGTCAGCTGATAGCAATGTGCTTGCCAGTGATGGGCCCTAAGGGTGCAATTACGCTACGGGCCAGTACTCTAGTAATTACAGAGTGATCAGTTCGTCGTGTGTACACCGACGAAAGGGAATTAATAGACTGCATGGGTGTACAGCCACACGGTACCTACCGATGATAACTGCAACCGTCAGCGTGTGGTGTCCGCTACGGCGACCGCCAGCTAATAATCGTACTCCTTCAGGTAGGTACCTAATTCGACTAGTTGGGAATTCACGCTTTGGGCACCCACGGACTTGATAGTACTTTGCTGTTGGGCGGCGACGTCGCAGTCGTGCGGGGTGCTATTAAACGGTTCCCCTTAATGGTCCGTCTCGGTAAATCTAAGTTTTGGGGGGACCATGCCTATGACTTTGCACTCAACCCCTTTGCCAGGTGTGGATGCGATGTTGGTTCATTTGACAGCTCCTAAGATCACACCATTCGAGAGGGACCAGTGTTCGTTAGAATTACACTGTCCATCTTGTACCATCCGCGAGTATGCAGGAGTAGAAAGCTTCCGGTCTGCTGTACGAGCGCGCGTTGTACGTAGACTTGTCAGGTCCCCTTGACGCTAGTCAAAGGAGTTAAAATAAGTTGGAACGCTCTTCCCGTGCAAGCTCCCCCACTGTCGGCTCGGTTTTTGGATAGAGTTGTTCGATCTACTGCCTAATCCACCATGAATATTCATAGTTACATACTAATCGCCGTGTGGGGGCGACCTTCAAGTATCGATTTCCAAGGTCGTACTACCAGTTAATTTCGGAGCTCTTCGGTATTGCTCAGGGGTCTCCGTGTGGACATAGAGCGCTGATTGGTCATTGTGGTCCGGGGTGGGATCGCGTAGGCGAGCTTGAACAACCGTTCCACTCTCACTACTGAAGTCTTTTAATCGCAAGAAGCCTCTCGACACCCGAGAATAAACTAGTTTCCGTTGTAATAGCCTCAAAACGGAACAGACTTTACGTGCCCGGAGACCGCCACCCAACTACCTGCCCGAATGAAGGTACGTGTTCACCGCTTAATAACGCATGCATGTAAAGACAGCGTGCCCGATGTCGATCTCTCGTATGTGTCCAGCAGTCCGTGCGTCCGAACTTGTAGGCGACTACGCAATATCTTTAGTAGCTGACCTCGGAGCGTACGGTGAGGCAGCAGTTCGCGTCAGCGTTTGCTTGCCGACCTTAACGCACGTCTCAATATCATACGGCGCCGGGAGCACATACATCAGGAAGTGGGGTAACCATACCGTTACTGGTCGGGTGAATAATCAGAGTTATCCACAGCACGGGATTCCCCGCTCGAGG";
     std::string _dna_query = "AGTATCCCGACGCGGTTACTGCTTAAGCGGCTAACGTCCGCCGTTCCATGGGCTTCCTAGATTCCAAGGGATCTTGCGCTCTCATGAGGCATTTGAGAGGGCGTGGTGGTTCCAATTCTTGGTAATAGCGTGCCTTAGAATCCTGGCTCAGAACGAAGCGATCGATGTGGTAGTGCTGGCTTGATGGCACAGGAGATTCGCGATTATATGCGCCCGGTCCCAGTATGGAAAATCGCACAGGAGATAGGACTCATCTACTTGGGTAGCGTCAGGGAATTTCTAGATAGAGTCACTCAGGATAGTTACAGACGGCTGCGATGGTATAGTTCACTGAAATATCTTCCGCCGACTCCAGCCTATGCGTCAACCCAACCGCCAGTGGGCAGACTCACACCGGTAGATTGACATGGTGCGGATTCTACTATTGGGCAATGAGGATCTCCGGCTCTTCTTTCGTGTCTGTTACACGGCGAAAGACCGAACATTCTGGTACGAGAACGCCGGACTACTACATTAACGGCGGGCTAGTTTTTCGTCTTAATGAGAGCTGCGGGACCGCGGCTCATACCTAGCCAACTTCTTGCACTATCAAACTGCGTAGATTGGCAGGAGTGTACAAAGCTGATATAGGCACTATTTAGGGTTCGCGAAATTTGACCGCTCTACGTCAGCTGATAGCAATGTGCTTGCCAGTGATGGGCCCTAAGGGTGCAATTACGCTACGGGCCAGTACTCTAGTAATTACAGAGTGATCAGTTCGTCGTGTGTACACCGACGAAAGGGAATTAATAGACTGCATGGGTGTACAGCCACACGGTACCTACCGATGATAACTGCAACCGTCAGCGTGTGGTGTCCGCTACGGCGACCGCCAGCTAATAATCGTACTCCTTCAGGTAGGTACCTAATTCGACTAGTTGGGAATTCACGCTTTGGGCACCCACGGACTTGATAGTACTTTGCTGTTGGGCGGCGACGTCGCAGTCGTGCGGGGTGCTATTAAACGGTTCCCCTTAATGGTCCGTCTCGGTAAATCTAAGTTTTGGGGGGACCATGCCTATGACTTTGCACTCAACCCCTTTGCCAGGTGTGGATGCGATGTTGGTTCATTTGACAGCTCCTAAGATCACACCATTCGAGAGGGACCAGTGTTCGTTAGAATTACACTGTCCATCTTGTACCATCCGCGAGTATGCAGGAGTAGAAAGCTTCCGGTCTGCTGTACGAGCGCGCGTTGTACGTAGACTTGTCAGGTCCCCTTGACGCTAGTCAAAGGAGTTAAAATAAGTTGGAACGCTCTTCCCGTGCAAGCTCCCCCACTGTCGGCTCGGTTTTTGGATAGAGTTGTTCGATCTACTGCCTAATCCACCATGAATATTCATAGTTACATACTAATCGCCGTGTGGGGGCGACCTTCAAGTATCGATTTCCAAGGTCGTACTACCAGTTAATTTCGGAGCTCTTCGGTATTGCTCAGGGGTCTCCGTGTGGACATAGAGCGCTGATTGGTCATTGTGGTCCGGGGTGGGATCGCGTAGGCGAGCTTGAACAACCGTTCCACTCTCACTACTGAAGTCTTTTAATCGCAAGAAGCCTCTCGACACCCGAGAATAAACTAGTTTCCGTTGTAATAGCCTCAAAACGGAACAGACTTTACGTGCCCGGAGACCGCCACCCAACTACCTGCCCGAATGAAGGTACGTGTTCACCGCTTAATAACGCATGCATGTAAAGACAGCGTGCCCGATGTCGATCTCTCGTATGTGTCCAGCAGTCCGTGCGTCCGAACTTGTAGGCGACTACGCAATATCTTTAGTAGCTGACGAGCGTACGGTGAGGTCGCGTCAGCGTTTGCTTGCCGACCTTAACGCACGTCTCAATATCATACGGCGCCGGGAGCACATACATCAGGAAGTGGGGTAACCATACCGTTACTGGTCGGGTGAATAATCAGAGTTATCCACAGCACGGGATTCCCCGCTCGAGG";
 
-//    std::string _dna_ref1 =  "CCTATGGCACAGCGGTTGGCGCTTGCGCGGTCACCGGCGACTGGTCGATTGGCTTGTTAAATGCGTATGGGACATATCTTAAGCAAAGTCA";
-//    std::string _dna_ref2 =  "AGTATCCCGACGCGGTTACTGCTTAAGCGGCTAACGTCCGCCGTTCCATGGGCTTCCTAGATTCCAAGGGATCTTGCGCTCTCATGAGGCA";
-//    std::string _dna_query = "AGTATCCCGACGCGGTTACTGCTTAAGCGGCTAACGTCCGCCGTTCCATGGGCTTCCTAGATTCCAAGGGATCTTGCGCTCTCATGAGGCA";
-
     std::string _alignment_query;
     std::string _alignment_ref2;
     std::string _alignment_ref1;
     int64_t slidingWindowSize = 500;
 
-
     int32_t wfaSize = 250000;
     int32_t min_wavefront_length = 10000;
     int32_t max_distance_threshold = 10000;
     Scorei m(matchingScore, mismatchingPenalty);
-    std::map<std::string, std::string> parameters;
     std::cout << "line 438" << std::endl;
     int64_t thiScore = alignSlidingWindow(_dna_query, _dna_ref2, _alignment_query, _alignment_ref2,
                                           slidingWindowSize, wfaSize, matchingScore, mismatchingPenalty,
                                           open_gap_penalty1, extend_gap_penalty1, open_gap_penalty2,
-                                          extend_gap_penalty2, min_wavefront_length, max_distance_threshold, m, parameters);
+                                          extend_gap_penalty2, min_wavefront_length, max_distance_threshold, m);
     std::cout << "line 443\t" << thiScore << std::endl;
     std::cout << _alignment_ref2 << std::endl;
     std::cout << _alignment_query << std::endl;
@@ -483,9 +258,6 @@ TEST(MSA, c1) {
     std::cout << thiScore << std::endl;
     ASSERT_EQ(0, 0);
 }
-
-
-
 
 TEST(alignSlidingWindow, c3) {
 
@@ -513,19 +285,16 @@ TEST(alignSlidingWindow, c3) {
     int32_t min_wavefront_length = 10000;
     int32_t max_distance_threshold = 10000;
     Scorei m(matchingScore, mismatchingPenalty);
-    std::map<std::string, std::string> parameters;
     std::cout << "line 325" << std::endl;
     int64_t thiScore = alignSlidingWindow(querySeq, refSeq, _alignment_q, _alignment_d,
                                           slidingWindowSize, wfaSize, matchingScore, mismatchingPenalty,
                                           open_gap_penalty1, extend_gap_penalty1, open_gap_penalty2,
-                                          extend_gap_penalty2, min_wavefront_length, max_distance_threshold, m, parameters);
+                                          extend_gap_penalty2, min_wavefront_length, max_distance_threshold, m);
     std::cout << _alignment_d << std::endl;
     std::cout << _alignment_q << std::endl;
     std::cout << thiScore << std::endl;
     ASSERT_EQ(0, 0);
 }
-
-
 
 void align(const char *tseq, const char *qseq, int sc_mch, int sc_mis, int gapo, int gape, std::string & refSeq, std::string & querySeq) {
     int8_t a = sc_mch, b = sc_mis < 0? sc_mis : -sc_mis; // a>0 and b<0
@@ -613,7 +382,6 @@ void align(const char *tseq, const char *qseq, int sc_mch, int sc_mis, int gapo,
     free(ez.cigar); free(ts); free(qs);
 }
 
-
 TEST(alignSlidingWindow, c4) {
 
     std::string refSeq = "act";
@@ -625,5 +393,3 @@ TEST(alignSlidingWindow, c4) {
     }
     ASSERT_EQ(0, 0);
 }
-
-
