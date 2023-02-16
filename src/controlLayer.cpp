@@ -667,7 +667,6 @@ bool genProVectorFromFile(std::string path_anchors, std::string wholeCommand, st
         }
 
         infile.close();
-
         return true;
     }
 

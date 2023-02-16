@@ -233,7 +233,6 @@ char getCharByPos(std::map<std::string, std::tuple<std::string, long, long, int>
         std::string ret_str = std::string(buf);
 
         char ret_c = char_replace(ret_str[0]);
-//        transform(ret_str.begin(), ret_str.end(), ret_str.begin(), char_replace);
 
         close(fd);
         delete [] buf;

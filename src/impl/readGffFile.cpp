@@ -88,6 +88,10 @@ void readGffFile(const std::string &filePath, std::map <std::string, std::vector
                 size_t p_p_e = info.find(";");
                 info = info.substr(0, p_p_e);
 
+                // process for the type like : chr1	TAIR10	CDS	3760	3913	.	+	0	Parent=AT1G01010.1,AT1G01010.1-Protein;
+                size_t p_p_b_pre = info.find(",");
+                info = info.substr(0, p_p_b_pre);
+
                 if (transcriptHashMap.find(info) != transcriptHashMap.end()) {
                 } else {
                     std::string chromosomeName = std::string(name);
