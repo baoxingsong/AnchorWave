@@ -98,9 +98,9 @@ Different compiling ways generated identical alignments
 ## RAM and wall time cost comparison
 |             | peak memory (Gb) | wall time |
 | ----------- |------------------|-----------| 
-| SSE2        | 20.2             | 26:01:26  |
-| SSE4.1      | 20.1             | 23:17:17  |
-| AVX2        | 20.2             | 20:02:14  |
-| AVX512      | 20.1             | 13:35:58  |
+| SSE2        | 20.1             | 26:47:17  |
+| SSE4.1      | 20.6             | 24:05:07  |
+| AVX2        | 20.1             | 21:40:00  |
+| AVX512      | 20.1             | 18:31:39  |
 
 *the cost comparison was performed for once (did not perform multiple times and calculate the average)
