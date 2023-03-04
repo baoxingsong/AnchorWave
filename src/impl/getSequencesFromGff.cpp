@@ -10,10 +10,17 @@ void getSequences(const std::string &gffFile, const std::string &genomeFile, con
     readFastaFile(genomeFile, genome);
 
     std::map<std::string, std::vector<Transcript> > map_v_ts;
+//    if (exonModel) {
+//        readGffFile(gffFile, map_v_ts, "exon", minExon);
+//    } else {
+//        readGffFile(gffFile, map_v_ts, "CDS", minExon);
+//    }
+    std::string regex = "([\\s\\S]*)Parent=([a-zA-Z0-9.:_-]+)";
     if (exonModel) {
-        readGffFile(gffFile, map_v_ts, "exon", minExon);
-    } else {
-        readGffFile(gffFile, map_v_ts, "CDS", minExon);
+        readGffFile_exon(gffFile, map_v_ts, regex, minExon);
+    }
+    else {
+        readGffFile1(gffFile, map_v_ts, regex, minExon);
     }
 
     std::set<std::string> set_rm_chr;

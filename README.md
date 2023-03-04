@@ -37,7 +37,7 @@ Table of Contents
 ## Installation
 ### Installation from source code
 #### Dependencies
-GNU GCC >=6.0  
+GNU GCC >=7.0  
 Cmake >= 3.0
 [minimap2](https://github.com/lh3/minimap2) or [GMAP](http://research-pub.gene.com/gmap/)  
 Operating System: Linux  

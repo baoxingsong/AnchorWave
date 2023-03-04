@@ -558,12 +558,21 @@ void setupAnchorsWithSpliceAlignmentResult(const std::string &gffFilePath, const
 
     //read genome and gff file begin
     std::map<std::string, std::vector<Transcript> > map_v_ts;
+//    if (exonModel) {
+//        readGffFile(gffFilePath, map_v_ts, "exon", minExon);
+//    }
+//    else {
+//        readGffFile(gffFilePath, map_v_ts, "CDS", minExon);
+//    }
+
+    std::string regex = "([\\s\\S]*)Parent=([a-zA-Z0-9.:_-]+)";
     if (exonModel) {
-        readGffFile(gffFilePath, map_v_ts, "exon", minExon);
+        readGffFile_exon(gffFilePath, map_v_ts, regex, minExon);
     }
     else {
-        readGffFile(gffFilePath, map_v_ts, "CDS", minExon);
+        readGffFile1(gffFilePath, map_v_ts, regex, minExon);
     }
+
 
     std::set<std::string> set_rm_chr;
     for (std::map<std::string, std::vector<Transcript> >::iterator it = map_v_ts.begin(); it != map_v_ts.end(); ++it) {
@@ -1108,10 +1117,18 @@ void setupAnchorsWithSpliceAlignmentResultQuota(const std::string &gffFilePath, 
 
     // read reference genome and gff begin
     std::map<std::string, std::vector<Transcript> > transcriptHashSet;
+//    if (exonModel) {
+//        readGffFile(gffFilePath, transcriptHashSet, "exon", minExon);
+//    } else {
+//        readGffFile(gffFilePath, transcriptHashSet, "CDS", minExon);
+//    }
+
+    std::string regex = "([\\s\\S]*)Parent=([a-zA-Z0-9.:_-]+)";
     if (exonModel) {
-        readGffFile(gffFilePath, transcriptHashSet, "exon", minExon);
-    } else {
-        readGffFile(gffFilePath, transcriptHashSet, "CDS", minExon);
+        readGffFile_exon(gffFilePath, transcriptHashSet, regex, minExon);
+    }
+    else {
+        readGffFile1(gffFilePath, transcriptHashSet, regex, minExon);
     }
 
     // clean reference genome and annotation chromosomes
