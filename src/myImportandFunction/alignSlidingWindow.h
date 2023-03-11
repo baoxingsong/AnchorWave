@@ -5,7 +5,7 @@
 #pragma once
 
 #ifdef __SSE2NEON__
-#include "sse2neon.h"
+#include "../../sse2neon.h"
 #else
 #include <immintrin.h>
 #endif // __SSE2NEON__

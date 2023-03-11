@@ -6,7 +6,7 @@
 #include <string.h>
 #include <assert.h>
 #ifdef __SSE2NEON__
-#include "sse2neon.h"
+#include "../sse2neon.h"
 #else
 #include <immintrin.h>
 #include <x86intrin.h>
