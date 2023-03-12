@@ -38,13 +38,14 @@ Table of Contents
 ### Installation from source code
 #### Dependencies
 GNU GCC >=7.0  
-Cmake >= 3.0
+Cmake >= 3.0  
 [minimap2](https://github.com/lh3/minimap2) or [GMAP](http://research-pub.gene.com/gmap/)  
-Operating System: Linux  
+Operating System: Linux or MAC  
 Memory: > 20 Gb  
-
-If you would like to take the advantage of modern CPU to speed up please refer [the document for advanced installation](./installation.md).
-Or you are using old x86_64 CPUs without SSE4.1 but with SSE2, please also refer [the document for advanced installation](./installation.md).
+ 
+If you would like to take the advantage of modern CPU to speed up please refer [the document for advanced installation](./installation.md).  
+If you are working on a machine with ARM CPU, for example a MAC machine with M1/M2 CPU, please also refer [the document for advanced installation](./installation.md).  
+If you are using old x86_64 CPUs without SSE4.1 but with SSE2, please also refer [the document for advanced installation](./installation.md).
 
 #### Compile
 ```
@@ -54,7 +55,7 @@ cmake ./
 make
 ```
 You will get an executable file named ```anchorwave ```.
-The code has been tested under Ubuntu 20.2 and CentOS 7 with intel/AMD CPU. It should work well on other REDHAT or Debian based Linux Distributions.
+The code has been tested under Ubuntu 20.2 and CentOS 7 with intel/AMD CPU. It should work well on other REDHAT or Debian based Linux Distributions.  
 ### Installation using conda
 ```
 conda install -c bioconda -c conda-forge anchorwave
