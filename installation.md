@@ -120,7 +120,7 @@ Different compiling ways generated identical alignments
 | SSE4.1 | 20.6             | 24:05:07  |
 | AVX2   | 20.1             | 21:40:00  |
 | AVX512 | 20.1             | 18:31:39  |
-| ARM    | 13.6             | 10:49:55  |
+| ARM    | 32.4             | 18:35:42  |
 
 *the cost comparison was performed for once (did not perform multiple times and calculate the average)
 *the test of SSE2, SSE4.1, AVX2 and AVX512 were conduction on a machine with Intel Xeon W-2295 CPU
