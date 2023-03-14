@@ -122,6 +122,6 @@ Different compiling ways generated identical alignments
 | AVX512 | 20.1             | 18:31:39  |
 | ARM    | 34.2             | 18:08:57  |
 
-*the cost comparison was performed for once (did not perform multiple times and calculate the average)
-*the test of SSE2, SSE4.1, AVX2 and AVX512 were conduction on a machine with Intel Xeon W-2295 CPU
+*the cost comparison was performed for once (did not perform multiple times and calculate the average)  
+*the test of SSE2, SSE4.1, AVX2 and AVX512 were conduction on a machine with Intel Xeon W-2295 CPU  
 *the test of ARM was conduction on a MacBook Pro with M2 MAX chip
