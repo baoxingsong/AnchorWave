@@ -34,7 +34,7 @@ void getSequences(const std::string &gffFile, const std::string &genomeFile, con
         map_v_ts.erase(chr);
     }
 
-    std::map<std::string, std::string> map_ts_to_gene; // map: transcript to gene
+    std::map<std::string, std::string> map_ts_to_gene;
     get_map_from_gff(gffFile, map_ts_to_gene);
 
     std::map<std::string, std::string> map_used;
@@ -45,21 +45,27 @@ void getSequences(const std::string &gffFile, const std::string &genomeFile, con
         if (genome.find(it1->first) != genome.end()) {
             for (std::vector<Transcript>::iterator it2 = it1->second.begin(); it2 != it1->second.end(); ++it2) {
                 if (map_ts_to_gene.find((*it2).getName()) != map_ts_to_gene.end()) {
-                    TranscriptUpdateCdsInformation((*it2), genome);
+                    TranscriptUpdateCdsInformation(*it2, genome);
                     std::string seq_cds = (*it2).getCdsSequence();
-                    std::string name_transcript = (*it2).getName();
+                    std::string name_ts = (*it2).getName();
 
                     if (map_used.find(seq_cds) == map_used.end()) {
-                        if (seqToOutPut.find(map_ts_to_gene[(*it2).getName()]) == seqToOutPut.end()) {
-                            seqToOutPut[map_ts_to_gene[(*it2).getName()]] = seq_cds;
+                        if (seqToOutPut.find(map_ts_to_gene[name_ts]) == seqToOutPut.end()) {
+                            seqToOutPut[map_ts_to_gene[name_ts]] = seq_cds;
                         }
-                        else if (seqToOutPut[map_ts_to_gene[(*it2).getName()]].length() < seq_cds.length()) {
-                            seqToOutPut[map_ts_to_gene[(*it2).getName()]] = seq_cds;
+                        else if (seqToOutPut[map_ts_to_gene[name_ts]].length() < seq_cds.length()) {
+                            seqToOutPut[map_ts_to_gene[name_ts]] = seq_cds;
+                        }
+                        else if (seqToOutPut[map_ts_to_gene[name_ts]].length() == seq_cds.length()) {
+                            if(seqToOutPut[map_ts_to_gene[name_ts]] < seq_cds) {
+                                seqToOutPut[map_ts_to_gene[name_ts]] = seq_cds;
+                            }
                         }
 
-                        map_used[seq_cds] = name_transcript;
-                    } else {
-                        geneBlackList.insert(map_ts_to_gene[(*it2).getName()]);
+                        map_used[seq_cds] = name_ts;
+                    }
+                    else {
+                        geneBlackList.insert(map_ts_to_gene[name_ts]);
                         geneBlackList.insert(map_ts_to_gene[map_used[seq_cds]]);
                     }
                 }
