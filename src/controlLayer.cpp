@@ -1027,7 +1027,7 @@ int ali(int argc, char **argv) {
 
     int32_t openGapPenalty2 = -75;
     int32_t extendGapPenalty2 = -1;
-    int64_t windowWidth = 38000;
+    int64_t windowWidth = 100000;
 
     std::stringstream usage;
     usage << "Usage: " << PROGRAMNAME <<
