@@ -4,8 +4,7 @@ The key is setting LD_LIBRARY_PATH and PATH before typing `cmake ./`. The easies
 2) Set `LD_LIBRARY_PATH`, `PATH`, `CC`, and `GCC` to the new gcc.
 3) Re-clone the AnchorWave repository and compile it.
 
-## error message for installation: unrecognized command line option '-std=gnu++14'
-
+## Error message for installation: unrecognized command line option '-std=gnu++14'
 Please check log information from the `cmake ./` command.  
 `-- The C compiler identification is GNU` <span style='color: #FF0000;'>***** </span>   
 `-- The CXX compiler identification is GNU` <span style='color: #FF0000;'>***** </span>
@@ -19,6 +18,12 @@ export CC=/usr/local/gcc-7.3.0/bin/gcc
 export CXX=/usr/local/gcc-7.3.0/bin/g++
 ```
 On a different computer, you need figure out where are those programms located.
+
+## AnchorWave is very slow when using a network storage
+To save memory and increase the number of threads running in parallel, AnchorWave does not catch genome sequences in memory, but read them on demand for a lot of times.
+Please avoid using network storage if it is possible. Or if you have a big memory, you could copy the genome file, especially the query genome file into memory, `/dev/shm` .
+
+
 
 ## Should I perform genome repeat masking before feed into AnchorWave
 Genome masking is not expected to improve the performance of AnchorWave.  
