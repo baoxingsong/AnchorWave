@@ -97,6 +97,7 @@ void readSam(std::vector<AlignmentMatch> &alignmentMatchsMapT, std::ifstream &in
                 int headClipping = 0;
                 int tailClipping = 0;
                 int numberofMatch = 0;
+                std::string qseq;
 
                 for (size_t i = 0; i < cigarElems.size(); ++i) {
                     std::string cVal = cigarElems[i];
@@ -119,9 +120,10 @@ void readSam(std::vector<AlignmentMatch> &alignmentMatchsMapT, std::ifstream &in
                         case 'M':
                             queryEnd += cLen;
                             numberofMatch += cLen;
+                            qseq = getSubsequence2(queryGenome, queryChr, currentqueryPosition, currentqueryPosition + cLen - 1);
 
                             for (int32_t p = 0; p < cLen; p++) {
-                                  if (cdsSequence[currentCDSPosition] == getCharByPos(queryGenome, queryChr, currentqueryPosition) ) {
+                                if (cdsSequence[currentCDSPosition] == qseq[p] ) {
                                     score += matchingScore;
                                 } else {
                                     score += mismatchingPenalty;
