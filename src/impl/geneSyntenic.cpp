@@ -847,14 +847,9 @@ void longestPathQuotaGene(std::vector<AlignmentMatch> pairedSimilarFragments, st
                                     thisScore += scoreArray[jdx];
                                 }
                                 if (distance > 0) {
-                                    if (pairedSimilarFragments[idx].getQueryGeneName().find("localAlignment") != std::string::npos || pairedSimilarFragments[jdx].getQueryGeneName().find("localAlignment") != std::string::npos) {
-                                        thisScore = thisScore + INDEL_SCORE * distance;
-                                    } else {
-                                        thisScore = thisScore + GAP_OPEN_PENALTY + INDEL_SCORE * distance;
-                                    }
+                                    thisScore = thisScore + GAP_OPEN_PENALTY + INDEL_SCORE * distance;
                                 }
 
-                                //                            std::cout << "line 599 thisScore:" << thisScore << " distance:" << distance << " jdx:" << jdx << " idx:" << idx << " thisIndexScore:" << thisIndexScore << " scoreArray[jdx]:" << scoreArray[jdx] << " pairedSimilarFragments[idx].getRefId()" << pairedSimilarFragments[idx].getRefId() << " pairedSimilarFragments[jdx].getRefId():" << pairedSimilarFragments[jdx].getRefId() << std::endl;
                                 if (thisScore > scoreArray[idx] && pairedSimilarFragments[jdx].getQueryId() < pairedSimilarFragments[idx].getQueryId()) {
                                     scoreArray[idx] = thisScore;
                                     prev[idx] = jdx;
