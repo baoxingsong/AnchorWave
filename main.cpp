@@ -59,6 +59,12 @@ int main(int argc, char **argv) {
     else if (program.compare("ali") == 0) {
         return ali(--argc, ++argv);
     }
+    else if (program.compare("geno") == 0) {
+        return geno(--argc, ++argv);
+    }
+    else if (program.compare("pro") == 0) {
+        return pro(--argc, ++argv);
+    }
 
     usage();
 

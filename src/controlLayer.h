@@ -36,3 +36,7 @@ int genomeAlignment(int argc, char **argv);
 int proportionalAlignment(int argc, char **argv);
 
 int ali(int argc, char **argv);
+
+int geno(int argc, char **argv);
+
+int pro(int argc, char **argv);
