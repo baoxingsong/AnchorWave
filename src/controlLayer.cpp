@@ -1671,7 +1671,7 @@ int pro(int argc, char **argv) {
         }
 
         myOrthologPairsSortQuota(alignmentMatchsMapT);
-        longestPathQuotaGene(alignmentMatchsMapT, alignmentMatchsMap, refIndexMap, queryIndexMap, INDEL_SCORE, GAP_OPEN_PENALTY, MIN_ALIGNMENT_SCORE, MAX_DIST_BETWEEN_MATCHES, refMaximumTimes, queryMaximumTimes, calculateIndelDistance, false);
+        longestPathQuotaGene(alignmentMatchsMapT, alignmentMatchsMap, refIndexMap, queryIndexMap, INDEL_SCORE, GAP_OPEN_PENALTY, MIN_ALIGNMENT_SCORE, MAX_DIST_BETWEEN_MATCHES, refMaximumTimes, queryMaximumTimes, calculateIndelDistance);
 
         // output anchors file.
         if (inputParser.cmdOptionExists("-n")) {
