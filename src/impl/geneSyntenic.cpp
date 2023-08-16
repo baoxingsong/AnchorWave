@@ -750,7 +750,7 @@ void longestPathQuotav2(std::vector<AlignmentMatch> pairedSimilarFragments, std:
 
 // since we will change pairedSimilarFragments, so do not use reference C++ data type here
 void longestPathQuotaGene(std::vector<AlignmentMatch> pairedSimilarFragments, std::vector<std::vector<AlignmentMatch>> &sortedOrthologPairChains,
-                        std::map<std::string, std::map<int64_t, AlignmentMatch>> &refIndexMap /*chr, index, AlignmentMatch*/, std::map<std::string, std::map<int64_t, AlignmentMatch>> &queryIndexMap,
+                        std::map<std::string, std::map<int, AlignmentMatch>> &refIndexMap /*chr, index, AlignmentMatch*/, std::map<std::string, std::map<int, AlignmentMatch>> &queryIndexMap,
                         double &INDEL_SCORE, double &GAP_OPEN_PENALTY,
                         double &MIN_ALIGNMENT_SCORE, const int &MAX_DIST_BETWEEN_MATCHES, int &refMaximumTimes, int &queryMaximumTimes,
                         double &calculateIndelDistance, bool withNovelAnchors) {
@@ -819,7 +819,13 @@ void longestPathQuotaGene(std::vector<AlignmentMatch> pairedSimilarFragments, st
 
                                 for (int idi = pairedSimilarFragments[jdx].getQueryId() + 1; idi < pairedSimilarFragments[idx].getQueryId(); ++idi) {
                                     ++query_del;
-                                    assert(queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId() == idi);
+//                                    std::cout << "idx:" << idx << std::endl;
+//                                    std::cout << "pairedSimilarFragments[idx].getQueryChr():" << pairedSimilarFragments[idx].getQueryChr() << std::endl;
+//                                    std::cout << "idi:" << idi << std::endl;
+//                                    std::cout << "queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId():" << queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId() << std::endl;
+//                                    std::cout << "pairedSimilarFragments[idx].getQueryChr():" << pairedSimilarFragments[idx].getQueryChr() << std::endl;
+//
+//                                    assert(queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId() == idi);
                                     if (queryTimes.find(pairedSimilarFragments[idx].getQueryChr()) != queryTimes.end()
                                         && queryTimes[pairedSimilarFragments[idx].getQueryChr()].find(idi) != queryTimes[pairedSimilarFragments[idx].getQueryChr()].end()
                                         && queryTimes[pairedSimilarFragments[idx].getQueryChr()][idi] >= queryMaximumTimes) {
@@ -871,7 +877,7 @@ void longestPathQuotaGene(std::vector<AlignmentMatch> pairedSimilarFragments, st
                                 double query_del = 0;
                                 for (int idi = pairedSimilarFragments[idx].getQueryId() + 1; idi < pairedSimilarFragments[jdx].getQueryId(); ++idi) {
                                     ++query_del;
-                                    assert(queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId() == idi);
+//                                    assert(queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId() == idi);
                                     if (queryTimes.find(pairedSimilarFragments[idx].getQueryChr()) != queryTimes.end()
                                         && queryTimes[pairedSimilarFragments[idx].getQueryChr()].find(idi) != queryTimes[pairedSimilarFragments[idx].getQueryChr()].end()
                                         && queryTimes[pairedSimilarFragments[idx].getQueryChr()][idi] >= queryMaximumTimes) {

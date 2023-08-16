@@ -1571,7 +1571,8 @@ int pro(int argc, char **argv) {
         std::string path_anchors = inputParser.getCmdOption("-n");
 
         std::vector<AlignmentMatch> alignmentMatchsMapT;
-
+//        std::map<std::string, std::map<int, AlignmentMatch>> queryIndexMap; // chr, index, AlignmentMatch
+  //      std::map<std::string, std::map<int, AlignmentMatch>> refIndexMap; // chr, index, AlignmentMatch
         std::ifstream infile(blastpResultFile);
         if (!infile.good()) {
             std::cerr << "error in opening blastpResultFile file:" << blastpResultFile << std::endl;
@@ -1610,18 +1611,41 @@ int pro(int argc, char **argv) {
             orthologPair.setQueryId(queryId);
             orthologPair.setRefId(refId);
             alignmentMatchsMapT.push_back(orthologPair);
+/*
+            if (refIndexMap.find(orthologPair.getRefChr()) == refIndexMap.end()) {
+                refIndexMap[orthologPair.getRefChr()] = std::map<int, AlignmentMatch>();
+            }
+            refIndexMap[orthologPair.getRefChr()][refId] = orthologPair;
+
+
+            if (queryIndexMap.find(orthologPair.getQueryChr()) == queryIndexMap.end()) {
+                queryIndexMap[orthologPair.getQueryChr()] = std::map<int, AlignmentMatch>();
+            }
+            queryIndexMap[orthologPair.getQueryChr()][queryId] = orthologPair;
+
+            assert(queryIndexMap[queryChr][queryId].getQueryId() == queryId);
+*/
+
+//            std::cout << "idx:" << idx << std::endl;
+//            std::cout << "pairedSimilarFragments[idx].getQueryChr():" << pairedSimilarFragments[idx].getQueryChr() << std::endl;
+//            std::cout << "idi:" << idi << std::endl;
+//            std::cout << "queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId():" << queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId() << std::endl;
+//            assert(queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId() == idi);
+
+
+
         }
         infile.close();
         // prepare data in RAM end
 
         // begin setting index, they are necessary in the longest path approach
-        std::map<std::string, int64_t> queryIndex;
-        std::map<std::string, std::map<int64_t, AlignmentMatch>> queryIndexMap; // chr, index, AlignmentMatch
+        std::map<std::string, int> queryIndex;
+        std::map<std::string, std::map<int, AlignmentMatch>> queryIndexMap; // chr, index, AlignmentMatch
         myOrthologPairsSortQueryQuota(alignmentMatchsMapT);
         for (size_t ii = 0; ii < alignmentMatchsMapT.size(); ++ii) {
             if (queryIndex.find(alignmentMatchsMapT[ii].getQueryChr()) == queryIndex.end()) {
                 queryIndex[alignmentMatchsMapT[ii].getQueryChr()] = 0;
-                queryIndexMap[alignmentMatchsMapT[ii].getQueryChr()] = std::map<int64_t, AlignmentMatch>();
+                queryIndexMap[alignmentMatchsMapT[ii].getQueryChr()] = std::map<int, AlignmentMatch>();
             } else {
                 queryIndex[alignmentMatchsMapT[ii].getQueryChr()] = queryIndex[alignmentMatchsMapT[ii].getQueryChr()] + 1;
             }
@@ -1632,12 +1656,12 @@ int pro(int argc, char **argv) {
 
         myOrthologPairsSortQuota(alignmentMatchsMapT);
 
-        std::map<std::string, int64_t> refIndex; // key is chr
-        std::map<std::string, std::map<int64_t, AlignmentMatch>> refIndexMap; // chr, index, AlignmentMatch
+        std::map<std::string, int> refIndex; // key is chr
+        std::map<std::string, std::map<int, AlignmentMatch>> refIndexMap; // chr, index, AlignmentMatch
         for (size_t ii = 0; ii < alignmentMatchsMapT.size(); ++ii) {
             if (refIndex.find(alignmentMatchsMapT[ii].getRefChr()) == refIndex.end()) {
                 refIndex[alignmentMatchsMapT[ii].getRefChr()] = 0;
-                refIndexMap[alignmentMatchsMapT[ii].getRefChr()] = std::map<int64_t, AlignmentMatch>();
+                refIndexMap[alignmentMatchsMapT[ii].getRefChr()] = std::map<int, AlignmentMatch>();
             }
             else {
                 refIndex[alignmentMatchsMapT[ii].getRefChr()] = refIndex[alignmentMatchsMapT[ii].getRefChr()] + 1;
@@ -1646,6 +1670,7 @@ int pro(int argc, char **argv) {
             refIndexMap[alignmentMatchsMapT[ii].getRefChr()][refIndex[alignmentMatchsMapT[ii].getRefChr()]] = alignmentMatchsMapT[ii];
         }
 
+        myOrthologPairsSortQuota(alignmentMatchsMapT);
         longestPathQuotaGene(alignmentMatchsMapT, alignmentMatchsMap, refIndexMap, queryIndexMap, INDEL_SCORE, GAP_OPEN_PENALTY, MIN_ALIGNMENT_SCORE, MAX_DIST_BETWEEN_MATCHES, refMaximumTimes, queryMaximumTimes, calculateIndelDistance, false);
 
         // output anchors file.
