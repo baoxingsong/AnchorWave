@@ -1101,7 +1101,7 @@ int ali(int argc, char **argv) {
     }
 
     std::map<std::string, std::tuple<std::string, long, long, int> > map_qry;
-    readFastaFile(referenceGenomeSequence, map_qry);
+    readFastaFile(targetGenomeSequence, map_qry);
 
     if (map_qry.size() != 1) {
         std::cerr << "There should be one and only one sequence in the query FASTA file" << std::endl;
