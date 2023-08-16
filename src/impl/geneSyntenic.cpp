@@ -780,7 +780,6 @@ void longestPathQuotaGene(std::vector<AlignmentMatch> pairedSimilarFragments, st
     do {
         done = true;
         n = pairedSimilarFragments.size();
-//        std::cout << "line 322" << std::endl;
 
         for (int idx = 0; idx < n; ++idx) {
             if ( untouchedRefChrs.find(pairedSimilarFragments[idx].getRefChr() ) != untouchedRefChrs.end() || untouchedQeuryChrs.find(pairedSimilarFragments[idx].getQueryChr() ) != untouchedQeuryChrs.end() ) {
