@@ -42,6 +42,7 @@ void readFastaFile(const std::string &filePath, std::map<std::string, std::tuple
             }
 
             size = 0;
+            line_bases = 0;
             offset += line.size() + 1;
         } else {
             size += line.size();
