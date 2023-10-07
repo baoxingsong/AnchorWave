@@ -385,5 +385,9 @@ This work is funded by NSF [#1822330](https://nsf.gov/awardsearch/showAward?AWD_
 AnchorWave: Sensitive alignment of genomes with high sequence diversity, extensive structural polymorphism, and whole-genome duplication.
 Proceedings of the National Academy of Sciences Jan 2022, 119 (1) e2113075119; DOI: 10.1073/pnas.2113075119](https://www.pnas.org/content/119/1/e2113075119)
 
+[Shuai Wang, Qinlin Xu, Baoxing Song.
+Applying AnchorWave to Address Plant Genome Alignment.
+Bio-protocol Oct 2023; DOI: 10.21769/BioProtoc.4830](https://bio-protocol.org/exchange/protocoldetail?id=4830&type=1)
+
 [license]: ./LICENSE
 [license-badge]: https://img.shields.io/badge/license-MIT-blue.svg
