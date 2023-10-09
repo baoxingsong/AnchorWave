@@ -67,7 +67,7 @@ void readSam(std::vector<AlignmentMatch> &alignmentMatchsMapT, std::ifstream &in
             }
         }
 
-        if (line[0] != '@') { //ignore the header
+        if (line.size()>1 && line[0] != '@') { //ignore the header
 //            elems.clear();
             std::vector<std::string> elems;
             split(line, delim, elems);
@@ -350,7 +350,7 @@ void readSam(std::vector<AlignmentMatch> &alignmentMatchsMapT, std::ifstream &in
             }
         }
 
-        if (line[0] != '@') { //ignore the header
+        if (line.size()>1 && line[0] != '@') { //ignore the header
             elems.clear();
             split(line, delim, elems);
             queryStart = stoi(elems[3]);
