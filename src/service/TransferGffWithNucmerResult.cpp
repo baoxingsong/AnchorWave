@@ -605,14 +605,13 @@ void setupAnchorsWithSpliceAlignmentResult(const std::string &gffFilePath, const
     }
 
     for (std::string chr: set_rm_chr) {
+        std::cerr << "There is not enough anchors found on " << chr << std::endl;
         if (map_v_ts.find(chr) != map_v_ts.end()) {
             map_v_ts.erase(chr);
         }
-
         if (map_ref.find(chr) != map_ref.end()) {
             map_ref.erase(chr);
         }
-
         if (map_qry.find(chr) != map_qry.end()) {
             map_qry.erase(chr);
         }
@@ -707,7 +706,17 @@ void setupAnchorsWithSpliceAlignmentResult(const std::string &gffFilePath, const
     }
 
     bool keepTandemDuplication = false;
+    for (std::map<std::string, std::tuple<std::string, long, long, int> >::iterator it = map_ref.begin(); it != map_ref.end(); ++it) {
+        if ( alignmentMatchsMapT.find( it->first ) == alignmentMatchsMapT.end() ){
+            std::cerr << "There is not enough anchors found on " << it->first << std::endl;
+        }
+    }
     for (std::map<std::string, std::vector<AlignmentMatch>>::iterator it = alignmentMatchsMapT.begin(); it != alignmentMatchsMapT.end(); ++it) {
+        if (it->second.size() < 3) {
+            std::cerr << "There is not enough anchors found on " << it->first << std::endl;
+            continue;
+        }
+
         std::vector<AlignmentMatch> temp;
 
         myAlignmentMatchSort(it->second, inversion_PENALTY, MIN_ALIGNMENT_SCORE, keepTandemDuplication, considerInversion);
