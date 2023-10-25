@@ -12,9 +12,61 @@ set(CMAKE_CXX_STANDARD 14)
 
 find_package(ZLIB)
 
-set(CMAKE_CXX_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -msse4.1 -msse4.2 -I ./ -std=gnu++14 -pthread -lrt") # the -mavx* is for GNU compiler and xCORE* are for intel compiler
-set(CMAKE_C_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -msse4.1 -msse4.2 -I ./ -pthread -lrt")
+set(CMAKE_CXX_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -I ./ -std=gnu++14 -pthread -lrt") # the -mavx* is for GNU compiler and xCORE* are for intel compiler
+set(CMAKE_C_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -I ./ -pthread -lrt")
 
+include(CheckCCompilerFlag)
+include(CheckCXXCompilerFlag)
+
+check_c_compiler_flag(-msse COMPILER_CAN_HANDLE_SSE)
+check_c_compiler_flag(-msse2 COMPILER_CAN_HANDLE_SSE2)
+check_c_compiler_flag(-msse4.1 COMPILER_CAN_HANDLE_SSE4_1)
+check_c_compiler_flag(-msse4.2 COMPILER_CAN_HANDLE_SSE4_2)
+check_c_compiler_flag(-mavx COMPILER_CAN_HANDLE_AVX)
+check_c_compiler_flag(-mavx2 COMPILER_CAN_HANDLE_AVX2)
+check_c_compiler_flag(-mavx512 COMPILER_CAN_HANDLE_AVX512)
+
+if (COMPILER_CAN_HANDLE_AVX512)
+    message(STATUS "Support AVX512: True")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mavx512bw -mavx512cd -mavx512vl -mavx512f -mavx512dq")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx512bw -mavx512cd -mavx512vl -mavx512f -mavx512dq")
+endif()
+
+if (COMPILER_CAN_HANDLE_AVX2)
+    message(STATUS "Support AVX2: True")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mavx2")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")
+endif()
+
+if (COMPILER_CAN_HANDLE_AVX)
+    message(STATUS "Support AVX: True")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mavx")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx")
+endif()
+
+if (COMPILER_CAN_HANDLE_SSE4_2)
+    message(STATUS "Support SSE4_2: True")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse4.2")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse4.2")
+endif()
+
+if (COMPILER_CAN_HANDLE_SSE4_1)
+    message(STATUS "Support SSE4_1: True")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse4.1")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse4.1")
+endif()
+
+if (COMPILER_CAN_HANDLE_SSE2)
+    message(STATUS "Support SSE2: True")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse2")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse2")
+endif()
+
+if (COMPILER_CAN_HANDLE_SSE)
+    message(STATUS "Support SSE: True")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse")
+endif()
 
 #for google unit test
 add_subdirectory(./googletest/googletest)
