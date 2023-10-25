@@ -24,7 +24,7 @@ check_c_compiler_flag(-msse4.1 COMPILER_CAN_HANDLE_SSE4_1)
 check_c_compiler_flag(-msse4.2 COMPILER_CAN_HANDLE_SSE4_2)
 check_c_compiler_flag(-mavx COMPILER_CAN_HANDLE_AVX)
 check_c_compiler_flag(-mavx2 COMPILER_CAN_HANDLE_AVX2)
-check_c_compiler_flag(-mavx512 COMPILER_CAN_HANDLE_AVX512)
+check_c_compiler_flag(-mavx512f COMPILER_CAN_HANDLE_AVX512)
 
 if (COMPILER_CAN_HANDLE_AVX512)
     message(STATUS "Support AVX512: True")
