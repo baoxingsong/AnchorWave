@@ -1,7 +1,9 @@
 cmake_minimum_required(VERSION 3.0)
 project(anchorwave-MSA)
 
+include(CheckCCompilerFlag)
 #include(CheckCXXCompilerFlag)
+
 set(CMAKE_CXX_STANDARD 14)
 #
 #if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
@@ -14,9 +16,6 @@ find_package(ZLIB)
 
 set(CMAKE_CXX_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -I ./ -std=gnu++14 -pthread -lrt") # the -mavx* is for GNU compiler and xCORE* are for intel compiler
 set(CMAKE_C_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -I ./ -pthread -lrt")
-
-include(CheckCCompilerFlag)
-include(CheckCXXCompilerFlag)
 
 check_c_compiler_flag(-msse COMPILER_CAN_HANDLE_SSE)
 check_c_compiler_flag(-msse2 COMPILER_CAN_HANDLE_SSE2)
@@ -68,10 +67,14 @@ if (COMPILER_CAN_HANDLE_SSE)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse")
 endif()
 
+if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "aarch64")
+    add_definitions(-D__SSE2__ -D__SSE2NEON__)
+    include_directories(src minimap2/sse2neon)
+endif()
+
 #for google unit test
 add_subdirectory(./googletest/googletest)
 include_directories(googletest/googletest/include googletest/googletest)
-
 
 add_executable(anchorwave
         googletest
