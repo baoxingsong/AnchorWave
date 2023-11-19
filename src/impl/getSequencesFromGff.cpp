@@ -73,13 +73,20 @@ void getSequences(const std::string &gffFile, const std::string &genomeFile, con
         }
     }
 
+    int64_t sequenceCount = 0;
     std::ofstream oCfile;
     oCfile.open(outputCdsSequences);
     for (std::map<std::string, std::string>::iterator it = seqToOutPut.begin(); it != seqToOutPut.end(); ++it) {
         if (geneBlackList.find(it->first) == geneBlackList.end()) {
             oCfile << ">" << map_used[it->second] << " " << it->first << std::endl;
             oCfile << it->second << std::endl; // does it work?
+            ++sequenceCount;
         }
     }
     oCfile.close();
+    if ( sequenceCount == 0 ){
+        std::cerr << "AnchorWave could not parse the input annotation file in GFF(3) format or genome sequence file in FASTA format."
+        << std::endl << "Please refer: https://github.com/baoxingsong/AnchorWave/issues/39#issuecomment-1274237960" << std::endl <<
+        "OR:           https://github.com/baoxingsong/AnchorWave/issues/36#issuecomment-1785325233" << std::endl;
+    }
 }
