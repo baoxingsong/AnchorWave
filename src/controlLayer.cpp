@@ -31,6 +31,7 @@ int gff2seq(int argc, char **argv) {
     InputParser inputParser(argc, argv);
     if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help") || !inputParser.cmdOptionExists("-i") || !inputParser.cmdOptionExists("-r") || !inputParser.cmdOptionExists("-o")) {
         std::cerr << usage.str();
+        return 1;
     }
 
     std::string inputGffFile = inputParser.getCmdOption("-i");
@@ -266,6 +267,7 @@ int genomeAlignment(int argc, char **argv) {
 
     if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help")) {
         std::cerr << usage.str();
+        return 1;
     }
     else if (inputParser.cmdOptionExists("-i") && inputParser.cmdOptionExists("-r") &&
                inputParser.cmdOptionExists("-a") && inputParser.cmdOptionExists("-s") && inputParser.cmdOptionExists("-as") &&
@@ -537,6 +539,7 @@ int genomeAlignment(int argc, char **argv) {
     }
     else {
         std::cerr << usage.str();
+        return 1;
     }
 
     return 0;
@@ -751,6 +754,7 @@ int proportionalAlignment(int argc, char **argv) {
     InputParser inputParser(argc, argv);
     if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help")) {
         std::cerr << usage.str();
+        return 1;
     } else if (inputParser.cmdOptionExists("-i") && inputParser.cmdOptionExists("-r") &&
                inputParser.cmdOptionExists("-a") && inputParser.cmdOptionExists("-s") && inputParser.cmdOptionExists("-as")
                && (inputParser.cmdOptionExists("-n") || inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-o") ) ) {
@@ -1013,6 +1017,7 @@ int proportionalAlignment(int argc, char **argv) {
     }
     else {
         std::cerr << usage.str();
+        return 1;
     }
 
     return 0;
@@ -1046,6 +1051,7 @@ int ali(int argc, char **argv) {
     InputParser inputParser(argc, argv);
     if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help") || !inputParser.cmdOptionExists("-r") || !inputParser.cmdOptionExists("-s")) {
         std::cerr << usage.str();
+        return 1;
     }
 
     std::string referenceGenomeSequence = inputParser.getCmdOption("-r");
@@ -1511,6 +1517,7 @@ int pro(int argc, char **argv) {
     InputParser inputParser(argc, argv);
     if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help")) {
         std::cerr << usage.str();
+        return 1;
     } else if ( inputParser.cmdOptionExists("-i") && inputParser.cmdOptionExists("-n") ) {
 
         std::string blastpResultFile = inputParser.getCmdOption("-i");
@@ -1731,6 +1738,7 @@ int pro(int argc, char **argv) {
     }
     else {
         std::cerr << usage.str();
+        return 1;
     }
     return 0;
 }
