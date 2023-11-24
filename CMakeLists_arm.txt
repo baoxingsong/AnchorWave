@@ -27,7 +27,7 @@ include_directories(googletest/googletest/include googletest/googletest)
 add_executable(anchorwave
         googletest
         googletest/googletest
-
+        sse2neon.h
         main.cpp
 
         src/controlLayer.cpp

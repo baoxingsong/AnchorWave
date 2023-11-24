@@ -157,10 +157,12 @@ else()
     set(CMAKE_CXX_FLAGS "${CUSTOM_FLAGS_CXX}")
 endif()
 
-
-if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "aarch64")
+EXECUTE_PROCESS( COMMAND uname -m COMMAND tr -d '\n' OUTPUT_VARIABLE ARCHITECTURE )
+if(${ARCHITECTURE} STREQUAL "arm64")
     add_definitions(-D__SSE2__ -D__SSE2NEON__)
     include_directories(src minimap2/sse2neon)
+    set(CMAKE_CXX_FLAGS " -Wall -g3 -O3 -I ./ -std=gnu++14 -pthread") # the -mavx* is for GNU compiler and xCORE* are for intel compiler
+    set(CMAKE_C_FLAGS " -Wall -g3 -O3 -I ./ -pthread")
 endif()
 
 message(STATUS "${CMAKE_C_FLAGS}")
@@ -172,7 +174,7 @@ include_directories(googletest/googletest/include googletest/googletest)
 add_executable(anchorwave
         googletest
         googletest/googletest
-
+        sse2neon.h
         main.cpp
 
         src/controlLayer.cpp
