@@ -32,27 +32,30 @@ int gff2seq(int argc, char **argv) {
     if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help") || !inputParser.cmdOptionExists("-i") || !inputParser.cmdOptionExists("-r") || !inputParser.cmdOptionExists("-o")) {
         std::cerr << usage.str();
         return 1;
+    } else if (inputParser.cmdOptionExists("-i") && inputParser.cmdOptionExists("-r") && inputParser.cmdOptionExists("-o") ) {
+
+        std::string inputGffFile = inputParser.getCmdOption("-i");
+        std::string genome = inputParser.getCmdOption("-r");
+        std::string outputCdsSequences = inputParser.getCmdOption("-o");
+
+        int minExon;
+        if (inputParser.cmdOptionExists("-m")) {
+            minExon = std::stoi(inputParser.getCmdOption("-m"));
+        } else {
+            minExon = 20;
+        }
+
+        bool exonModel = false;
+        if (inputParser.cmdOptionExists("-x")) {
+            exonModel = true;
+        }
+        getSequences(inputGffFile, genome, outputCdsSequences, minExon, exonModel);
+
+        return 0;
+    }else{
+        std::cerr << usage.str();
+        return 1;
     }
-
-    std::string inputGffFile = inputParser.getCmdOption("-i");
-    std::string genome = inputParser.getCmdOption("-r");
-    std::string outputCdsSequences = inputParser.getCmdOption("-o");
-
-    int minExon;
-    if (inputParser.cmdOptionExists("-m")) {
-        minExon = std::stoi(inputParser.getCmdOption("-m"));
-    } else {
-        minExon = 20;
-    }
-
-    bool exonModel = false;
-    if (inputParser.cmdOptionExists("-x")) {
-        exonModel = true;
-    }
-
-    getSequences(inputGffFile, genome, outputCdsSequences, minExon, exonModel);
-
-    return 0;
 }
 
 // generate alignmentMatchsMap for genomeAlignment from anchors file.
