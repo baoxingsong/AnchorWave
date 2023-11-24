@@ -163,6 +163,9 @@ if(${ARCHITECTURE} STREQUAL "arm64")
     include_directories(src minimap2/sse2neon)
     set(CMAKE_CXX_FLAGS " -Wall -g3 -O3 -I ./ -std=gnu++14 -pthread") # the -mavx* is for GNU compiler and xCORE* are for intel compiler
     set(CMAKE_C_FLAGS " -Wall -g3 -O3 -I ./ -pthread")
+elseif (${ARCHITECTURE} STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    set(CMAKE_CXX_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -msse4.1 -msse4.2 -I ./ -std=gnu++14 -pthread") # the -mavx* is for GNU compiler and xCORE* are for intel compiler
+    set(CMAKE_C_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -msse4.1 -msse4.2 -I ./ -pthread")
 endif()
 
 message(STATUS "${CMAKE_C_FLAGS}")
