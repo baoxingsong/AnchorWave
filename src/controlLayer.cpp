@@ -1765,8 +1765,8 @@ int pro(int argc, char **argv) {
                     plus_minus = "POSITIVE";
                 }
                 offile << "##Alignment" << "\t" << blockIndex << "\t" << "N=" << v_am.size() << "\t"
-                       << "score=" << block_score[blockIndex - 1] << "\t" << v_am[0].getQueryChr() << "&" <<
-                       v_am[0].getRefChr() << "\t" << plus_minus << std::endl;
+                       << "score=" << block_score[blockIndex - 1] << "\t" << v_am[0].getRefChr() << "&" <<
+                       v_am[0].getQueryChr() << "\t" << plus_minus << std::endl;
                 blockIndex++;
 
                 for (const auto &i: v_am) {
