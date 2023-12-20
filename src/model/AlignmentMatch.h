@@ -17,7 +17,7 @@ private:
     uint32_t queryStartPos; // start position of assembly/query
     uint32_t queryEndPos; // end position of assembly/query
     double score; // alignment score using as graph edge
-    STRAND strand; // positive means same strand and positive means different strand
+    STRAND strand; // positive means same strand and negative means different strand
     int refId;
     int queryId;
     std::string referenceGeneName;
