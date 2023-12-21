@@ -20,6 +20,12 @@ void myOrthologPairsSortQueryQuota(std::vector<AlignmentMatch> &pairedSimilarFra
 
 void myOrthologPairsSortQuota(std::vector<AlignmentMatch> &pairedSimilarFragments);
 
+void orthologPairSortQuery(std::vector<AlignmentMatch> &pairedSimilarFragments); // for delete tandem
+
+void orthologPairSortReference(std::vector<AlignmentMatch> &pairedSimilarFragments); // for delete tandem
+
+void orthologPairSortPosition(std::vector<AlignmentMatch> &pairedSimilarFragments);
+
 void longestPathQuotav2(std::vector<AlignmentMatch> pairedSimilarFragments, std::vector<std::vector<AlignmentMatch>> &sortedOrthologPairChains,
                         std::map<std::string, std::map<int64_t, AlignmentMatch>> &refIndexMap, std::map<std::string, std::map<int64_t, AlignmentMatch>> &queryIndexMap,
                         double &INDEL_SCORE, double &GAP_OPEN_PENALTY,
@@ -27,8 +33,8 @@ void longestPathQuotav2(std::vector<AlignmentMatch> pairedSimilarFragments, std:
                         double &calculateIndelDistance, bool withNovelAnchors);
 
 void longestPathQuotaGene(std::vector<AlignmentMatch> pairedSimilarFragments, std::vector<std::vector<AlignmentMatch>> &sortedOrthologPairChains,
-                          std::map<std::string, std::map<int, AlignmentMatch>> &refIndexMap /*chr, index, AlignmentMatch*/, std::map<std::string, std::map<int, AlignmentMatch>> &queryIndexMap,
-                          double &INDEL_SCORE, double &GAP_OPEN_PENALTY,
-                          double &MIN_ALIGNMENT_SCORE, const int &MAX_DIST_BETWEEN_MATCHES, int &refMaximumTimes, int &queryMaximumTimes,
-                          double &calculateIndelDistance);
-
+                          std::map<std::string, std::map<int, std::string>> &refIndexMap /*chr, index, refGeneName*/, std::map<std::string, std::map<int, std::string>> &queryIndexMap,
+                          double &GAP_EXTENSION_PENALTY, double &GAP_OPEN_PENALTY,
+                          double &MIN_ALIGNMENT_SCORE, const int &MAX_DIST_BETWEEN_MATCHES,
+                          int &refMaximumTimes, int &queryMaximumTimes,
+                          std::vector<double> &block_score);
