@@ -232,9 +232,10 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
 
                 if (outPutFraged) {
                     g_num_mutex.lock();
+                    int64_t negative_startQuery = size_targetSequence - querySeq.size() - (startQuery-1);
                     ofragfile << "a\tscore=" << thiScore << std::endl
                               << "s\t" << std::left << std::setw(chrWidth) << refChr << "\t" << std::right << std::setw(9) << startRef - 1 << "\t" << std::setw(9) << 0 << "\t+\t" << size_refSequence << "\t" << _alignment_d << std::endl
-                              << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << startQuery - 1 << "\t" << std::setw(9) << querySeq.size() << "\t-\t" << size_targetSequence << "\t" << _alignment_q << std::endl
+                              << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << negative_startQuery << "\t" << std::setw(9) << querySeq.size() << "\t-\t" << size_targetSequence << "\t" << _alignment_q << std::endl
                               << std::endl;
                     g_num_mutex.unlock();
                 }
@@ -254,10 +255,11 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
                 alignmentScore += thiScore;
 
                 if (outPutFraged) {
+                    int64_t negative_startQuery = size_targetSequence -0 - (startQuery-1);
                     g_num_mutex.lock();
                     ofragfile << "a\tscore=" << thiScore << std::endl
                               << "s\t" << std::left << std::setw(chrWidth) << refChr << "\t" << std::right << std::setw(9) << startRef - 1 << "\t" << std::setw(9) << refSeq.size() << "\t+\t" << size_refSequence << "\t" << _alignment_d << std::endl
-                              << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << startQuery - 1 << "\t" << std::setw(9) << 0 << "\t-\t" << size_targetSequence << "\t" << _alignment_q << std::endl
+                              << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << negative_startQuery << "\t" << std::setw(9) << 0 << "\t-\t" << size_targetSequence << "\t" << _alignment_q << std::endl
                               << std::endl;
                     g_num_mutex.unlock();
                 }
@@ -297,10 +299,11 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
                     queryAlign << _alignment_q;
 
                     if (outPutFraged) {
+                        int64_t negative_startQuery = size_targetSequence - querySeq.size() - (startQuery-1);
                         g_num_mutex.lock();
                         ofragfile << "a\tscore=" << thiScore << std::endl
                                   << "s\t" << std::left << std::setw(chrWidth) << refChr << "\t" << std::right << std::setw(9) << startRef - 1 << "\t" << std::setw(9) << refSeq.size() << "\t+\t" << size_refSequence << "\t" << _alignment_d << std::endl
-                                  << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << startQuery - 1 << "\t" << std::setw(9) << querySeq.size() << "\t-\t" << size_targetSequence << "\t" << _alignment_q
+                                  << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << negative_startQuery << "\t" << std::setw(9) << querySeq.size() << "\t-\t" << size_targetSequence << "\t" << _alignment_q
                                   << std::endl
                                   << std::endl;
                         g_num_mutex.unlock();
@@ -346,9 +349,10 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
 
                     if (outPutFraged) {
                         g_num_mutex.lock();
+                        int64_t negative_startQuery = size_targetSequence - querySeq.size() - (startQuery-1);
                         ofragfile << "a\tscore=" << thiScore << std::endl
                                   << "s\t" << std::left << std::setw(chrWidth) << refChr << "\t" << std::right << std::setw(9) << startRef - 1 << "\t" << std::setw(9) << refSeq.size() << "\t+\t" << size_refSequence << "\t" << _alignment_d << std::endl
-                                  << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << startQuery - 1 << "\t" << std::setw(9) << querySeq.size() << "\t-\t" << size_targetSequence << "\t" << _alignment_q << std::endl
+                                  << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << negative_startQuery << "\t" << std::setw(9) << querySeq.size() << "\t-\t" << size_targetSequence << "\t" << _alignment_q << std::endl
                                   << std::endl;
                         g_num_mutex.unlock();
                     }
@@ -370,11 +374,12 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
             assert(temp.compare(queryGenomerSequence) == 0);
             //}
             if (outPutMaf) {
+                int64_t negative_startQuery = size_targetSequence - queryGenomerSequence.size() - (alignmentMatchs[alignmentMatchs.size() - 1].getQueryStartPos() - 1);
                 g_num_mutex.lock();
                 omaffile << "a\tscore=" << alignmentScore << std::endl
                          << "s\t" << std::left << std::setw(chrWidth) << refChr << "\t" << std::right << std::setw(9) << alignmentMatchs[0].getRefStartPos() - 1 << "\t" << std::setw(9) << refGenomerSequence.size() << "\t+\t" << size_refSequence << "\t"
                          << refAlign.str() << std::endl
-                         << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << alignmentMatchs[alignmentMatchs.size() - 1].getQueryStartPos() - 1 << "\t" << std::setw(9) << queryGenomerSequence.size()
+                         << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << negative_startQuery << "\t" << std::setw(9) << queryGenomerSequence.size()
                          << "\t-\t" << size_targetSequence << "\t" << queryAlign.str() << std::endl
                          << std::endl;
                 g_num_mutex.unlock();
@@ -650,10 +655,11 @@ void genomeAlignmentAndVariantCallingSingleThread(
                 alignmentScore += thiScore;
 
                 if (outPutFraged) {
+                    int64_t negative_startQuery = size_target_sq - seq_qry.size() - (startQuery-1);
                     g_num_mutex.lock();
                     ofragfile << "a\tscore=" << thiScore << std::endl
                               << "s\t" << std::left << std::setw(chrWidth) << refChr << "\t" << std::right << std::setw(9) << startRef - 1 << "\t" << std::setw(9) << 0 << "\t+\t" << size_ref_sq << "\t" << _alignment_d << std::endl
-                              << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << startQuery - 1 << "\t" << std::setw(9) << seq_qry.size() << "\t-\t" << size_target_sq << "\t" << _alignment_q << std::endl
+                              << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << negative_startQuery << "\t" << std::setw(9) << seq_qry.size() << "\t-\t" << size_target_sq << "\t" << _alignment_q << std::endl
                               << std::endl;
                     g_num_mutex.unlock();
                 }
@@ -678,9 +684,10 @@ void genomeAlignmentAndVariantCallingSingleThread(
 
                 if (outPutFraged) {
                     g_num_mutex.lock();
+                    int64_t negative_startQuery = size_target_sq - 0 - (startQuery-1);
                     ofragfile << "a\tscore=" << thiScore << std::endl
                               << "s\t" << std::left << std::setw(chrWidth) << refChr << "\t" << std::right << std::setw(9) << startRef - 1 << "\t" << std::setw(9) << seq_ref.size() << "\t+\t" << size_ref_sq << "\t" << _alignment_d << std::endl
-                              << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << startQuery - 1 << "\t" << std::setw(9) << 0 << "\t-\t" << size_target_sq << "\t" << _alignment_q << std::endl
+                              << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << negative_startQuery << "\t" << std::setw(9) << 0 << "\t-\t" << size_target_sq << "\t" << _alignment_q << std::endl
                               << std::endl;
                     g_num_mutex.unlock();
                 }
@@ -724,10 +731,11 @@ void genomeAlignmentAndVariantCallingSingleThread(
                 }
 
                 if (outPutFraged) {
+                    int64_t negative_startQuery = size_target_sq - seq_qry.size() - (endQuery-1);
                     g_num_mutex.lock();
                     ofragfile << "a\tscore=" << thiScore << std::endl
                               << "s\t" << std::left << std::setw(chrWidth) << refChr << "\t" << std::right << std::setw(9) << startRef - 1 << "\t" << std::setw(9) << seq_ref.size() << "\t+\t" << size_ref_sq << "\t" << _alignment_d << std::endl
-                              << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << endQuery - 1 << "\t" << std::setw(9) << seq_qry.size() << "\t-\t" << size_target_sq << "\t" << _alignment_q << std::endl
+                              << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << negative_startQuery << "\t" << std::setw(9) << seq_qry.size() << "\t-\t" << size_target_sq << "\t" << _alignment_q << std::endl
                               << std::endl;
                     g_num_mutex.unlock();
                 }
