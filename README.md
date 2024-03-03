@@ -359,9 +359,9 @@ cat anchorwave.sam | samtools view -O BAM --reference Zea_mays.AGPv4.dna.topleve
 samtools index anchorwave.bam
 ```
 If you would like to swap reference and query sequence, there is no need to re-run AnchorWave, which is computational cost.  
-The script ```anchorwave-maf-swap.py``` under folder ```scripts``` has been implemented for this aim:
+The script  [maf-swap](https://gitlab.com/mcfrith/last/-/blob/main/bin/maf-swap)  could be used for this aim:
 ```
-cat anchorwave.maf | python2 anchorwave-maf-swap.py >anchorwave_swap.maf
+cat anchorwave.maf | python2 maf-convert >anchorwave_swap.maf
 maf-convert sam anchorwave_swap.maf | sed 's/[0-9]\+H//g' > anchorwave_swap.sam
 samtools view -O BAM --reference Zm-Mo17-REFERENCE-CAU-1.0.fa anchorwave_swap.sam | samtools sort - > anchorwave_swap.bam
 ```

@@ -766,10 +766,15 @@ void genomeAlignmentAndVariantCallingSingleThread(
                     tm = mafQueryStart;
                 }
 
+                int32_t this_tm = tm;
+                if (mafStrand == "-") {
+                    this_tm = size_target_sq - temp2.size() - tm;
+                }
+
                 g_num_mutex.lock();
                 omaffile << "a\tscore=" << alignmentScore << std::endl
                          << "s\t" << std::left << std::setw(chrWidth) << refChr << "\t" << std::right << std::setw(9) << mafRefStart << "\t" << std::setw(9) << temp1.size() << "\t+\t" << size_ref_sq << "\t" << refAlign.str() << std::endl
-                         << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << tm << "\t" << std::setw(9) << temp2.size() << "\t" << mafStrand << "\t" << size_target_sq << "\t" << queryAlign.str() << std::endl
+                         << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << this_tm << "\t" << std::setw(9) << temp2.size() << "\t" << mafStrand << "\t" << size_target_sq << "\t" << queryAlign.str() << std::endl
                          << std::endl;
                 g_num_mutex.unlock();
             }
@@ -830,10 +835,14 @@ void genomeAlignmentAndVariantCallingSingleThread(
             }
 
             if (outPutFraged) {
+                int64_t this_startQuery = (startQuery-1);
+                if( mafStrand == "-"){
+                    this_startQuery = size_target_sq - seq_qry.size() - (startQuery-1);
+                }
                 g_num_mutex.lock();
                 ofragfile << "a\tscore=" << thiScore << std::endl
                           << "s\t" << std::left << std::setw(chrWidth) << refChr << "\t" << std::right << std::setw(9) << startRef - 1 << "\t" << std::setw(9) << seq_ref.size() << "\t+\t" << size_ref_sq << "\t" << _alignment_d << std::endl
-                          << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << startQuery - 1 << "\t" << std::setw(9) << seq_qry.size() << "\t" << mafStrand << "\t" << size_target_sq << "\t" << _alignment_q << std::endl
+                          << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << this_startQuery << "\t" << std::setw(9) << seq_qry.size() << "\t" << mafStrand << "\t" << size_target_sq << "\t" << _alignment_q << std::endl
                           << std::endl;
                 g_num_mutex.unlock();
             }
@@ -989,11 +998,14 @@ void genomeAlignmentAndVariantCallingSingleThread(
         if (lastStrand == POSITIVE) {
             tm = mafQueryStart;
         }
-
+        int32_t this_tm = tm;
+        if (mafStrand == "-") {
+            this_tm = size_target_sq - temp2.size() - tm;
+        }
         g_num_mutex.lock();
         omaffile << "a\tscore=" << alignmentScore << std::endl
                  << "s\t" << std::left << std::setw(chrWidth) << refChr << "\t" << std::right << std::setw(9) << mafRefStart << "\t" << std::setw(9) << temp1.size() << "\t+\t" << size_ref_sq << "\t" << refAlign.str() << std::endl
-                 << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << tm << "\t" << std::setw(9) << temp2.size() << "\t" + mafStrand + "\t" << size_target_sq << "\t" << queryAlign.str() << std::endl
+                 << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << this_tm << "\t" << std::setw(9) << temp2.size() << "\t" + mafStrand + "\t" << size_target_sq << "\t" << queryAlign.str() << std::endl
                  << std::endl;
         g_num_mutex.unlock();
     }
