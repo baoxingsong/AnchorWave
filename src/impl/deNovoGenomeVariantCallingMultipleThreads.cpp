@@ -441,12 +441,12 @@ void genomeAlignment(std::vector<std::vector<AlignmentMatch>> &alignmentMatchsMa
 
     if (outPutMaf) {
         omaffile.open(outPutMafFile);
-        omaffile << "##maf version=1" << std::endl;
+//        omaffile << "##maf version=1" << std::endl;
     }
 
     if (outPutFraged) {
         ofragfile.open(outPutFragedFile);
-        ofragfile << "##maf version=1" << std::endl;
+//        ofragfile << "##maf version=1" << std::endl;
     }
 
     int32_t size = alignmentMatchsMap.size();
@@ -1067,7 +1067,7 @@ void genomeAlignmentAndVariantCalling(std::map<std::string, std::vector<Alignmen
     std::ofstream ofragfile;
     if (outPutMaf) {
         omaffile.open(outPutMafFile);
-        omaffile << "##maf version=1" << std::endl;
+//        omaffile << "##maf version=1" << std::endl;
     }
 
     time_t now = time(0);
@@ -1081,7 +1081,7 @@ void genomeAlignmentAndVariantCalling(std::map<std::string, std::vector<Alignmen
 
     if (outPutFraged) {
         ofragfile.open(outPutFragedFile);
-        ofragfile << "##maf version=1" << std::endl;
+//        ofragfile << "##maf version=1" << std::endl;
     }
 
     std::atomic_int num_runing_threads(0);
