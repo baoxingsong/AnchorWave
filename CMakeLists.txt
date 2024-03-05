@@ -1,9 +1,7 @@
 cmake_minimum_required(VERSION 3.0)
 project(anchorwave)
 
-#include(CheckCCompilerFlag)
 #include(CheckCXXCompilerFlag)
-include(CheckCXXSourceRuns)
 set(CMAKE_CXX_STANDARD 14)
 #
 #if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
@@ -14,170 +12,19 @@ set(CMAKE_CXX_STANDARD 14)
 
 find_package(ZLIB)
 
-set(CMAKE_CXX_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -I ./ -std=gnu++14 -pthread -lrt") # the -mavx* is for GNU compiler and xCORE* are for intel compiler
-set(CMAKE_C_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -I ./ -pthread -lrt")
+set(CMAKE_CXX_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -msse4.1 -msse4.2 -I ./ -std=gnu++14 -pthread -lrt") # the -mavx* is for GNU compiler and xCORE* are for intel compiler
+set(CMAKE_C_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -msse4.1 -msse4.2 -I ./ -pthread -lrt")
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mavx512bw -mavx512cd -mavx512vl -mavx512f -mavx512dq")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx512bw -mavx512cd -mavx512vl -mavx512f -mavx512dq")
-
-check_cxx_source_runs("
-        #include <immintrin.h>
-        int main()
-        {
-          __m512i a, b, c;
-          const int64_t src[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
-          int64_t dst[8];
-          a =  _mm512_loadu_si512( (__m512i*)src );
-          b =  _mm512_loadu_si512( (__m512i*)src );
-          c = _mm512_add_epi64( a, b );
-          _mm512_storeu_si512( (__m512i*)dst, c );
-          for( int i = 0; i < 8; i++ ){
-            if( ( src[i] + src[i] ) != dst[i] ){
-              return -1;
-            }
-          }
-          return 0;
-        }"
-        COMPILER_CAN_HANDLE_AVX512)
-
-
-if (COMPILER_CAN_HANDLE_AVX512)
-    message(STATUS "Support AVX512: True")
-else()
-    message(STATUS "Support AVX512: FALSE")
-    string(REPLACE "-mavx512bw -mavx512cd -mavx512vl -mavx512f -mavx512dq" "" CUSTOM_FLAGS_CXX ${CMAKE_CXX_FLAGS})
-    string(REPLACE "-mavx512bw -mavx512cd -mavx512vl -mavx512f -mavx512dq" "" CUSTOM_FLAGS_C ${CMAKE_C_FLAGS})
-    set(CMAKE_C_FLAGS "${CUSTOM_FLAGS_C}")
-    set(CMAKE_CXX_FLAGS "${CUSTOM_FLAGS_CXX}")
-endif()
-
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mavx2")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")
-
-check_cxx_source_runs("
-        #include <immintrin.h>
-        int main()
-        {
-          __m256i a, b, c;
-          const int32_t src[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
-          int32_t dst[8];
-          a =  _mm256_loadu_si256( (__m256i*)src );
-          b =  _mm256_loadu_si256( (__m256i*)src );
-          c = _mm256_add_epi32( a, b );
-          _mm256_storeu_si256( (__m256i*)dst, c );
-          for( int i = 0; i < 8; i++ ){
-            if( ( src[i] + src[i] ) != dst[i] ){
-              return -1;
-            }
-          }
-          return 0;
-        }"
-        COMPILER_CAN_HANDLE_AVX2)
-
-if (COMPILER_CAN_HANDLE_AVX2)
-    message(STATUS "Support AVX2: True")
-else()
-    message(STATUS "Support AVX2: FALSE")
-    string(REPLACE "-mavx2" "" CUSTOM_FLAGS_CXX ${CMAKE_CXX_FLAGS})
-    string(REPLACE "-mavx2" "" CUSTOM_FLAGS_C ${CMAKE_C_FLAGS})
-    set(CMAKE_C_FLAGS "${CUSTOM_FLAGS_C}")
-    set(CMAKE_CXX_FLAGS "${CUSTOM_FLAGS_CXX}")
-endif()
-
-
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse4.1")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse4.1")
-
-check_cxx_source_runs("
-        #include <immintrin.h>
-        int main()
-        {
-          __m128i a, b, c, d;
-          const int8_t src1[16] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
-          const int8_t src2[16] = {  16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
-          int8_t dstmin[16];
-          int8_t dstmax[16];
-          a =  _mm_loadu_si128 ( (__m128i*)src1 );
-          b =  _mm_loadu_si128 ( (__m128i*)src2 );
-          c = _mm_max_epi8( a, b );
-          d = _mm_min_epi8( a, b );
-          _mm_storeu_si128( (__m128i*)dstmax, c );
-          _mm_storeu_si128( (__m128i*)dstmin, d );
-          for( int i = 0; i < 16; i++ ){
-            if( ( dstmin[i] + dstmax[i] ) != 17 ){
-              return -1;
-            }
-          }
-          return 0;
-        }"
-        COMPILER_CAN_HANDLE_SSE4.1)
-
-if (COMPILER_CAN_HANDLE_SSE4.1)
-    message(STATUS "Support SSE4.1: True")
-else()
-    message(STATUS "Support SSE4.1: FALSE")
-    string(REPLACE "-msse4.1" "" CUSTOM_FLAGS_CXX ${CMAKE_CXX_FLAGS})
-    string(REPLACE "-msse4.1" "" CUSTOM_FLAGS_C ${CMAKE_C_FLAGS})
-    set(CMAKE_C_FLAGS "${CUSTOM_FLAGS_C}")
-    set(CMAKE_CXX_FLAGS "${CUSTOM_FLAGS_CXX}")
-endif()
-
-
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse2")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse2")
-
-
-check_cxx_source_runs("
-        #include <immintrin.h>
-        int main()
-        {
-          __m128i a, b, c;
-          const int16_t src[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
-          int16_t dst[8];
-          a =  _mm_loadu_si128 ( (__m128i*)src );
-          b =  _mm_loadu_si128 ( (__m128i*)src );
-          c = _mm_add_epi16( a, b );
-          _mm_storeu_si128( (__m128i*)dst, c );
-          for( int i = 0; i < 8; i++ ){
-            if( ( src[i] + src[i] ) != dst[i] ){
-              return -1;
-            }
-          }
-          return 0;
-        }"
-        COMPILER_CAN_HANDLE_SSE2)
-
-if (COMPILER_CAN_HANDLE_SSE2)
-    message(STATUS "Support SSE2: True")
-else()
-    message(STATUS "Support SSE2: FALSE")
-    string(REPLACE "-msse2" "" CUSTOM_FLAGS_CXX ${CMAKE_CXX_FLAGS})
-    string(REPLACE "-msse2" "" CUSTOM_FLAGS_C ${CMAKE_C_FLAGS})
-    set(CMAKE_C_FLAGS "${CUSTOM_FLAGS_C}")
-    set(CMAKE_CXX_FLAGS "${CUSTOM_FLAGS_CXX}")
-endif()
-
-EXECUTE_PROCESS( COMMAND uname -m COMMAND tr -d '\n' OUTPUT_VARIABLE ARCHITECTURE )
-if(${ARCHITECTURE} STREQUAL "arm64")
-    add_definitions(-D__SSE2__ -D__SSE2NEON__)
-    include_directories(src minimap2/sse2neon)
-    set(CMAKE_CXX_FLAGS " -Wall -g3 -O3 -I ./ -std=gnu++14 -pthread") # the -mavx* is for GNU compiler and xCORE* are for intel compiler
-    set(CMAKE_C_FLAGS " -Wall -g3 -O3 -I ./ -pthread")
-elseif (${ARCHITECTURE} STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    set(CMAKE_CXX_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -msse4.1 -msse4.2 -I ./ -std=gnu++14 -pthread") # the -mavx* is for GNU compiler and xCORE* are for intel compiler
-    set(CMAKE_C_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -msse4.1 -msse4.2 -I ./ -pthread")
-endif()
-
-message(STATUS "${CMAKE_C_FLAGS}")
 
 #for google unit test
 add_subdirectory(./googletest/googletest)
 include_directories(googletest/googletest/include googletest/googletest)
 
+
 add_executable(anchorwave
         googletest
         googletest/googletest
-        sse2neon.h
+
         main.cpp
 
         src/controlLayer.cpp
