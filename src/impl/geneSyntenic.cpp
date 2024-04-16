@@ -273,7 +273,7 @@ void longestPath(std::vector<AlignmentMatch> &pairedSimilarFragments, std::vecto
                     prev[idx] = jdx;
                 } else if (pairedSimilarFragments[jdx].getStrand() == NEGATIVE && pairedSimilarFragments[idx].getStrand() == NEGATIVE
                            && pairedSimilarFragments[jdx].getRefEndPos() < pairedSimilarFragments[idx].getRefStartPos()
-                           && pairedSimilarFragments[jdx].getQueryEndPos() < pairedSimilarFragments[idx].getQueryStartPos() && scoreArray[jdx] > scoreThreshold) { // this block is under test, todo remind PHG guies
+                           && pairedSimilarFragments[jdx].getQueryEndPos() < pairedSimilarFragments[idx].getQueryStartPos() && scoreArray[jdx] > scoreThreshold) { // this block is under test, TODO vice versa for two positive strand blocks
                     scoreArray[idx] = scoreArray[jdx] + pairedSimilarFragments[idx].getScore();
                     prev[idx] = jdx;
                 } else if (pairedSimilarFragments[jdx].getStrand() != pairedSimilarFragments[idx].getStrand()
