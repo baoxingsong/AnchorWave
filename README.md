@@ -368,7 +368,7 @@ samtools index anchorwave.bam
 If you would like to swap reference and query sequence, there is no need to re-run AnchorWave, which is computational cost.  
 The script  [maf-swap](https://gitlab.com/mcfrith/last/-/blob/main/bin/maf-swap)  could be used for this aim:
 ```
-cat anchorwave.maf | python2 maf-convert >anchorwave_swap.maf
+cat anchorwave.maf | python2 maf-swap >anchorwave_swap.maf
 bioconvert maf2sam anchorwave_swap.maf anchorwave_swap.sam
 bioconvert sam2paf anchorwave_swap.bc.sam anchorwave_swap.paf
 cat anchorwave_swap.sam | sed 's/[0-9]\+H//g' | samtools view -O BAM --reference Zm-Mo17-REFERENCE-CAU-1.0.fa - | samtools sort - > anchorwave_swap.bam
