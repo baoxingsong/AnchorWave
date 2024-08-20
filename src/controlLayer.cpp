@@ -1480,9 +1480,11 @@ int pro(int argc, char **argv) {
     double GAP_EXTENSION_PENALTY = -0.005;
     int MAX_DIST_BETWEEN_MATCHES = 25;
     int refMaximumTimes = 1;
-    int queryMaximumTimes = 2;
+    int queryMaximumTimes = 1;
     int OVER_LAP_WINDOW = 5;
     int delete_tandem = 0;
+    int get_all_collinear_gene_pair = 0;
+    int count_style = 1;
 
     std::stringstream usage;
 
@@ -1498,10 +1500,15 @@ int pro(int argc, char **argv) {
           " -E   DOUBLE  chain gap extend penalty (default: " << GAP_EXTENSION_PENALTY << ")" << std::endl <<
           " -I   DOUBLE  minimum chain score (default: " << MIN_ALIGNMENT_SCORE << ")" << std::endl <<
           " -D   INT     maximum gap size for chain (default: " << MAX_DIST_BETWEEN_MATCHES << ")" << std::endl <<
-          " -m   STRING  whether to delete tandem ortholog_pair in the input file(default: " << delete_tandem << "), " <<
-          "0 : retain tandem;" <<  "1 or other integer : delete tandem" << std::endl <<
-          " -W   INT     delete tandem ortholog_pair when distance between two tandem ortholog_pairs is less than -W parameter value"
-          " (if you set -m to 1, default: " << OVER_LAP_WINDOW << ")" << std::endl;
+          " -m   INT     Specify whether to delete tandem gene pairs in the input file (default: " << delete_tandem << ")" << std::endl <<
+          "              Options: 0 to retain tandem gene pairs; 1 or any other integer to delete them." << std::endl <<
+          " -W   INT     When -m is set to delete tandem gene pairs(1 or any other integer), " << std::endl <<
+          "              specify the maximum distance allowed between two homologous gene pairs before they are considered for deletion" << "(default: " << OVER_LAP_WINDOW << ")" << std::endl <<
+          "              This parameter is ignored if -m is not set to delete tandem gene pairs(set 0)." << std::endl <<
+          " -a   INT     Enable this flag to get all collinear results and disable the R and Q parameters (default: " << get_all_collinear_gene_pair << ")" << std::endl <<
+          "              Options: 0:enable R Q parameter; 1 or other integer: all collinear result" << std::endl <<
+          " -c   INT     For R Q count, 0: gene number count; 1 or other integer: block count (default: " << count_style << ")"
+          << std::endl;
 
     InputParser inputParser(argc, argv);
     if (inputParser.cmdOptionExists("-i") && inputParser.cmdOptionExists("-o")) {
@@ -1517,17 +1524,12 @@ int pro(int argc, char **argv) {
 
         if (inputParser.cmdOptionExists("-R")) {
             refMaximumTimes = std::stoi(inputParser.getCmdOption("-R"));
-        } else {
-            std::cerr << "parameter -R is required" << std::endl;
-            std::cerr << usage.str();
-            return 1;
         }
         if (inputParser.cmdOptionExists("-Q")) {
             queryMaximumTimes = std::stoi(inputParser.getCmdOption("-Q"));
-        } else {
-            std::cerr << "parameter -Q is required" << std::endl;
-            std::cerr << usage.str();
-            return 1;
+        }
+        if (inputParser.cmdOptionExists("-a")) {
+            get_all_collinear_gene_pair = std::stoi(inputParser.getCmdOption("-a"));
         }
 
         if (inputParser.cmdOptionExists("-O")) {
@@ -1581,6 +1583,10 @@ int pro(int argc, char **argv) {
                 thisStrand = NEGATIVE;
             }
 
+            if (refGene == queryGene) {
+                continue;
+            }
+
             AlignmentMatch orthologPair(refChr, queryChr, refStart,
                                         refEnd, queryStart,
                                         queryEnd, alignmentScore, thisStrand,
@@ -1592,7 +1598,8 @@ int pro(int argc, char **argv) {
         infile.close();
         // prepare data in RAM end
         if (delete_tandem !=0 ) {
-            // sort by querychr refchr querystart and identity/100,respectively.
+            std::cout << "delete tandem" << "line1598" << std::endl;
+            // sort by querychr refchr querystart(query gene name) and identity/100,respectively.
             orthologPairSortQuery(alignmentMatchsMapT);
             // filter ref tandem gene by threshold five. This thought comes from MCScanX.
             std::vector<AlignmentMatch>::const_iterator it1, prev_pair1;
@@ -1603,6 +1610,7 @@ int pro(int argc, char **argv) {
             // insert first pair
             match_bin1.push_back(*prev_pair1);
             // match_bin1[0] has a maximum identity value in the match_bin by orthologPairSortQuery function.
+//            std::cout << "\t" << "line1606" << "\t" << alignmentMatchsMapT.size() << std::endl;
             for (; it1 != alignmentMatchsMapT.end(); it1++) {
                 if (it1->getRefChr() == prev_pair1->getRefChr() && it1->getQueryChr() == prev_pair1->getQueryChr()) {
                     if ((it1->getQueryId() != prev_pair1->getQueryId()) ||
@@ -1624,9 +1632,10 @@ int pro(int argc, char **argv) {
             alignmentMatchsMapT_cpy1.push_back(match_bin1[0]);  //the last bin
             alignmentMatchsMapT.clear();
             alignmentMatchsMapT = alignmentMatchsMapT_cpy1;
+//            std::cout << "\t" << "line1628" << "\t" << alignmentMatchsMapT.size() << std::endl;
             alignmentMatchsMapT_cpy1.clear();
 
-            // sort by querychr refchr refstart and identity/100,respectively.
+            // sort by querychr refchr refstart(ref gene name) and identity/100,respectively.
             orthologPairSortReference(alignmentMatchsMapT);
             // filter query tandem gene by threshold five. This thought comes from MCScanX.
             std::vector<AlignmentMatch>::const_iterator it2, prev_pair2;
@@ -1637,6 +1646,7 @@ int pro(int argc, char **argv) {
             // insert first pair
             match_bin2.push_back(*prev_pair2);
             // match_bin2[0] has a maximum identity value in the match_bin by orthologPairSortReference.
+//            std::cout << "\t" << "line1642" << "\t" << alignmentMatchsMapT.size() << std::endl;
             for (; it2 != alignmentMatchsMapT.end(); it2++) {
                 if (it2->getRefChr() == prev_pair2->getRefChr() && it2->getQueryChr() == prev_pair2->getQueryChr()) {
                     if ((it2->getRefId() != prev_pair2->getRefId()) ||
@@ -1658,6 +1668,7 @@ int pro(int argc, char **argv) {
             alignmentMatchsMapT_cpy2.push_back(match_bin2[0]);
             alignmentMatchsMapT.clear();
             alignmentMatchsMapT = alignmentMatchsMapT_cpy2;
+//            std::cout << "\t" << "line1664" << "\t" << alignmentMatchsMapT.size() << std::endl;
             alignmentMatchsMapT_cpy2.clear();
         }
 
@@ -1688,53 +1699,16 @@ int pro(int argc, char **argv) {
             }
         }
 
-        orthologPairSortQuery(alignmentMatchsMapT);
-        // below this line, the variable reflects reference gene repeat number by counting the same queryGeneName number.
-        std::map<std::string, std::map<std::string, int>> queryGeneName_repeat_number;
-        for (const AlignmentMatch &ortholog_pa: alignmentMatchsMapT) {
-            if (queryGeneName_repeat_number.find(ortholog_pa.getQueryChr()) == queryGeneName_repeat_number.end()) {
-                queryGeneName_repeat_number[ortholog_pa.getQueryChr()] = std::map<std::string, int>();
-            }
-            if (queryGeneName_repeat_number[ortholog_pa.getQueryChr()].find(ortholog_pa.getQueryGeneName()) ==
-                queryGeneName_repeat_number[ortholog_pa.getQueryChr()].end()) {
-                queryGeneName_repeat_number[ortholog_pa.getQueryChr()][ortholog_pa.getQueryGeneName()] = 1;
-            } else{
-                queryGeneName_repeat_number[ortholog_pa.getQueryChr()][ortholog_pa.getQueryGeneName()] += 1;
-            }
-        }
-
-        orthologPairSortReference(alignmentMatchsMapT);
-        std::map<std::string, std::map<std::string, int>> refGeneName_repeat_number;
-        for (const AlignmentMatch &ortholog_pai: alignmentMatchsMapT) {
-            if (refGeneName_repeat_number.find(ortholog_pai.getRefChr()) ==
-                refGeneName_repeat_number.end()) {
-                refGeneName_repeat_number[ortholog_pai.getRefChr()] = std::map<std::string, int>();
-            }
-            if (refGeneName_repeat_number[ortholog_pai.getRefChr()].find(ortholog_pai.getReferenceGeneName()) ==
-                refGeneName_repeat_number[ortholog_pai.getRefChr()].end()){
-                refGeneName_repeat_number[ortholog_pai.getRefChr()][ortholog_pai.getReferenceGeneName()] = 1;
-            } else{
-                refGeneName_repeat_number[ortholog_pai.getRefChr()][ortholog_pai.getReferenceGeneName()] += 1;
-            }
-        }
-
-
-        double weight1;
-        double weight2;
-        // set identity_score for gene pair again
-        for (AlignmentMatch ortholog_pair: alignmentMatchsMapT) {
-            weight1 = 1.0/(queryGeneName_repeat_number[ortholog_pair.getQueryChr()][ortholog_pair.getQueryGeneName()]);
-            weight2 = 1.0/(refGeneName_repeat_number[ortholog_pair.getRefChr()][ortholog_pair.getReferenceGeneName()]);
-            ortholog_pair.setScore(ortholog_pair.getScore() * weight1 * weight2);
-        }
-
         orthologPairSortPosition(alignmentMatchsMapT);
-
+//        std::cout << "\t" << "line1739" << "\t" << alignmentMatchsMapT.size() << std::endl;
         std::vector<double> block_score;
-
+//        for (AlignmentMatch &ortholog_pair: alignmentMatchsMapT) {
+//            std::cout << "line1746" << "\t" << ortholog_pair.getQueryChr()  << "\t" << ortholog_pair.getQueryGeneName() << "\t"  << ortholog_pair.getQueryId() << "\t" << ortholog_pair.getRefChr() << "\t" << ortholog_pair.getReferenceGeneName() << "\t" << ortholog_pair.getRefId() << "\t" << ortholog_pair.getScore() << std::endl;
+//        }
+//        exit(1);
         longestPathQuotaGene(alignmentMatchsMapT, alignmentMatchsMap, refIndexMap, queryIndexMap,
                              GAP_EXTENSION_PENALTY, GAP_OPEN_PENALTY, MIN_ALIGNMENT_SCORE, MAX_DIST_BETWEEN_MATCHES,
-                             refMaximumTimes, queryMaximumTimes, block_score);
+                             refMaximumTimes, queryMaximumTimes, block_score, count_style, get_all_collinear_gene_pair);
         // output anchors file.
         if (inputParser.cmdOptionExists("-o")) {
             std::string wholeCommand = argv[0];
@@ -1756,41 +1730,43 @@ int pro(int argc, char **argv) {
                    << "queryStart" << "\t"
                    << "queryEnd" << "\t"
                    << "strand" << "\t"
-                   << "score" << "\t"
+                   << "score"
                    << std::endl;
 
             size_t totalAnchors = 0;
             int blockIndex = 1;
             for (std::vector<AlignmentMatch> v_am: alignmentMatchsMap) {
-                std::string plus_minus = "NEGATIVE";
-                if (v_am[0].getStrand() == POSITIVE) {
-                    plus_minus = "POSITIVE";
-                }
-                offile << "##Alignment" << "\t" << blockIndex << "\t" << "N=" << v_am.size() << "\t"
-                       << "score=" << block_score[blockIndex - 1] << "\t" << v_am[0].getRefChr() << "&" <<
-                       v_am[0].getQueryChr() << "\t" << plus_minus << std::endl;
-                blockIndex++;
-
-                for (const auto &i: v_am) {
-                    std::string thisStrand = "+";
-                    if (i.getStrand() == NEGATIVE) {
-                        thisStrand = "-";
+//                if (v_am.size() >= 4) {
+                    std::string plus_minus = "NEGATIVE";
+                    if (v_am[0].getStrand() == POSITIVE) {
+                        plus_minus = "POSITIVE";
                     }
+                    offile << "##Alignment" << "\t" << blockIndex << "\t" << "N=" << v_am.size() << "\t"
+                           << "score=" << block_score[blockIndex - 1] << "\t" << v_am[0].getRefChr() << "&" <<
+                           v_am[0].getQueryChr() << "\t" << plus_minus << std::endl;
+                    blockIndex++;
 
-                    offile << i.getReferenceGeneName() << "\t"
-                           << i.getRefChr() << "\t"
-                           << i.getRefId() << "\t"
-                           << i.getRefStartPos() << "\t"
-                           << i.getRefEndPos() << "\t"
-                           << i.getQueryGeneName() << "\t"
-                           << i.getQueryChr() << "\t"
-                           << i.getQueryId() << "\t"
-                           << i.getQueryStartPos() << "\t"
-                           << i.getQueryEndPos() << "\t"
-                           << thisStrand << "\t"
-                           << i.getScore() << std::endl;
-                    totalAnchors++;
-                }
+                    for (const auto &i: v_am) {
+                        std::string thisStrand = "+";
+                        if (i.getStrand() == NEGATIVE) {
+                            thisStrand = "-";
+                        }
+
+                        offile << i.getReferenceGeneName() << "\t"
+                               << i.getRefChr() << "\t"
+                               << i.getRefId() << "\t"
+                               << i.getRefStartPos() << "\t"
+                               << i.getRefEndPos() << "\t"
+                               << i.getQueryGeneName() << "\t"
+                               << i.getQueryChr() << "\t"
+                               << i.getQueryId() << "\t"
+                               << i.getQueryStartPos() << "\t"
+                               << i.getQueryEndPos() << "\t"
+                               << thisStrand << "\t"
+                               << i.getScore() << std::endl;
+                        totalAnchors++;
+                    }
+//                }
             }
             offile.close();
             std::cout << "totalAnchors:" << totalAnchors << std::endl;
