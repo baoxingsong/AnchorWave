@@ -1598,7 +1598,6 @@ int pro(int argc, char **argv) {
         infile.close();
         // prepare data in RAM end
         if (delete_tandem !=0 ) {
-            std::cout << "delete tandem" << "line1598" << std::endl;
             // sort by querychr refchr querystart(query gene name) and identity/100,respectively.
             orthologPairSortQuery(alignmentMatchsMapT);
             // filter ref tandem gene by threshold five. This thought comes from MCScanX.
