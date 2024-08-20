@@ -37,4 +37,4 @@ void longestPathQuotaGene(std::vector<AlignmentMatch> pairedSimilarFragments, st
                           double &GAP_EXTENSION_PENALTY, double &GAP_OPEN_PENALTY,
                           double &MIN_ALIGNMENT_SCORE, const int &MAX_DIST_BETWEEN_MATCHES,
                           int &refMaximumTimes, int &queryMaximumTimes,
-                          std::vector<double> &block_score);
+                          std::vector<double> &block_score, const int &count_style, const int &get_all_collinear_gene_pair);
