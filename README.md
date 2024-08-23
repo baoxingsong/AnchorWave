@@ -189,8 +189,8 @@ Options
  -n   FILE    output anchors file
  -o   FILE    output file in maf format
  -f   FILE    output sequence alignment for each anchor/inter-anchor region in maf format
+ -b   FILE    output the sequence alignment method used for each anchor/inter-anchor region, in bed format
  -t   INT     number of threads (default: 1)
- -v   FILE    output variant calling in vcf format (conflict with -IV)
  -m   INT     minimum exon length to use (default: 20, should be identical with the setting of gff2seq function)
  -mi  DOUBLE  minimum full-length CDS anchor hit similarity to use (default:0.95)
  -mi2 DOUBLE  minimum novel anchor hit similarity to use (default:0.2)
@@ -321,6 +321,7 @@ Options
  -n   FILE    output anchors file
  -o   FILE    output file in maf format
  -f   FILE    output sequence alignment for each anchor/inter-anchor region in maf format
+ -b   FILE    output the sequence alignment method used for each anchor/inter-anchor region, in bed format
  -t   INT     number of threads (default: 1)
  -fa3 INT     if the inter-anchor length is shorter than this value, stop trying to find new anchors (default: 100000)
  -w   INT     sequence alignment window width (default: 100000)
@@ -338,8 +339,8 @@ Options
               This prevents using tandem duplicated genes to identify collinear block
  -y   DOUBLE  minimal ratio of e+1 similarity to 1 similarity to drop an anchor (default: 0.6)
  -ar  FILE    sam file by mapping conserved sequence to reference genome
-              this is used to improve the accurancy of anchors mapping
- Following parameters are for identify collinear blocks
+              this is used to improve the accuracy of anchors mapping
+ Following parameters are to identify collinear blocks
  -d   DOUBLE  calculate IndelDistance (default: 3)
  -O   DOUBLE  chain open gap penalty (default: -0.03)
  -E   DOUBLE  chain extend gap penalty (default: -0.01)
