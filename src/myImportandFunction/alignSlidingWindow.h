@@ -22,7 +22,7 @@
 #include <map>
 #include <string>
 
-int64_t alignSlidingWindow(std::string &dna_q, std::string &dna_d, std::string &_alignment_q, std::string &_alignment_d,
+int64_t alignSlidingWindow(std::string &dna_q, std::string &dna_d, std::string &_alignment_q, std::string &_alignment_d, std::string &_alignMethod,
                            const int64_t &slidingWindowSize, const int32_t &matchingScore,
                            const int32_t &mismatchingPenalty, const int32_t &openGapPenalty1, const int32_t &extendGapPenalty1, const int32_t &openGapPenalty2, const int32_t &extendGapPenalty2);
 

@@ -7,8 +7,8 @@
 std::mutex g_num_mutex;
 
 void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
-                                 const bool outPutMaf, const bool outPutFraged,
-                                 std::ofstream &omaffile, std::ofstream &ofragfile,
+                                 const bool outPutMaf, const bool outPutFraged, const bool oMethodBed,
+                                 std::ofstream &omaffile, std::ofstream &ofragfile, std::ofstream &oMethodBedfile,
                                  std::map<std::string, std::tuple<std::string, long, long, int> > &map_ref,
                                  std::map<std::string, std::tuple<std::string, long, long, int> > &map_qry,
                                  const int chrWidth, const std::string refFileName, const std::string queryFileName,
@@ -21,7 +21,7 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
     std::string refChr = alignmentMatchs[0].getRefChr();
     std::string queryChr = alignmentMatchs[0].getQueryChr();
 
-    bool checkResult = false;
+    bool checkResult = true;
 
     STRAND strand = alignmentMatchs[0].getStrand();
 
@@ -61,6 +61,11 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
                               << std::endl;
                     g_num_mutex.unlock();
                 }
+                if(oMethodBed){
+                    g_num_mutex.lock();
+                    oMethodBedfile << refChr << "\t" << startRef - 1 << "\t" << startRef - 1 << "\t" << "FILLING" << "\t" << 0 << "\t" << "+" << "\t" << queryChr << "\t" << startQuery-1 << "\t" << startQuery-1+ querySeq.size()<< std::endl;
+                    g_num_mutex.unlock();
+                }
             } else if (orthologPair.getRefStartPos() != startRef && orthologPair.getQueryStartPos() == startQuery) {
                 endRef = orthologPair.getRefStartPos() - 1;
                 std::string refSeq = getSubsequence2(map_ref, refChr, startRef, endRef);
@@ -84,6 +89,11 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
                               << std::endl;
                     g_num_mutex.unlock();
                 }
+                if(oMethodBed){
+                    g_num_mutex.lock();
+                    oMethodBedfile << refChr << "\t" << startRef - 1 << "\t" << startRef - 1 + refSeq.size() << "\t" << "FILLING" << "\t" << 0 << "\t" << "+" << "\t" << queryChr << "\t" << startQuery-1 << "\t" << startQuery-1<< std::endl;
+                    g_num_mutex.unlock();
+                }
             } else if (orthologPair.getRefStartPos() == startRef && orthologPair.getQueryStartPos() == startQuery) {
 
             } else {
@@ -91,12 +101,13 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
                 endQuery = orthologPair.getQueryStartPos() - 1;
                 std::string refSeq = getSubsequence2(map_ref, refChr, startRef, endRef);
                 std::string querySeq = getSubsequence2(map_qry, queryChr, startQuery, endQuery);
+                std::string alignMethod = "UNKNOWN";
                 {
                     std::string _alignment_q;
                     std::string _alignment_d;
 
-                    int64_t thiScore = alignSlidingWindow(querySeq, refSeq, _alignment_q, _alignment_d, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
-                    if (checkResult) {
+                    int64_t thiScore = alignSlidingWindow(querySeq, refSeq, _alignment_q, _alignment_d, alignMethod, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
+                    if (alignMethod.compare("BANDED_MINIMAP2")==0 && checkResult) {
                         std::string tempd;
                         std::string tempq;
 
@@ -107,6 +118,7 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
                         tempq.erase(std::remove(tempq.begin(), tempq.end(), '-'), tempq.end());
                         if (tempd.compare(refSeq) != 0 || tempq.compare(querySeq) != 0) {
 //                            std::cout << "align error:" << std::endl << refSeq << std::endl << querySeq << std::endl;
+                            alignMethod="SLIDING_WINDOW";
                             thiScore = alignSlidingWindowNW(querySeq, refSeq, _alignment_q, _alignment_d, windowWidth,  matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
                             tempd = _alignment_d;
                             tempd.erase(std::remove(tempd.begin(), tempd.end(), '-'), tempd.end());
@@ -130,6 +142,11 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
                                   << std::endl;
                         g_num_mutex.unlock();
                     }
+                    if(oMethodBed){
+                        g_num_mutex.lock();
+                        oMethodBedfile << refChr << "\t" << startRef - 1 << "\t" << startRef - 1 + refSeq.size() << "\t" << alignMethod  << "\t" << thiScore << "\t" << "+" << "\t" << queryChr << "\t" << startQuery-1 << "\t" << startQuery-1 + querySeq.size() << std::endl;
+                        g_num_mutex.unlock();
+                    }
                 }
             }
             {
@@ -143,9 +160,9 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
                 {
                     std::string _alignment_q;
                     std::string _alignment_d;
-
-                    int64_t thiScore = alignSlidingWindow(querySeq, refSeq, _alignment_q, _alignment_d, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
-                    if (checkResult) {
+                    std::string alignMethod = "UNKNOWN";
+                    int64_t thiScore = alignSlidingWindow(querySeq, refSeq, _alignment_q, _alignment_d, alignMethod, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
+                    if (alignMethod.compare("BANDED_MINIMAP2")==0 && checkResult) {
                         std::string tempd = _alignment_d;
                         tempd.erase(std::remove(tempd.begin(), tempd.end(), '-'), tempd.end());
                         std::string tempq = _alignment_q;
@@ -156,6 +173,7 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
                             tempd.erase(std::remove(tempd.begin(), tempd.end(), '-'), tempd.end());
                             tempq = _alignment_q;
                             tempq.erase(std::remove(tempq.begin(), tempq.end(), '-'), tempq.end());
+                            alignMethod="SLIDING_WINDOW";
                         }
                         assert(tempd.compare(refSeq) == 0);
                         assert(tempq.compare(querySeq) == 0);
@@ -171,6 +189,11 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
                                   << "s\t" << std::left << std::setw(chrWidth) << refChr << "\t" << std::right << std::setw(9) << startRef - 1 << "\t" << std::setw(9) << refSeq.size() << "\t+\t" << size_refSequence << "\t" << _alignment_d << std::endl
                                   << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << startQuery - 1 << "\t" << std::setw(9) << querySeq.size() << "\t+\t" << size_targetSequence << "\t" << _alignment_q << std::endl
                                   << std::endl;
+                        g_num_mutex.unlock();
+                    }
+                    if(oMethodBed){
+                        g_num_mutex.lock();
+                        oMethodBedfile << refChr << "\t" << startRef - 1 << "\t" << startRef - 1 + refSeq.size() << "\t" << alignMethod << "\t" << thiScore << "\t" << "+" << "\t" << queryChr << "\t" << startQuery-1 << "\t" << startQuery-1 + querySeq.size() << std::endl;
                         g_num_mutex.unlock();
                     }
                 }
@@ -239,6 +262,11 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
                               << std::endl;
                     g_num_mutex.unlock();
                 }
+                if(oMethodBed){
+                    g_num_mutex.lock();
+                    oMethodBedfile << refChr << "\t" << startRef - 1 << "\t" << startRef - 1  << "\t" << "FILLING" << "\t" << "0" << "\t" << "-" << "\t" << queryChr << "\t" << startQuery-1 << "\t" << startQuery-1 + querySeq.size() << std::endl;
+                    g_num_mutex.unlock();
+                }
             } else if (orthologPair.getRefStartPos() != startRef && orthologPair.getQueryEndPos() == endQuery) {
                 endRef = orthologPair.getRefStartPos() - 1;
                 std::string refSeq = getSubsequence2(map_ref, refChr, startRef, endRef);
@@ -263,6 +291,11 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
                               << std::endl;
                     g_num_mutex.unlock();
                 }
+                if(oMethodBed){
+                    g_num_mutex.lock();
+                    oMethodBedfile << refChr << "\t" << startRef - 1 << "\t" << startRef - 1 + refSeq.size() << "\t" << "FILLING" << "\t" << "0" << "\t" << "-" << "\t" << queryChr << "\t" << startQuery-1 << "\t" << startQuery-1  << std::endl;
+                    g_num_mutex.unlock();
+                }
             } else if (orthologPair.getRefStartPos() == startRef && orthologPair.getQueryEndPos() == endQuery) {
 
             } else {
@@ -273,10 +306,10 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
                 {
                     std::string _alignment_q;
                     std::string _alignment_d;
+                    std::string alignMethod = "UNKNOWN";
+                    int64_t thiScore = alignSlidingWindow(querySeq, refSeq, _alignment_q, _alignment_d, alignMethod, windowWidth,  matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
 
-                    int64_t thiScore = alignSlidingWindow(querySeq, refSeq, _alignment_q, _alignment_d, windowWidth,  matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
-
-                    if (checkResult) {
+                    if (alignMethod.compare("BANDED_MINIMAP2")==0 && checkResult) {
                         std::string tempd;
                         std::string tempq;
                         tempd = _alignment_d;
@@ -289,6 +322,7 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
                             tempd.erase(std::remove(tempd.begin(), tempd.end(), '-'), tempd.end());
                             tempq = _alignment_q;
                             tempq.erase(std::remove(tempq.begin(), tempq.end(), '-'), tempq.end());
+                            alignMethod="SLIDING_WINDOW";
                         }
                         assert(tempd.compare(refSeq) == 0);
                         assert(tempq.compare(querySeq) == 0);
@@ -308,6 +342,11 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
                                   << std::endl;
                         g_num_mutex.unlock();
                     }
+                    if(oMethodBed){
+                        g_num_mutex.lock();
+                        oMethodBedfile << refChr << "\t" << startRef - 1 << "\t" << startRef - 1 + refSeq.size() << "\t" << alignMethod << "\t" << thiScore << "\t" << "-" << "\t" << queryChr << "\t" << startQuery-1 << "\t" << startQuery-1 + querySeq.size() << std::endl;
+                        g_num_mutex.unlock();
+                    }
                 }
             }
             {
@@ -320,10 +359,11 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
                 {
                     std::string _alignment_q;
                     std::string _alignment_d;
+                    std::string alignMethod = "UNKNOWN";
 //                    std::cout << refSeq << std::endl << querySeq << std::endl << "line 276" << std::endl;
-                    int64_t thiScore = alignSlidingWindow(querySeq, refSeq, _alignment_q, _alignment_d, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
+                    int64_t thiScore = alignSlidingWindow(querySeq, refSeq, _alignment_q, _alignment_d, alignMethod, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
 
-                    if (checkResult) {
+                    if (alignMethod.compare("BANDED_MINIMAP2")==0 && checkResult) {
                         std::string tempd;
                         std::string tempq;
                         tempd = _alignment_d;
@@ -337,6 +377,7 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
                             tempd.erase(std::remove(tempd.begin(), tempd.end(), '-'), tempd.end());
                             tempq = _alignment_q;
                             tempq.erase(std::remove(tempq.begin(), tempq.end(), '-'), tempq.end());
+                            alignMethod="SLIDING_WINDOW";
                         }
 
                         assert(tempd.compare(refSeq) == 0);
@@ -354,6 +395,11 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
                                   << "s\t" << std::left << std::setw(chrWidth) << refChr << "\t" << std::right << std::setw(9) << startRef - 1 << "\t" << std::setw(9) << refSeq.size() << "\t+\t" << size_refSequence << "\t" << _alignment_d << std::endl
                                   << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << negative_startQuery << "\t" << std::setw(9) << querySeq.size() << "\t-\t" << size_targetSequence << "\t" << _alignment_q << std::endl
                                   << std::endl;
+                        g_num_mutex.unlock();
+                    }
+                    if(oMethodBed){
+                        g_num_mutex.lock();
+                        oMethodBedfile << refChr << "\t" << startRef - 1 << "\t" << startRef - 1 + refSeq.size() << "\t" << alignMethod << "\t" << thiScore << "\t" << "-" << "\t" << queryChr << "\t" << startQuery-1 << "\t" << startQuery-1 + querySeq.size() << std::endl;
                         g_num_mutex.unlock();
                     }
                 }
@@ -393,7 +439,7 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
 void genomeAlignment(std::vector<std::vector<AlignmentMatch>> &alignmentMatchsMap,
                      const std::string &refFastaFilePath, const std::string &targetFastaFilePath,
                      const int32_t &windowWidth,
-                     const std::string &outPutMafFile, const std::string &outPutFragedFile,
+                     const std::string &outPutMafFile, const std::string &outPutFragedFile, const std::string &outPutBedFile,
                      const int32_t &matchingScore, const int32_t &mismatchingPenalty,
                      const int32_t &openGapPenalty1, const int32_t &extendGapPenalty1,
                      const int32_t &openGapPenalty2, const int32_t &extendGapPenalty2,
@@ -401,12 +447,16 @@ void genomeAlignment(std::vector<std::vector<AlignmentMatch>> &alignmentMatchsMa
 
     bool outPutMaf = false;
     bool outPutFraged = false;
+    bool oMethodBed = false;
 
     if (outPutMafFile.size() > 0) {
         outPutMaf = true;
     }
     if (outPutFragedFile.size() > 0) {
         outPutFraged = true;
+    }
+    if (outPutBedFile.size() > 0) {
+        oMethodBed = true;
     }
 
     std::map<std::string, std::tuple<std::string, long, long, int> > map_ref;
@@ -438,6 +488,7 @@ void genomeAlignment(std::vector<std::vector<AlignmentMatch>> &alignmentMatchsMa
 
     std::ofstream omaffile;
     std::ofstream ofragfile;
+    std::ofstream oMethodBedfile;
 
     if (outPutMaf) {
         omaffile.open(outPutMafFile);
@@ -449,6 +500,10 @@ void genomeAlignment(std::vector<std::vector<AlignmentMatch>> &alignmentMatchsMa
 //        ofragfile << "##maf version=1" << std::endl;
     }
 
+    if (oMethodBed){
+        oMethodBedfile.open(outPutBedFile);
+    }
+
     int32_t size = alignmentMatchsMap.size();
 
     std::atomic_int number_of_runing_threads(0);
@@ -458,8 +513,8 @@ void genomeAlignment(std::vector<std::vector<AlignmentMatch>> &alignmentMatchsMa
         bool isThisThreadUnrun = true;
         while (isThisThreadUnrun) {
             if (number_of_runing_threads < maxThread) {
-                std::thread t(genomeAlignmentSingleThread, alignmentMatchs, outPutMaf, outPutFraged,
-                              std::ref(omaffile), std::ref(ofragfile),
+                std::thread t(genomeAlignmentSingleThread, alignmentMatchs, outPutMaf, outPutFraged, oMethodBed,
+                              std::ref(omaffile), std::ref(ofragfile), std::ref(oMethodBedfile),
                               std::ref(map_ref), std::ref(map_qry),
                               chrWidth, refFileName, queryFileName,
                               windowWidth, matchingScore, mismatchingPenalty,
@@ -492,8 +547,9 @@ void genomeAlignmentAndVariantCallingSingleThread(
         std::map<std::string, std::tuple<std::string, long, long, int> > & map_qry,
         const std::vector<AlignmentMatch> & v_am,
         const int & chrWidth, const std::string & refFileName, const std::string & queryFileName,
-        const bool & outPutMaf, const bool & outPutFraged, std::ofstream &omaffile,
-        std::ofstream &ofragfile,
+        const bool & outPutMaf, const bool & outPutFraged, const bool & oMethodBed,
+        std::ofstream &omaffile,
+        std::ofstream &ofragfile, std::ofstream &oMethodBedfile,
         const int32_t & windowWidth,
         const int32_t & matchingScore, const int32_t & mismatchingPenalty,
         const int32_t & openGapPenalty1, const int32_t & extendGapPenalty1, const int32_t & openGapPenalty2, const int32_t & extendGapPenalty2,
@@ -517,7 +573,7 @@ void genomeAlignmentAndVariantCallingSingleThread(
     int mafQueryStart = 0;
     std::string mafStrand = "+";
     bool hasInversion = false;
-    bool checkResult = false;
+    bool checkResult = true;
 
     size_t size_ref_sq = getSequenceSizeFromPath2(map_ref[refChr]);
     size_t size_target_sq = getSequenceSizeFromPath2(map_qry[queryChr]);
@@ -559,6 +615,12 @@ void genomeAlignmentAndVariantCallingSingleThread(
                               << std::endl;
                     g_num_mutex.unlock();
                 }
+
+                if(oMethodBed){
+                    g_num_mutex.lock();
+                    oMethodBedfile << refChr << "\t" << startRef - 1 << "\t" << startRef - 1 << "\t" << "FILLING" << "\t" << "0" << "\t" << "+" << "\t" << queryChr << "\t" << startQuery-1 << "\t" << startQuery-1 + seq_qry.size() << std::endl;
+                    g_num_mutex.unlock();
+                }
             }
             else if (alignmentMatch.getRefStartPos() != startRef && alignmentMatch.getQueryStartPos() == startQuery) {
                 endRef = alignmentMatch.getRefStartPos() - 1;
@@ -585,6 +647,11 @@ void genomeAlignmentAndVariantCallingSingleThread(
                               << std::endl;
                     g_num_mutex.unlock();
                 }
+                if(oMethodBed){
+                    g_num_mutex.lock();
+                    oMethodBedfile << refChr << "\t" << startRef - 1 << "\t" << startRef - 1 + seq_ref.size() << "\t" << "FILLING" << "\t" << "0" << "\t" << "+" << "\t" << queryChr << "\t" << startQuery-1 << "\t" << startQuery-1  << std::endl;
+                    g_num_mutex.unlock();
+                }
             }
             else if (alignmentMatch.getRefStartPos() == startRef && alignmentMatch.getQueryStartPos() == startQuery) {
 
@@ -598,9 +665,9 @@ void genomeAlignmentAndVariantCallingSingleThread(
 
                 std::string _alignment_q;
                 std::string _alignment_d;
-
-                int64_t thiScore = alignSlidingWindow(seq_qry, seq_ref, _alignment_q, _alignment_d, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
-                if (checkResult) {
+                std::string alignMethod;
+                int64_t thiScore = alignSlidingWindow(seq_qry, seq_ref, _alignment_q, _alignment_d, alignMethod, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
+                if (alignMethod.compare("BANDED_MINIMAP2")==0 && checkResult) {
                     std::string tempd = _alignment_d;
                     tempd.erase(std::remove(tempd.begin(), tempd.end(), '-'), tempd.end());
 
@@ -608,11 +675,21 @@ void genomeAlignmentAndVariantCallingSingleThread(
                     tempq.erase(std::remove(tempq.begin(), tempq.end(), '-'), tempq.end());
 
                     if (tempd.compare(seq_ref) != 0 || tempq.compare(seq_qry) != 0) {
+//                        std::cout << "seq_ref:" << seq_ref << std::endl;
+//                        std::cout << "seq_qry:" << seq_qry << std::endl;
+//                        std::cout << "_alignment_d1:" << _alignment_d << std::endl;
+//                        std::cout << "_alignment_q1:" << _alignment_q << std::endl;
+                        alignMethod = "SLIDING_WINDOW";
                         thiScore = alignSlidingWindowNW(seq_qry, seq_ref, _alignment_q, _alignment_d, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
                         tempd = _alignment_d;
                         tempd.erase(std::remove(tempd.begin(), tempd.end(), '-'), tempd.end());
                         tempq = _alignment_q;
                         tempq.erase(std::remove(tempq.begin(), tempq.end(), '-'), tempq.end());
+//                        std::cout << "_alignment_d2:" << _alignment_d << std::endl;
+//                        std::cout << "_alignment_q2:" << _alignment_q << std::endl;
+//                        std::cout  << "line 686\t"  << refChr << "\t" << startRef - 1 << "\t" << startRef - 1 + seq_ref.size() << "\t" << alignMethod << "\t" << thiScore << "\t" << "+" << "\t" << queryChr << "\t" << startQuery-1 << "\t" << startQuery-1 + seq_qry.size() << std::endl;
+
+
                     }
 
                     assert(tempd == seq_ref);
@@ -631,6 +708,11 @@ void genomeAlignmentAndVariantCallingSingleThread(
                               << "s\t" << std::left << std::setw(chrWidth) << refChr << "\t" << std::right << std::setw(9) << startRef - 1 << "\t" << std::setw(9) << seq_ref.size() << "\t+\t" << size_ref_sq << "\t" << _alignment_d << std::endl
                               << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << startQuery - 1 << "\t" << std::setw(9) << seq_qry.size() << "\t+\t" << size_target_sq << "\t" << _alignment_q << std::endl
                               << std::endl;
+                    g_num_mutex.unlock();
+                }
+                if(oMethodBed){
+                    g_num_mutex.lock();
+                    oMethodBedfile << refChr << "\t" << startRef - 1 << "\t" << startRef - 1 + seq_ref.size() << "\t" << alignMethod << "\t" << thiScore << "\t" << "+" << "\t" << queryChr << "\t" << startQuery-1 << "\t" << startQuery-1 + seq_qry.size() << std::endl;
                     g_num_mutex.unlock();
                 }
             }
@@ -663,6 +745,11 @@ void genomeAlignmentAndVariantCallingSingleThread(
                               << std::endl;
                     g_num_mutex.unlock();
                 }
+                if(oMethodBed){
+                    g_num_mutex.lock();
+                    oMethodBedfile << refChr << "\t" << startRef - 1 << "\t" << startRef - 1  << "\t" << "FILLING" << "\t" << "0" << "\t" << "-" << "\t" << queryChr << "\t" << startQuery-1 << "\t" << startQuery-1 + seq_qry.size() << std::endl;
+                    g_num_mutex.unlock();
+                }
             }
             else if (alignmentMatch.getRefStartPos() != startRef && alignmentMatch.getQueryEndPos() == startQuery) {
                 endRef = alignmentMatch.getRefStartPos() - 1;
@@ -691,6 +778,11 @@ void genomeAlignmentAndVariantCallingSingleThread(
                               << std::endl;
                     g_num_mutex.unlock();
                 }
+                if(oMethodBed){
+                    g_num_mutex.lock();
+                    oMethodBedfile << refChr << "\t" << startRef - 1 << "\t" << startRef - 1 + seq_ref.size() << "\t" << "FILLING" << "\t" << "0" << "\t" << "-" << "\t" << queryChr << "\t" << startQuery-1 << "\t" << startQuery-1  << std::endl;
+                    g_num_mutex.unlock();
+                }
             }
             else if (alignmentMatch.getRefStartPos() == startRef && alignmentMatch.getQueryEndPos() == startQuery) {
 
@@ -704,9 +796,9 @@ void genomeAlignmentAndVariantCallingSingleThread(
 
                 std::string _alignment_q;
                 std::string _alignment_d;
-
-                int64_t thiScore = alignSlidingWindow(seq_qry, seq_ref, _alignment_q, _alignment_d, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
-                if (checkResult) {
+                std::string alignMethod;
+                int64_t thiScore = alignSlidingWindow(seq_qry, seq_ref, _alignment_q, _alignment_d, alignMethod, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
+                if (alignMethod.compare("BANDED_MINIMAP2")==0 && checkResult) {
                     std::string tempd = _alignment_d;
                     tempd.erase(std::remove(tempd.begin(), tempd.end(), '-'), tempd.end());
 
@@ -714,12 +806,23 @@ void genomeAlignmentAndVariantCallingSingleThread(
                     tempq.erase(std::remove(tempq.begin(), tempq.end(), '-'), tempq.end());
 
                     if (tempd.compare(seq_ref) != 0 || tempq.compare(seq_qry) != 0) {
+//                        std::cout << "seq_ref:" << seq_ref << std::endl;
+//                        std::cout << "seq_qry:" << seq_qry << std::endl;
+//                        std::cout << "_alignment_d1:" << _alignment_d << std::endl;
+//                        std::cout << "_alignment_q1:" << _alignment_q << std::endl;
+
+                        alignMethod = "SLIDING_WINDOW";
                         thiScore = alignSlidingWindowNW(seq_qry, seq_ref, _alignment_q, _alignment_d, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
                         tempd = _alignment_d;
                         tempd.erase(std::remove(tempd.begin(), tempd.end(), '-'), tempd.end());
                         tempq = _alignment_q;
                         tempq.erase(std::remove(tempq.begin(), tempq.end(), '-'), tempq.end());
+//                        std::cout << "_alignment_d2:" << _alignment_d << std::endl;
+//                        std::cout << "_alignment_q2:" << _alignment_q << std::endl;
+//                        std::cout << "line 818\t"  << refChr << "\t" << startRef - 1 << "\t" << startRef - 1 + seq_ref.size() << "\t" << alignMethod << "\t" << thiScore << "\t" << "-" << "\t" << queryChr << "\t" << startQuery-1 << "\t" << startQuery-1 + seq_qry.size() << std::endl;
+
                     }
+
                     assert(tempd == seq_ref);
                     assert(tempq == seq_qry);
                 }
@@ -737,6 +840,11 @@ void genomeAlignmentAndVariantCallingSingleThread(
                               << "s\t" << std::left << std::setw(chrWidth) << refChr << "\t" << std::right << std::setw(9) << startRef - 1 << "\t" << std::setw(9) << seq_ref.size() << "\t+\t" << size_ref_sq << "\t" << _alignment_d << std::endl
                               << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << negative_startQuery << "\t" << std::setw(9) << seq_qry.size() << "\t-\t" << size_target_sq << "\t" << _alignment_q << std::endl
                               << std::endl;
+                    g_num_mutex.unlock();
+                }
+                if(oMethodBed){
+                    g_num_mutex.lock();
+                    oMethodBedfile << refChr << "\t" << startRef - 1 << "\t" << startRef - 1 + seq_ref.size() << "\t" << alignMethod << "\t" << thiScore << "\t" << "-" << "\t" << queryChr << "\t" << startQuery-1 << "\t" << startQuery-1 + seq_qry.size() << std::endl;
                     g_num_mutex.unlock();
                 }
             }
@@ -807,9 +915,9 @@ void genomeAlignmentAndVariantCallingSingleThread(
 
             std::string _alignment_q;
             std::string _alignment_d;
-
-            int64_t thiScore = alignSlidingWindow(seq_qry, seq_ref, _alignment_q, _alignment_d, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
-            if (checkResult) {
+            std::string alignMethod;
+            int64_t thiScore = alignSlidingWindow(seq_qry, seq_ref, _alignment_q, _alignment_d, alignMethod, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
+            if (alignMethod.compare("BANDED_MINIMAP2")==0 && checkResult) {
                 std::string tempd = _alignment_d;
                 tempd.erase(std::remove(tempd.begin(), tempd.end(), '-'), tempd.end());
 
@@ -817,11 +925,20 @@ void genomeAlignmentAndVariantCallingSingleThread(
                 tempq.erase(std::remove(tempq.begin(), tempq.end(), '-'), tempq.end());
 
                 if (tempd.compare(seq_ref) != 0 || tempq.compare(seq_qry) != 0) {
+//                    std::cout << "seq_ref:" << seq_ref << std::endl;
+//                    std::cout << "seq_qry:" << seq_qry << std::endl;
+//                    std::cout << "_alignment_d1:" << _alignment_d << std::endl;
+//                    std::cout << "_alignment_q1:" << _alignment_q << std::endl;
+                    alignMethod="SLIDING_WINDOW";
                     thiScore = alignSlidingWindowNW(seq_qry, seq_ref, _alignment_q, _alignment_d, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
                     tempd = _alignment_d;
                     tempd.erase(std::remove(tempd.begin(), tempd.end(), '-'), tempd.end());
                     tempq = _alignment_q;
                     tempq.erase(std::remove(tempq.begin(), tempq.end(), '-'), tempq.end());
+//                    std::cout << "_alignment_d2:" << _alignment_d << std::endl;
+//                    std::cout << "_alignment_q2:" << _alignment_q << std::endl;
+//                    std::cout   << "line 936\t" << refChr << "\t" << startRef - 1 << "\t" << startRef - 1 + seq_ref.size() << "\t" << alignMethod << "\t" << thiScore << "\t" << mafStrand << "\t" << queryChr << "\t" << startQuery-1 << "\t" << startQuery-1 + seq_qry.size() << std::endl;
+
                 }
 
                 assert(tempd == seq_ref);
@@ -844,6 +961,11 @@ void genomeAlignmentAndVariantCallingSingleThread(
                           << "s\t" << std::left << std::setw(chrWidth) << refChr << "\t" << std::right << std::setw(9) << startRef - 1 << "\t" << std::setw(9) << seq_ref.size() << "\t+\t" << size_ref_sq << "\t" << _alignment_d << std::endl
                           << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << this_startQuery << "\t" << std::setw(9) << seq_qry.size() << "\t" << mafStrand << "\t" << size_target_sq << "\t" << _alignment_q << std::endl
                           << std::endl;
+                g_num_mutex.unlock();
+            }
+            if(oMethodBed){
+                g_num_mutex.lock();
+                oMethodBedfile << refChr << "\t" << startRef - 1 << "\t" << startRef - 1 + seq_ref.size() << "\t" << alignMethod << "\t" << thiScore << "\t" << mafStrand << "\t" << queryChr << "\t" << startQuery-1 << "\t" << startQuery-1 + seq_qry.size() << std::endl;
                 g_num_mutex.unlock();
             }
         }
@@ -889,6 +1011,11 @@ void genomeAlignmentAndVariantCallingSingleThread(
                           << std::endl;
                 g_num_mutex.unlock();
             }
+            if(oMethodBed){
+                g_num_mutex.lock();
+                oMethodBedfile << refChr << "\t" << startRef - 1 << "\t" << startRef - 1  << "\t" << "FILLING" << "\t" << "0" << "\t" << "+" << "\t" << queryChr << "\t" << startQuery-1 << "\t" << startQuery-1+seq_qry.size() << std::endl;
+                g_num_mutex.unlock();
+            }
         }
         else if (startRef <= endRef && startQuery > endQuery) {
             std::string refSeq = getSubsequence3(map_ref, fd_ref, refChr, startRef, endRef);
@@ -915,6 +1042,11 @@ void genomeAlignmentAndVariantCallingSingleThread(
                           << std::endl;
                 g_num_mutex.unlock();
             }
+            if(oMethodBed){
+                g_num_mutex.lock();
+                oMethodBedfile << refChr << "\t" << startRef - 1 << "\t" << startRef - 1 + refSeq.size() << "\t" << "FILLING" << "\t" << "0" << "\t" << "+" << "\t" << queryChr << "\t" << startQuery-1 << "\t" << startQuery-1  << std::endl;
+                g_num_mutex.unlock();
+            }
         }
         else if (startRef > endRef && startQuery > endQuery) {
 
@@ -925,9 +1057,9 @@ void genomeAlignmentAndVariantCallingSingleThread(
 
             std::string _alignment_q;
             std::string _alignment_d;
-
-            int64_t thiScore = alignSlidingWindow(seq_qry, seq_ref, _alignment_q, _alignment_d, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
-            if (checkResult) {
+            std::string alignMethod;
+            int64_t thiScore = alignSlidingWindow(seq_qry, seq_ref, _alignment_q, _alignment_d, alignMethod, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
+            if (alignMethod.compare("BANDED_MINIMAP2")==0 && checkResult) {
                 std::string tempd = _alignment_d;
                 tempd.erase(std::remove(tempd.begin(), tempd.end(), '-'), tempd.end());
 
@@ -935,11 +1067,20 @@ void genomeAlignmentAndVariantCallingSingleThread(
                 tempq.erase(std::remove(tempq.begin(), tempq.end(), '-'), tempq.end());
 
                 if (tempd.compare(seq_ref) != 0 || tempq.compare(seq_qry) != 0) {
+//                    std::cout << "seq_ref:" << seq_ref << std::endl;
+//                    std::cout << "seq_qry:" << seq_qry << std::endl;
+//                    std::cout << "_alignment_d1:" << _alignment_d << std::endl;
+//                    std::cout << "_alignment_q1:" << _alignment_q << std::endl;
                     thiScore = alignSlidingWindowNW(seq_qry, seq_ref, _alignment_q, _alignment_d, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
                     tempd = _alignment_d;
                     tempd.erase(std::remove(tempd.begin(), tempd.end(), '-'), tempd.end());
                     tempq = _alignment_q;
                     tempq.erase(std::remove(tempq.begin(), tempq.end(), '-'), tempq.end());
+                    alignMethod="SLIDING_WINDOW";
+//                    std::cout << "_alignment_d2:" << _alignment_d << std::endl;
+//                    std::cout << "_alignment_q2:" << _alignment_q << std::endl;
+//                    std::cout << "line 1077\t" << refChr << "\t" << startRef - 1 << "\t" << startRef - 1 + seq_ref.size() << "\t" << alignMethod << "\t" << thiScore << "\t" << "+" << "\t" << queryChr << "\t" << startQuery-1 << "\t" << startQuery-1 +seq_qry.size() << std::endl;
+
                 }
                 assert(tempd == seq_ref);
                 assert(tempq == seq_qry);
@@ -957,6 +1098,11 @@ void genomeAlignmentAndVariantCallingSingleThread(
                           << "s\t" << std::left << std::setw(chrWidth) << refChr << "\t" << std::right << std::setw(9) << startRef - 1 << "\t" << std::setw(9) << seq_ref.size() << "\t+\t" << size_ref_sq << "\t" << _alignment_d << std::endl
                           << "s\t" << std::left << std::setw(chrWidth) << queryChr << "\t" << std::right << std::setw(9) << startQuery - 1 << "\t" << std::setw(9) << seq_qry.size() << "\t+\t" << size_target_sq << "\t" << _alignment_q << std::endl
                           << std::endl;
+                g_num_mutex.unlock();
+            }
+            if(oMethodBed){
+                g_num_mutex.lock();
+                oMethodBedfile << refChr << "\t" << startRef - 1 << "\t" << startRef - 1 + seq_ref.size() << "\t" << alignMethod << "\t" << thiScore << "\t" << "+" << "\t" << queryChr << "\t" << startQuery-1 << "\t" << startQuery-1 +seq_qry.size() << std::endl;
                 g_num_mutex.unlock();
             }
         }
@@ -1020,13 +1166,13 @@ void genomeAlignmentAndVariantCallingSingleThread(
 void genomeAlignmentAndVariantCalling(std::map<std::string, std::vector<AlignmentMatch>> &map_v_am,
                                       const std::string &path_ref_GenomeSequence, const std::string &path_target_GenomeSequence,
                                       const int32_t &windowWidth, const std::string &outPutMafFile,
-                                      const std::string &outPutFragedFile, const int32_t &matchingScore, const int32_t &mismatchingPenalty,
+                                      const std::string &outPutFragedFile, const std::string &outPutBedFile, const int32_t &matchingScore, const int32_t &mismatchingPenalty,
                                       const int32_t &openGapPenalty1, const int32_t &extendGapPenalty1, const int32_t &openGapPenalty2, const int32_t &extendGapPenalty2,
                                       const int &maxThread) {
 
     bool outPutMaf = false;
     bool outPutFraged = false;
-
+    bool oMethodBed = false;
     if (outPutMafFile.size() > 0) {
         outPutMaf = true;
     }
@@ -1034,7 +1180,9 @@ void genomeAlignmentAndVariantCalling(std::map<std::string, std::vector<Alignmen
     if (outPutFragedFile.size() > 0) {
         outPutFraged = true;
     }
-
+    if (outPutBedFile.size() > 0) {
+        oMethodBed = true;
+    }
     std::map<std::string, std::tuple<std::string, long, long, int> > map_ref;
     readFastaFile(path_ref_GenomeSequence, map_ref);
 
@@ -1083,6 +1231,17 @@ void genomeAlignmentAndVariantCalling(std::map<std::string, std::vector<Alignmen
         ofragfile.open(outPutFragedFile);
 //        ofragfile << "##maf version=1" << std::endl;
     }
+    std::ofstream oMethodBedfile;
+
+    if (oMethodBed){
+        oMethodBedfile.open(outPutBedFile);
+        oMethodBedfile << "# FILLING: no alignment was performed" << std::endl;
+        oMethodBedfile << "# WAVEFRONT: alignment was performed using the WAVEFRONT approach" << std::endl;
+        oMethodBedfile << "# MINIMAP2: alignment was performed using the ksw_extd2 approach implemented in minimap2, without setting band" << std::endl;
+        oMethodBedfile << "# BANDED_MINIMAP2: alignment was performed using the ksw_extd2 approach implemented in minimap2, with band setting" << std::endl;
+        oMethodBedfile << "# SLIDING_WINDOW: alignment was performed using a sliding window approach" << std::endl;
+        oMethodBedfile << "# WAVEFRONT are MINIMAP2 expected to generate optimized alignments. BANDED_MINIMAP2 might generate suboptimal alignments. SLIDING_WINDOW high likely generate suboptimal alignments " << std::endl;
+    }
 
     std::atomic_int num_runing_threads(0);
 
@@ -1093,14 +1252,10 @@ void genomeAlignmentAndVariantCalling(std::map<std::string, std::vector<Alignmen
             while (isThisThreadUnrun) {
                 if (num_runing_threads < maxThread) {
 
-//                    std::thread t(genomeAlignmentAndVariantCallingSingleThread, std::ref(refChr), std::ref(queryChr), std::ref(map_ref), std::ref(map_qry), std::ref(it->second), std::ref(chrWidth),
-//                                  std::ref(refFileName), std::ref(queryFileName), std::ref(outPutMaf), std::ref(outPutFraged), std::ref(omaffile),
-//                                  std::ref(ofragfile), std::ref(windowWidth), std::ref(matchingScore), std::ref(mismatchingPenalty),
-//                                  std::ref(openGapPenalty1), std::ref(extendGapPenalty1), std::ref(openGapPenalty2), std::ref(extendGapPenalty2),
-//                                  std::ref(num_runing_threads));
+
                     std::thread t(genomeAlignmentAndVariantCallingSingleThread, std::ref(map_ref), std::ref(map_qry), std::ref(it->second), std::ref(chrWidth),
-                                  std::ref(refFileName), std::ref(queryFileName), std::ref(outPutMaf), std::ref(outPutFraged), std::ref(omaffile),
-                                  std::ref(ofragfile), std::ref(windowWidth), std::ref(matchingScore), std::ref(mismatchingPenalty),
+                                  std::ref(refFileName), std::ref(queryFileName), std::ref(outPutMaf), std::ref(outPutFraged), std::ref(oMethodBed), std::ref(omaffile),
+                                  std::ref(ofragfile), std::ref(oMethodBedfile), std::ref(windowWidth), std::ref(matchingScore), std::ref(mismatchingPenalty),
                                   std::ref(openGapPenalty1), std::ref(extendGapPenalty1), std::ref(openGapPenalty2), std::ref(extendGapPenalty2),
                                   std::ref(num_runing_threads));
 

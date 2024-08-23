@@ -353,7 +353,7 @@ int64_t alignSlidingWindow_minimap2(const std::string &dna_q, const std::string 
     return totalScore;
 }
 
-int64_t alignSlidingWindow_minimap2_or_NW(std::string &dna_q, std::string &dna_d, std::string &_alignment_q, std::string &_alignment_d,
+int64_t alignSlidingWindow_minimap2_or_NW(std::string &dna_q, std::string &dna_d, std::string &_alignment_q, std::string &_alignment_d, std::string &_alignMethod,
                                           const int64_t &slidingWindowSize, const int32_t &matchingScore,
                                           const int32_t &mismatchingPenalty, const int32_t &openGapPenalty1, const int32_t &extendGapPenalty1, const int32_t &openGapPenalty2, const int32_t &extendGapPenalty2) {
 
@@ -371,20 +371,24 @@ int64_t alignSlidingWindow_minimap2_or_NW(std::string &dna_q, std::string &dna_d
         int32_t adjustBandWidth = -1;
         totalScore = alignSlidingWindow_minimap2(dna_q, dna_d, _length_of_q, _length_of_d, _alignment_q, _alignment_d, adjustBandWidth,
                                                  mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
-    } else if (longerSeqLength * 2.0 < slidingWindowSize) { // this calculated with RAM cost longerSeqLength*slidingWindowSize*2 <= (slidingWindowSize*slidingWindowSize
+        _alignMethod = "MINIMAP2";
+    } else if (longerSeqLength * 0.5 < slidingWindowSize) { // this calculated with RAM cost longerSeqLength*slidingWindowSize*0.5 <= (slidingWindowSize*slidingWindowSize
         /*the above parameter settings were based on RAM cost*/
-        int32_t adjustBandWidth = (slidingWindowSize * 0.5 / longerSeqLength) * slidingWindowSize;
+        int32_t adjustBandWidth = (slidingWindowSize * 1.0 / longerSeqLength) * slidingWindowSize;
+        //std::cout << "adjustBandWidth:" << adjustBandWidth << std::endl;
         totalScore = alignSlidingWindow_minimap2(dna_q, dna_d, _length_of_q, _length_of_d, _alignment_q, _alignment_d, adjustBandWidth,
                                                  mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
+        _alignMethod = "BANDED_MINIMAP2";
     } else {
         totalScore = alignSlidingWindow(dna_q, dna_d, _length_of_q, _length_of_d, _alignment_q, _alignment_d, slidingWindowSize, matchingScore,
                                         mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
+        _alignMethod = "SLIDING_WINDOW";
     }
 
     return totalScore;
 }
 
-int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d, std::string &_alignment_q, std::string &_alignment_d,
+int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d, std::string &_alignment_q, std::string &_alignment_d, std::string &_alignMethod,
                                          const int64_t &slidingWindowSize, const int32_t &matchingScore,
                                          const int32_t &mismatchingPenalty, const int32_t &openGapPenalty1, const int32_t &extendGapPenalty1, const int32_t &openGapPenalty2, const int32_t &extendGapPenalty2) {
     int64_t totalScore = 0;
@@ -420,7 +424,7 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
 
     if (_length_of_q < 5 || _length_of_d < 5 || ratio > 3.0) {
 //        std::cout << " minimap2 1 " << std::endl;
-        totalScore = alignSlidingWindow_minimap2_or_NW(dna_q, dna_d, _alignment_q, _alignment_d,
+        totalScore = alignSlidingWindow_minimap2_or_NW(dna_q, dna_d, _alignment_q, _alignment_d, _alignMethod,
                                                        slidingWindowSize, matchingScore,
                                                        mismatchingPenalty, openGapPenalty1, extendGapPenalty1,
                                                        openGapPenalty2,
@@ -469,9 +473,10 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
                 }
             }
             wavefront_aligner_delete(wf_aligner);
+            _alignMethod = "WAVEFRONT";
         } else {
             wavefront_aligner_delete(wf_aligner);
-            totalScore = alignSlidingWindow_minimap2_or_NW(dna_q, dna_d, _alignment_q, _alignment_d,
+            totalScore = alignSlidingWindow_minimap2_or_NW(dna_q, dna_d, _alignment_q, _alignment_d, _alignMethod,
                                                            slidingWindowSize, matchingScore,
                                                            mismatchingPenalty, openGapPenalty1, extendGapPenalty1,
                                                            openGapPenalty2,
@@ -482,17 +487,16 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
     return totalScore;
 }
 
-int64_t alignSlidingWindow(std::string &dna_q, std::string &dna_d, std::string &_alignment_q, std::string &_alignment_d,
+int64_t alignSlidingWindow(std::string &dna_q, std::string &dna_d, std::string &_alignment_q, std::string &_alignment_d, std::string &_alignMethod,
                            const int64_t &slidingWindowSize,  const int32_t &matchingScore,
                            const int32_t &mismatchingPenalty, const int32_t &openGapPenalty1, const int32_t &extendGapPenalty1, const int32_t &openGapPenalty2, const int32_t &extendGapPenalty2) {
-    return alignSlidingWindow_local_wfa2_v2(dna_q, dna_d, _alignment_q, _alignment_d, slidingWindowSize, matchingScore,
+    return alignSlidingWindow_local_wfa2_v2(dna_q, dna_d, _alignment_q, _alignment_d, _alignMethod, slidingWindowSize, matchingScore,
                                             mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
 }
 
 int64_t alignSlidingWindowNW(std::string &dna_q, std::string &dna_d, std::string &_alignment_q, std::string &_alignment_d,
                              const int64_t &slidingWindowSize, const int32_t &matchingScore,
-                             const int32_t &mismatchingPenalty, const int32_t &openGapPenalty1, const int32_t &extendGapPenalty1, const int32_t &openGapPenalty2, const int32_t &extendGapPenalty2,
-                             const Scorei &m) {
+                             const int32_t &mismatchingPenalty, const int32_t &openGapPenalty1, const int32_t &extendGapPenalty1, const int32_t &openGapPenalty2, const int32_t &extendGapPenalty2) {
     int64_t totalScore = 0;
     _alignment_q = "";
     _alignment_d = "";
