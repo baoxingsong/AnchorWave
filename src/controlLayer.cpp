@@ -1500,10 +1500,10 @@ int pro(int argc, char **argv) {
           " -E   DOUBLE  chain gap extend penalty (default: " << GAP_EXTENSION_PENALTY << ")" << std::endl <<
           " -I   DOUBLE  minimum chain score (default: " << MIN_ALIGNMENT_SCORE << ")" << std::endl <<
           " -D   INT     maximum gap size for chain (default: " << MAX_DIST_BETWEEN_MATCHES << ")" << std::endl <<
-          " -m   INT     Specify whether to delete tandem gene pairs in the input file (default: " << delete_tandem << ")" << std::endl <<
-          "              Options: 0 to retain tandem gene pairs; 1 or any other integer to delete them." << std::endl <<
-          " -W   INT     When -m is set to delete tandem gene pairs(1 or any other integer), " << std::endl <<
-          "              specify the maximum distance allowed between two homologous gene pairs before they are considered for deletion" << "(default: " << OVER_LAP_WINDOW << ")" << std::endl <<
+          " -m   INT     Specify whether to delete fake tandem gene pairs(collapse blast matches) in the input file (default: " << delete_tandem << ")" << std::endl <<
+          "              Options: 0 to retain fake tandem gene pairs(don't collapse blast matches); 1 or any other integer to delete them." << std::endl <<
+          " -W   INT     When -m is set to collapse blast matches(1 or any other integer), " << std::endl <<
+          "              specify the maximum distance(OVER LAP WINDOW) allowed between two homologous gene pairs before they are considered for deletion" << "(default: " << OVER_LAP_WINDOW << ")" << std::endl <<
           "              This parameter is ignored if -m is not set to delete tandem gene pairs(set 0)." << std::endl <<
           " -a   INT     Enable this flag to get all collinear results and disable the R and Q parameters (default: " << get_all_collinear_gene_pair << ")" << std::endl <<
           "              Options: 0:enable R Q parameter; 1 or other integer: all collinear result" << std::endl <<
@@ -1609,18 +1609,38 @@ int pro(int argc, char **argv) {
             // insert first pair
             match_bin1.push_back(*prev_pair1);
             // match_bin1[0] has a maximum identity value in the match_bin by orthologPairSortQuery function.
-//            std::cout << "\t" << "line1606" << "\t" << alignmentMatchsMapT.size() << std::endl;
             for (; it1 != alignmentMatchsMapT.end(); it1++) {
                 if (it1->getRefChr() == prev_pair1->getRefChr() && it1->getQueryChr() == prev_pair1->getQueryChr()) {
                     if ((it1->getQueryId() != prev_pair1->getQueryId()) ||
                         (std::abs(it1->getRefId() - prev_pair1->getRefId()) > OVER_LAP_WINDOW)) {
-                        alignmentMatchsMapT_cpy1.push_back(match_bin1[0]);
+                        orthologPairSortMatchBin(match_bin1);
+
+                        if (match_bin1.size() == 1 && match_bin1[0].getQueryChr() == match_bin1[0].getRefChr()
+                           && std::abs(match_bin1[0].getRefId() - match_bin1[0].getQueryId()) > OVER_LAP_WINDOW ){
+                            alignmentMatchsMapT_cpy1.push_back(match_bin1[0]);
+                        }
+                        if (match_bin1[0].getQueryChr() != match_bin1[0].getRefChr()){
+                            for (const AlignmentMatch &i: match_bin1) {
+                                assert( i.getRefChr() != i.getQueryChr());
+                                alignmentMatchsMapT_cpy1.push_back(i);
+                            }
+                        }
                         match_bin1.clear();
                     }
                     match_bin1.push_back(*it1);
                 } else if (it1->getRefChr() != prev_pair1->getRefChr() ||
                            it1->getQueryChr() != prev_pair1->getQueryChr()) {
-                    alignmentMatchsMapT_cpy1.push_back(match_bin1[0]);
+                    orthologPairSortMatchBin(match_bin1);
+                    if (match_bin1.size() == 1 && match_bin1[0].getQueryChr() == match_bin1[0].getRefChr()
+                    && std::abs(match_bin1[0].getRefId() - match_bin1[0].getQueryId()) > OVER_LAP_WINDOW ){
+                        alignmentMatchsMapT_cpy1.push_back(match_bin1[0]);
+                    }
+                    if (match_bin1[0].getQueryChr() != match_bin1[0].getRefChr()){
+                        for (const AlignmentMatch &i: match_bin1) {
+                            assert( i.getRefChr() != i.getQueryChr());
+                            alignmentMatchsMapT_cpy1.push_back(i);
+                        }
+                    }
                     match_bin1.clear();
                     prev_pair1 = it1;
                     match_bin1.push_back(*prev_pair1);
@@ -1628,10 +1648,19 @@ int pro(int argc, char **argv) {
                 }
                 prev_pair1 = it1;
             }
-            alignmentMatchsMapT_cpy1.push_back(match_bin1[0]);  //the last bin
+            orthologPairSortMatchBin(match_bin1);
+            if (match_bin1.size() == 1 && match_bin1[0].getQueryChr() == match_bin1[0].getRefChr()
+                && std::abs(match_bin1[0].getRefId() - match_bin1[0].getQueryId()) > OVER_LAP_WINDOW ){
+                alignmentMatchsMapT_cpy1.push_back(match_bin1[0]);
+            }
+            if (match_bin1[0].getQueryChr() != match_bin1[0].getRefChr()){
+                for (const AlignmentMatch &i: match_bin1) {
+                    assert( i.getRefChr() != i.getQueryChr());
+                    alignmentMatchsMapT_cpy1.push_back(i);
+                }
+            }
             alignmentMatchsMapT.clear();
             alignmentMatchsMapT = alignmentMatchsMapT_cpy1;
-//            std::cout << "\t" << "line1628" << "\t" << alignmentMatchsMapT.size() << std::endl;
             alignmentMatchsMapT_cpy1.clear();
 
             // sort by querychr refchr refstart(ref gene name) and identity/100,respectively.
@@ -1645,18 +1674,37 @@ int pro(int argc, char **argv) {
             // insert first pair
             match_bin2.push_back(*prev_pair2);
             // match_bin2[0] has a maximum identity value in the match_bin by orthologPairSortReference.
-//            std::cout << "\t" << "line1642" << "\t" << alignmentMatchsMapT.size() << std::endl;
             for (; it2 != alignmentMatchsMapT.end(); it2++) {
                 if (it2->getRefChr() == prev_pair2->getRefChr() && it2->getQueryChr() == prev_pair2->getQueryChr()) {
                     if ((it2->getRefId() != prev_pair2->getRefId()) ||
                         (std::abs(it2->getQueryId() - prev_pair2->getQueryId()) > OVER_LAP_WINDOW)) {
-                        alignmentMatchsMapT_cpy2.push_back(match_bin2[0]);
+                        orthologPairSortMatchBin(match_bin2);
+                        if (match_bin2.size() == 1 && match_bin2[0].getQueryChr() == match_bin2[0].getRefChr()
+                        && std::abs(match_bin2[0].getRefId() - match_bin2[0].getQueryId()) > OVER_LAP_WINDOW ){
+                            alignmentMatchsMapT_cpy2.push_back(match_bin2[0]);
+                        }
+                        if (match_bin2[0].getQueryChr() != match_bin2[0].getRefChr()){
+                            for (const AlignmentMatch &i: match_bin2) {
+                                assert( i.getRefChr() != i.getQueryChr());
+                                alignmentMatchsMapT_cpy2.push_back(i);
+                            }
+                        }
                         match_bin2.clear();
                     }
                     match_bin2.push_back(*it2);
                 } else if (it1->getRefChr() != prev_pair1->getRefChr() ||
                            it1->getQueryChr() != prev_pair1->getQueryChr()) {
-                    alignmentMatchsMapT_cpy2.push_back(match_bin2[0]);
+                    orthologPairSortMatchBin(match_bin2);
+                    if (match_bin2.size() == 1 && match_bin2[0].getQueryChr() == match_bin2[0].getRefChr()
+                        && std::abs(match_bin2[0].getRefId() - match_bin2[0].getQueryId()) > OVER_LAP_WINDOW ){
+                        alignmentMatchsMapT_cpy2.push_back(match_bin2[0]);
+                    }
+                    if (match_bin2[0].getQueryChr() != match_bin2[0].getRefChr()){
+                        for (const AlignmentMatch &i: match_bin2) {
+                            assert( i.getRefChr() != i.getQueryChr());
+                            alignmentMatchsMapT_cpy2.push_back(i);
+                        }
+                    }
                     match_bin2.clear();
                     prev_pair2 = it2;
                     match_bin2.push_back(*prev_pair2);
@@ -1664,10 +1712,20 @@ int pro(int argc, char **argv) {
                 }
                 prev_pair2 = it2;
             }
-            alignmentMatchsMapT_cpy2.push_back(match_bin2[0]);
+            orthologPairSortMatchBin(match_bin2);
+            if (match_bin2.size() == 1 && match_bin2[0].getQueryChr() == match_bin2[0].getRefChr()
+                && std::abs(match_bin2[0].getRefId() - match_bin2[0].getQueryId()) > OVER_LAP_WINDOW ){
+                alignmentMatchsMapT_cpy2.push_back(match_bin2[0]);
+            }
+            if (match_bin2[0].getQueryChr() != match_bin2[0].getRefChr()){
+                for (const AlignmentMatch &i: match_bin2) {
+                    assert( i.getRefChr() != i.getQueryChr());
+                    alignmentMatchsMapT_cpy2.push_back(i);
+                }
+            }
             alignmentMatchsMapT.clear();
             alignmentMatchsMapT = alignmentMatchsMapT_cpy2;
-//            std::cout << "\t" << "line1664" << "\t" << alignmentMatchsMapT.size() << std::endl;
+
             alignmentMatchsMapT_cpy2.clear();
         }
 

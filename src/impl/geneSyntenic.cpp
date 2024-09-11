@@ -31,6 +31,15 @@ void myOrthologPairsSortQueryQuota(std::vector<AlignmentMatch> &pairedSimilarFra
     });
 }
 
+void orthologPairSortMatchBin(std::vector<AlignmentMatch> &pairedSimilarFragments) {
+    std::sort(pairedSimilarFragments.begin(), pairedSimilarFragments.end(), [](const AlignmentMatch& a, const AlignmentMatch& b) {
+        if (a.getScore() > b.getScore()) {
+            return true;
+        }
+        return false;
+    });
+}
+
 // if two genes have same start and end position in different strand, Python script GffFile may be Error.
 void orthologPairSortQuery(std::vector<AlignmentMatch> &pairedSimilarFragments) {
     std::sort(pairedSimilarFragments.begin(), pairedSimilarFragments.end(), [](const AlignmentMatch& a, const AlignmentMatch& b) {
@@ -50,12 +59,12 @@ void orthologPairSortQuery(std::vector<AlignmentMatch> &pairedSimilarFragments) 
         }
         if ((a.getQueryChr() == b.getQueryChr()) && (a.getRefChr() == b.getRefChr())
             && (a.getQueryStartPos() == b.getQueryStartPos()) && (a.getQueryGeneName() == b.getQueryGeneName()) &&
-            (a.getScore() > b.getScore())){ // prepare to select max score pair, delete other tandem/proximal duplication gene.
+            (a.getRefStartPos() < b.getRefStartPos())){
             return true;
         }
         if ((a.getQueryChr() == b.getQueryChr()) && (a.getRefChr() == b.getRefChr())
             && (a.getQueryStartPos() == b.getQueryStartPos()) && (a.getQueryGeneName() == b.getQueryGeneName())
-            && (a.getScore() == b.getScore()) && (a.getRefStartPos() < b.getRefStartPos())){
+            && (a.getRefStartPos() == b.getRefStartPos()) && (a.getReferenceGeneName() < b.getReferenceGeneName())){
             return true;
         }
         return false;
@@ -80,12 +89,12 @@ void orthologPairSortReference(std::vector<AlignmentMatch> &pairedSimilarFragmen
         }
         if ((a.getQueryChr() == b.getQueryChr()) && (a.getRefChr() == b.getRefChr())
             && (a.getRefStartPos() == b.getRefStartPos()) && (a.getReferenceGeneName() == b.getReferenceGeneName())
-            && (a.getScore() > b.getScore())){
+            && (a.getQueryStartPos() < b.getQueryStartPos())){
             return true;
         }
         if ((a.getQueryChr() == b.getQueryChr()) && (a.getRefChr() == b.getRefChr())
             && (a.getRefStartPos() == b.getRefStartPos()) && (a.getReferenceGeneName() == b.getReferenceGeneName())
-            && (a.getScore() == b.getScore()) && (a.getQueryStartPos() < b.getQueryStartPos())){
+            && (a.getQueryStartPos() == b.getQueryStartPos()) && (a.getQueryGeneName() < b.getQueryGeneName())){
             return true;
         }
         return false;
@@ -105,7 +114,7 @@ void orthologPairSortPosition(std::vector<AlignmentMatch> &pairedSimilarFragment
             return true;
         }
         if ((a.getQueryChr() == b.getQueryChr()) && (a.getRefChr() == b.getRefChr())
-            && (a.getRefStartPos() == b.getRefStartPos()) && (a.getRefEndPos() < b.getRefEndPos())){
+            && (a.getRefStartPos() == b.getRefStartPos()) && (a.getRefEndPos() > b.getRefEndPos())){
             return true;
         }
         if ((a.getQueryChr() == b.getQueryChr()) && (a.getRefChr() == b.getRefChr())
@@ -116,6 +125,18 @@ void orthologPairSortPosition(std::vector<AlignmentMatch> &pairedSimilarFragment
         if ((a.getQueryChr() == b.getQueryChr()) && (a.getRefChr() == b.getRefChr())
             && (a.getRefStartPos() == b.getRefStartPos()) && (a.getRefEndPos() == b.getRefEndPos())
             && (a.getReferenceGeneName() == b.getReferenceGeneName()) && (a.getQueryStartPos() < b.getQueryStartPos())){
+            return true;
+        }
+        if ((a.getQueryChr() == b.getQueryChr()) && (a.getRefChr() == b.getRefChr())
+            && (a.getRefStartPos() == b.getRefStartPos()) && (a.getRefEndPos() == b.getRefEndPos())
+            && (a.getReferenceGeneName() == b.getReferenceGeneName()) && (a.getQueryStartPos() == b.getQueryStartPos())
+            && (a.getQueryEndPos() > b.getQueryEndPos())){
+            return true;
+        }
+        if ((a.getQueryChr() == b.getQueryChr()) && (a.getRefChr() == b.getRefChr())
+            && (a.getRefStartPos() == b.getRefStartPos()) && (a.getRefEndPos() == b.getRefEndPos())
+            && (a.getReferenceGeneName() == b.getReferenceGeneName()) && (a.getQueryStartPos() == b.getQueryStartPos())
+            && (a.getQueryEndPos() == b.getQueryEndPos()) && (a.getQueryGeneName() < b.getQueryGeneName())){
             return true;
         }
         return false;
