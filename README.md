@@ -12,7 +12,7 @@ By performing sensitive sequence alignment for each shorter interval via a 2-pie
 
 AnchorWave takes the reference genome sequence and gene annotation in GFF3 format as input and extracts reference full-length coding sequences (CDS) to use as anchors. 
 Using a splice aware alignment program (minimap2 and GMAP have been tested) to lift over the start and end position of reference full-length CDS to the query genome (step 1). 
-AnchorWave then identifies collinear anchors using one of three user-specified algorithm options (step 2) and uses the [WFA](https://github.com/smarco/WFA) algorithm to perform alignment for each anchor and inter anchor interval (step 4). Some anchor/inter-anchor regions cannot be aligned using our standard approach due to high memory and computational time costs. For these, AnchorWave either identifies novel anchors within long inter-anchor regions (step 3), or for those that cannot be split by novel anchors, aligns using the ksw_extd2 function implemented in minimap2 or a reimplemented sliding window approach (step 4). AnchorWave concatenates base pair sequence alignment for each anchor and inter-anchor region and outputs the alignment in MAF format (step 5).
+AnchorWave then identifies collinear anchors using one of three user-specified algorithm options (step 2) and uses the [WFA](https://github.com/smarco/WFA2-lib) and [minimap2](https://github.com/lh3/minimap2) algorithm to perform alignment for each anchor and inter anchor interval (step 4). Some anchor/inter-anchor regions cannot be aligned using our standard approach due to high memory and computational time costs. For these, AnchorWave either identifies novel anchors within long inter-anchor regions (step 3), or for those that cannot be split by novel anchors, aligns using the ksw_extd2 function implemented in minimap2 or a reimplemented sliding window approach (step 4). AnchorWave concatenates base pair sequence alignment for each anchor and inter-anchor region and outputs the alignment in MAF format (step 5).
 
 
 Table of Contents
@@ -79,7 +79,7 @@ In general, totally four commands are need to run through the whole pipeline.
 * [AnchorWave use prior informations about whole genome duplication, chromosome rearrangement etc to guide the genome alignment, while AnchorWave could not figure out those evolution events automatically. Users need to know those informations before running AnchorWave and tune the parameters accordingly. Users might need to draw some plots to figure out if you would like to use `genoAli` or `proali`. If `genoAli` is proper, then need to think about if you would like to set `IV`.
 If `proali` is proper, then need to think about how to set the values of `R`, `Q` and maybe `-e`.](#Note)
 Could refer [guideline.pdf](./doc/guideline.pdf) or [#16](./issues/16) for how to do that.
-* To alignment highly diverse genomes, the command 4 might cost a couple of CPU days. </span> If you have large memory available, this step could be paralyzed. Without heavily parameters turning, for highly diverse genomes, using a single thread, AnchorWave uses ~85Gb memory. Increasing a thread would cost an extra ~50Gb memory. If the two genomes have very similar sequences, the time and memory cost would be significantly less.
+* To alignment highly diverse genomes, the command 4 might cost a couple of CPU days. </span> If you have large memory available, this step could be paralyzed. Without heavily parameters turning, for highly diverse genomes, using a single thread, AnchorWave uses ~20Gb memory. Increasing a thread would cost an extra ~10Gb memory. If the two genomes have very similar sequences, the time and memory cost would be significantly less.
 
 
 Options:
@@ -189,8 +189,8 @@ Options
  -n   FILE    output anchors file
  -o   FILE    output file in maf format
  -f   FILE    output sequence alignment for each anchor/inter-anchor region in maf format
+ -b   FILE    output the sequence alignment method used for each anchor/inter-anchor region, in bed format
  -t   INT     number of threads (default: 1)
- -v   FILE    output variant calling in vcf format (conflict with -IV)
  -m   INT     minimum exon length to use (default: 20, should be identical with the setting of gff2seq function)
  -mi  DOUBLE  minimum full-length CDS anchor hit similarity to use (default:0.95)
  -mi2 DOUBLE  minimum novel anchor hit similarity to use (default:0.2)
@@ -264,8 +264,8 @@ anchorwave genoAli -i Zea_mays.AGPv4.34.gff3 -as cds.fa -r Zea_mays.AGPv4.dna.to
 anchorwave genoAli -i Zea_mays.AGPv4.34.gff3 -as cds.fa -r Zea_mays.AGPv4.dna.toplevel.fa -a cds.sam -ar ref.sam -s Zm-Mo17-REFERENCE-CAU-1.0.fa -n anchors -o anchorwave.maf -f anchorwave.f.maf -IV -m 0
 ```
 
-This command might cost a couple of days (~ three days on our computer) and 80 Gb memory. Reduce the values of parameters ```-w``` and ```-fa3``` could reduce memory usage and CPU time but would also reduce the sequence alignment quality.  
-If you have larger memory and multiple CPU cores available, you could increase the value of ```-t``` to run the command using multiple threads. By increasing each thread, ~50Gb more memory would be used. The memory cost is associated with sequence diversity. The above dataset is roughly represent the dataset that cost largest memory.
+This command might cost a couple of days (~ one day on our computer) and 20 Gb memory. Reduce the values of parameters ```-w``` and ```-fa3``` could reduce memory usage and CPU time but would also reduce the sequence alignment quality.  
+If you have larger memory and multiple CPU cores available, you could increase the value of ```-t``` to run the command using multiple threads. By increasing each thread, ~10Gb more memory would be used. The memory cost is associated with sequence diversity. The above dataset is roughly represent the dataset that cost largest memory.
 
 ### Genome alignment with relocation variation, chromosome fusion or whole genome duplication (an option of command 4)
 When comparing two genomes undergone different genome duplications (goldfish genome, plant genomes and maybe hexapod genomes), this program implemented algorithm to identify collinear blocks with user specified coverage, and perform base pair resolution genome alignment for each collinear block.  \
@@ -321,6 +321,7 @@ Options
  -n   FILE    output anchors file
  -o   FILE    output file in maf format
  -f   FILE    output sequence alignment for each anchor/inter-anchor region in maf format
+ -b   FILE    output the sequence alignment method used for each anchor/inter-anchor region, in bed format
  -t   INT     number of threads (default: 1)
  -fa3 INT     if the inter-anchor length is shorter than this value, stop trying to find new anchors (default: 100000)
  -w   INT     sequence alignment window width (default: 100000)
@@ -338,8 +339,8 @@ Options
               This prevents using tandem duplicated genes to identify collinear block
  -y   DOUBLE  minimal ratio of e+1 similarity to 1 similarity to drop an anchor (default: 0.6)
  -ar  FILE    sam file by mapping conserved sequence to reference genome
-              this is used to improve the accurancy of anchors mapping
- Following parameters are for identify collinear blocks
+              this is used to improve the accuracy of anchors mapping
+ Following parameters are to identify collinear blocks
  -d   DOUBLE  calculate IndelDistance (default: 3)
  -O   DOUBLE  chain open gap penalty (default: -0.03)
  -E   DOUBLE  chain extend gap penalty (default: -0.01)
@@ -358,12 +359,21 @@ python2 maf-convert sam anchorwave.maf | sed 's/[0-9]\+H//g' > anchorwave.sam
 cat anchorwave.sam | samtools view -O BAM --reference Zea_mays.AGPv4.dna.toplevel.fa - | samtools sort - > anchorwave.bam
 samtools index anchorwave.bam
 ```
-If you would like to swap reference and query sequence, there is no need to re-run AnchorWave, which is computational cost.  
-The script ```anchorwave-maf-swap.py``` under folder ```scripts``` has been implemented for this aim:
+The [bioconvert](https://github.com/bioconvert/bioconvert) is very efficient to reformat the alignments into bam or paf:
 ```
-cat anchorwave.maf | python2 anchorwave-maf-swap.py >anchorwave_swap.maf
-maf-convert sam anchorwave_swap.maf | sed 's/[0-9]\+H//g' > anchorwave_swap.sam
-samtools view -O BAM --reference Zm-Mo17-REFERENCE-CAU-1.0.fa anchorwave_swap.sam | samtools sort - > anchorwave_swap.bam
+bioconvert maf2sam anchorwave.maf anchorwave.sam
+bioconvert sam2paf anchorwave.bc.sam anchorwave.paf
+cat anchorwave.sam | sed 's/[0-9]\+H//g' | samtools view -O BAM --reference Zea_mays.AGPv4.dna.toplevel.fa - | samtools sort - > anchorwave.bam
+samtools index anchorwave.bam
+```
+If you would like to swap reference and query sequence, there is no need to re-run AnchorWave, which is computational cost.  
+The script  [maf-swap](https://gitlab.com/mcfrith/last/-/blob/main/bin/maf-swap)  could be used for this aim:
+```
+cat anchorwave.maf | python2 maf-swap >anchorwave_swap.maf
+bioconvert maf2sam anchorwave_swap.maf anchorwave_swap.sam
+bioconvert sam2paf anchorwave_swap.bc.sam anchorwave_swap.paf
+cat anchorwave_swap.sam | sed 's/[0-9]\+H//g' | samtools view -O BAM --reference Zm-Mo17-REFERENCE-CAU-1.0.fa - | samtools sort - > anchorwave_swap.bam
+samtools index anchorwave_swap.bam
 ```
 If you would like to reformat MAF files into (G)VCF or track the coordinates on query genome and the reference genome,
 please refer the MAF to G(VCF) [pipeline](https://github.com/baoxingsong/AnchorWave/blob/master/doc/GATK.md).

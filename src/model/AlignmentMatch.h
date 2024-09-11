@@ -6,7 +6,7 @@
 
 #include <string>
 #include "STRAND.h"
-
+#include <cstdint>
 
 class AlignmentMatch {
 private:

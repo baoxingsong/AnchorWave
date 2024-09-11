@@ -243,6 +243,7 @@ int genomeAlignment(int argc, char **argv) {
           " -n   FILE    output anchors file" << std::endl <<
           " -o   FILE    output file in maf format" << std::endl <<
           " -f   FILE    output sequence alignment for each anchor/inter-anchor region in maf format" << std::endl <<
+          " -b   FILE    output the sequence alignment method used for each anchor/inter-anchor region, in bed format" << std::endl <<
           " -t   INT     number of threads (default: " << threads << ")" << std::endl <<
           " -m   INT     minimum exon length to use (default: " << minExon << ", should be identical with the setting of gff2seq function)" << std::endl <<
           " -mi  DOUBLE  minimum full-length CDS anchor hit similarity to use (default:" << minimumSimilarity << ")" << std::endl <<
@@ -281,8 +282,8 @@ int genomeAlignment(int argc, char **argv) {
         std::string cdsSequenceFile = inputParser.getCmdOption("-as");
         std::string samFilePath = inputParser.getCmdOption("-a");
         std::string path_target_GenomeSequence = inputParser.getCmdOption("-s");
-        std::string outPutMafFile;
 
+        std::string outPutMafFile;
         if (inputParser.cmdOptionExists("-o")) {
             outPutMafFile = inputParser.getCmdOption("-o");
         }
@@ -290,6 +291,11 @@ int genomeAlignment(int argc, char **argv) {
         std::string outPutFragedFile;
         if (inputParser.cmdOptionExists("-f")) {
             outPutFragedFile = inputParser.getCmdOption("-f");
+        }
+
+        std::string outPutBedFile;
+        if (inputParser.cmdOptionExists("-b")) {
+            outPutBedFile = inputParser.getCmdOption("-b");
         }
 
         if (inputParser.cmdOptionExists("-t")) {
@@ -532,7 +538,7 @@ int genomeAlignment(int argc, char **argv) {
         if (inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-o") || inputParser.cmdOptionExists("-l")) {
             genomeAlignmentAndVariantCalling(map_v_am, path_ref_GenomeSequence, path_target_GenomeSequence,
                                              windowWidth,
-                                             outPutMafFile, outPutFragedFile,
+                                             outPutMafFile, outPutFragedFile, outPutBedFile,
                                              matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1,
                                              openGapPenalty2, extendGapPenalty2,
                                              threads);
@@ -726,6 +732,7 @@ int proportionalAlignment(int argc, char **argv) {
           " -n   FILE    output anchors file" << std::endl <<
           " -o   FILE    output file in maf format" << std::endl <<
           " -f   FILE    output sequence alignment for each anchor/inter-anchor region in maf format" << std::endl <<
+          " -b   FILE    output the sequence alignment method used for each anchor/inter-anchor region, in bed format" << std::endl <<
           " -t   INT     number of threads (default: " << threads << ")" << std::endl <<
           " -fa3 INT     if the inter-anchor length is shorter than this value, stop trying to find new anchors (default: " << wfaSize3 << ")" << std::endl <<
           " -w   INT     sequence alignment window width (default: " << windowWidth << ")" << std::endl <<
@@ -776,6 +783,11 @@ int proportionalAlignment(int argc, char **argv) {
         std::string outPutFragedFile;
         if (inputParser.cmdOptionExists("-f")) {
             outPutFragedFile = inputParser.getCmdOption("-f");
+        }
+
+        std::string outPutBedFile;
+        if (inputParser.cmdOptionExists("-b")) {
+            outPutBedFile = inputParser.getCmdOption("-b");
         }
 
         if (inputParser.cmdOptionExists("-t")) {
@@ -1013,7 +1025,7 @@ int proportionalAlignment(int argc, char **argv) {
 
         if (inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-o") || inputParser.cmdOptionExists("-l")) {
             genomeAlignment(v_v_am, referenceGenomeSequence, targetGenomeSequence, windowWidth,
-                            outPutMafFile, outPutFragedFile, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1,
+                            outPutMafFile, outPutFragedFile, outPutBedFile, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1,
                             openGapPenalty2, extendGapPenalty2, threads);
             std::cout << "AnchorWave done!" << std::endl;
         }
@@ -1121,8 +1133,8 @@ int ali(int argc, char **argv) {
 
     std::string refSeqStr = getSubsequence2(map_ref, map_ref.begin()->first);
     std::string querySeqStr = getSubsequence2(map_qry, map_qry.begin()->first);
-
-    alignSlidingWindow(querySeqStr, refSeqStr, _alignment_q, _alignment_d, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
+    std::string alignmentMethod= "UNKNOWN";
+    alignSlidingWindow(querySeqStr, refSeqStr, _alignment_q, _alignment_d, alignmentMethod, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
 
     std::cout << ">" << map_ref.begin()->first << std::endl;
     std::cout << _alignment_d << std::endl;

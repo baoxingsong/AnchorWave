@@ -862,7 +862,9 @@ void setupAnchorsWithSpliceAlignmentResult(const std::string &gffFilePath, const
                             delete [] query_seq_array;
                         }
                     }
-                } else if (lastStrand == NEGATIVE && alignmentMatch.getStrand() == NEGATIVE) {
+                } else if (lastStrand == NEGATIVE && alignmentMatch.getStrand() == NEGATIVE
+                           && alignmentMatch.getRefStartPos() > temp[m-1].getRefEndPos()
+                           && alignmentMatch.getQueryEndPos() < temp[m-1].getQueryStartPos()   ) {
                     if (alignmentMatch.getRefStartPos() == startRef && alignmentMatch.getQueryEndPos() != startQuery) {
 
                     } else if (alignmentMatch.getRefStartPos() != startRef && alignmentMatch.getQueryEndPos() == startQuery) {
