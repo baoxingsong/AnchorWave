@@ -1484,8 +1484,6 @@ int geno(int argc, char **argv) {
 }
 
 
-
-
 int pro(int argc, char **argv) {
     double MIN_ALIGNMENT_SCORE = 2;
     double GAP_OPEN_PENALTY = -0.02;
@@ -1493,10 +1491,11 @@ int pro(int argc, char **argv) {
     int MAX_DIST_BETWEEN_MATCHES = 25;
     int refMaximumTimes = 1;
     int queryMaximumTimes = 1;
-    int OVER_LAP_WINDOW = 5;
-    int delete_tandem = 0;
+    int OVER_LAP_WINDOW = 0;
+    int delete_tandem_length = 0;
     int get_all_collinear_gene_pair = 0;
     int count_style = 1;
+    int strict_strand = 1;
 
     std::stringstream usage;
 
@@ -1512,14 +1511,14 @@ int pro(int argc, char **argv) {
           " -E   DOUBLE  chain gap extend penalty (default: " << GAP_EXTENSION_PENALTY << ")" << std::endl <<
           " -I   DOUBLE  minimum chain score (default: " << MIN_ALIGNMENT_SCORE << ")" << std::endl <<
           " -D   INT     maximum gap size for chain (default: " << MAX_DIST_BETWEEN_MATCHES << ")" << std::endl <<
-          " -m   INT     Specify whether to delete fake tandem gene pairs(collapse blast matches) in the input file (default: " << delete_tandem << ")" << std::endl <<
-          "              Options: 0 to retain fake tandem gene pairs(don't collapse blast matches); 1 or any other integer to delete them." << std::endl <<
-          " -W   INT     When -m is set to collapse blast matches(1 or any other integer), " << std::endl <<
-          "              specify the maximum distance(OVER LAP WINDOW) allowed between two homologous gene pairs before they are considered for deletion" << "(default: " << OVER_LAP_WINDOW << ")" << std::endl <<
-          "              This parameter is ignored if -m is not set to delete tandem gene pairs(set 0)." << std::endl <<
+          " -m   INT     Specify whether to delete tandem gene pairs in the input file (default: " << delete_tandem_length << ")" << std::endl <<
+          "              Options: 0 means retain tandem gene pairs; 1 or any other integer means delete gene pairs with length less than this value)." << std::endl <<
+          "              When you are doing self vs self synteny alignment, we recommend you to delete tandem gene pairs."<< std::endl <<
+          " -W   INT     Collapse BLAST matches. Specify the maximum distance allowed, and only retain best homology pair" << "(default: " << OVER_LAP_WINDOW << ")" << std::endl <<
           " -a   INT     Enable this flag to get all collinear results and disable the R and Q parameters (default: " << get_all_collinear_gene_pair << ")" << std::endl <<
           "              Options: 0:enable R Q parameter; 1 or other integer: all collinear result" << std::endl <<
-          " -c   INT     For R Q count, 0: gene number count; 1 or other integer: block count (default: " << count_style << ")"
+          " -c   INT     For R Q count, 0: gene number count; 1 or other integer: block count (default: " << count_style << ")" << std::endl <<
+          " -s   INT     Specify whether the direction of the gene pair is the same as the block direction (default:  "<< strict_strand << ")"
           << std::endl;
 
     InputParser inputParser(argc, argv);
@@ -1560,10 +1559,16 @@ int pro(int argc, char **argv) {
             OVER_LAP_WINDOW = std::stoi(inputParser.getCmdOption("-W"));
         }
         if (inputParser.cmdOptionExists("-m")) {
-            delete_tandem = std::stoi(inputParser.getCmdOption("-m"));
+            delete_tandem_length = std::stoi(inputParser.getCmdOption("-m"));
+        }
+        if (inputParser.cmdOptionExists("-s")) {
+            strict_strand = std::stoi(inputParser.getCmdOption("-s"));
+        }
+        if (inputParser.cmdOptionExists("-c")) {
+            count_style = std::stoi(inputParser.getCmdOption("-c"));
         }
 
-
+        std::vector<double> block_score;
         std::vector<std::vector<AlignmentMatch>> alignmentMatchsMap;
         std::vector<AlignmentMatch> alignmentMatchsMapT;
         std::ifstream infile(fakeBlastpResultFile);
@@ -1572,6 +1577,7 @@ int pro(int argc, char **argv) {
             exit(1);
         }
         std::string line;
+        int flag = 0;
         // prepare data in RAM begin
         while (std::getline(infile, line)) {
             std::vector<std::string> elems;
@@ -1596,6 +1602,11 @@ int pro(int argc, char **argv) {
             }
 
             if (refGene == queryGene) {
+                flag = 1;
+                continue;
+            }
+
+            if (refChr == queryChr && delete_tandem_length != 0 && std::abs(refId -queryId) <= delete_tandem_length && flag == 1) {
                 continue;
             }
 
@@ -1608,141 +1619,9 @@ int pro(int argc, char **argv) {
             alignmentMatchsMapT.push_back(orthologPair);
         }
         infile.close();
-        // prepare data in RAM end
-        if (delete_tandem !=0 ) {
-            // sort by querychr refchr querystart(query gene name) and identity/100,respectively.
-            orthologPairSortQuery(alignmentMatchsMapT);
-            // filter ref tandem gene by threshold five. This thought comes from MCScanX.
-            std::vector<AlignmentMatch>::const_iterator it1, prev_pair1;
-            std::vector<AlignmentMatch> alignmentMatchsMapT_cpy1;
-            std::vector<AlignmentMatch> match_bin1;
-            prev_pair1 = it1 = alignmentMatchsMapT.begin();
-            it1++;
-            // insert first pair
-            match_bin1.push_back(*prev_pair1);
-            // match_bin1[0] has a maximum identity value in the match_bin by orthologPairSortQuery function.
-            for (; it1 != alignmentMatchsMapT.end(); it1++) {
-                if (it1->getRefChr() == prev_pair1->getRefChr() && it1->getQueryChr() == prev_pair1->getQueryChr()) {
-                    if ((it1->getQueryId() != prev_pair1->getQueryId()) ||
-                        (std::abs(it1->getRefId() - prev_pair1->getRefId()) > OVER_LAP_WINDOW)) {
-                        orthologPairSortMatchBin(match_bin1);
-
-                        if (match_bin1.size() == 1 && match_bin1[0].getQueryChr() == match_bin1[0].getRefChr()
-                           && std::abs(match_bin1[0].getRefId() - match_bin1[0].getQueryId()) > OVER_LAP_WINDOW ){
-                            alignmentMatchsMapT_cpy1.push_back(match_bin1[0]);
-                        }
-                        if (match_bin1[0].getQueryChr() != match_bin1[0].getRefChr()){
-                            for (const AlignmentMatch &i: match_bin1) {
-                                assert( i.getRefChr() != i.getQueryChr());
-                                alignmentMatchsMapT_cpy1.push_back(i);
-                            }
-                        }
-                        match_bin1.clear();
-                    }
-                    match_bin1.push_back(*it1);
-                } else if (it1->getRefChr() != prev_pair1->getRefChr() ||
-                           it1->getQueryChr() != prev_pair1->getQueryChr()) {
-                    orthologPairSortMatchBin(match_bin1);
-                    if (match_bin1.size() == 1 && match_bin1[0].getQueryChr() == match_bin1[0].getRefChr()
-                    && std::abs(match_bin1[0].getRefId() - match_bin1[0].getQueryId()) > OVER_LAP_WINDOW ){
-                        alignmentMatchsMapT_cpy1.push_back(match_bin1[0]);
-                    }
-                    if (match_bin1[0].getQueryChr() != match_bin1[0].getRefChr()){
-                        for (const AlignmentMatch &i: match_bin1) {
-                            assert( i.getRefChr() != i.getQueryChr());
-                            alignmentMatchsMapT_cpy1.push_back(i);
-                        }
-                    }
-                    match_bin1.clear();
-                    prev_pair1 = it1;
-                    match_bin1.push_back(*prev_pair1);
-                    continue;
-                }
-                prev_pair1 = it1;
-            }
-            orthologPairSortMatchBin(match_bin1);
-            if (match_bin1.size() == 1 && match_bin1[0].getQueryChr() == match_bin1[0].getRefChr()
-                && std::abs(match_bin1[0].getRefId() - match_bin1[0].getQueryId()) > OVER_LAP_WINDOW ){
-                alignmentMatchsMapT_cpy1.push_back(match_bin1[0]);
-            }
-            if (match_bin1[0].getQueryChr() != match_bin1[0].getRefChr()){
-                for (const AlignmentMatch &i: match_bin1) {
-                    assert( i.getRefChr() != i.getQueryChr());
-                    alignmentMatchsMapT_cpy1.push_back(i);
-                }
-            }
-            alignmentMatchsMapT.clear();
-            alignmentMatchsMapT = alignmentMatchsMapT_cpy1;
-            alignmentMatchsMapT_cpy1.clear();
-
-            // sort by querychr refchr refstart(ref gene name) and identity/100,respectively.
-            orthologPairSortReference(alignmentMatchsMapT);
-            // filter query tandem gene by threshold five. This thought comes from MCScanX.
-            std::vector<AlignmentMatch>::const_iterator it2, prev_pair2;
-            std::vector<AlignmentMatch> alignmentMatchsMapT_cpy2;
-            std::vector<AlignmentMatch> match_bin2;
-            prev_pair2 = it2 = alignmentMatchsMapT.begin();
-            it2++;
-            // insert first pair
-            match_bin2.push_back(*prev_pair2);
-            // match_bin2[0] has a maximum identity value in the match_bin by orthologPairSortReference.
-            for (; it2 != alignmentMatchsMapT.end(); it2++) {
-                if (it2->getRefChr() == prev_pair2->getRefChr() && it2->getQueryChr() == prev_pair2->getQueryChr()) {
-                    if ((it2->getRefId() != prev_pair2->getRefId()) ||
-                        (std::abs(it2->getQueryId() - prev_pair2->getQueryId()) > OVER_LAP_WINDOW)) {
-                        orthologPairSortMatchBin(match_bin2);
-                        if (match_bin2.size() == 1 && match_bin2[0].getQueryChr() == match_bin2[0].getRefChr()
-                        && std::abs(match_bin2[0].getRefId() - match_bin2[0].getQueryId()) > OVER_LAP_WINDOW ){
-                            alignmentMatchsMapT_cpy2.push_back(match_bin2[0]);
-                        }
-                        if (match_bin2[0].getQueryChr() != match_bin2[0].getRefChr()){
-                            for (const AlignmentMatch &i: match_bin2) {
-                                assert( i.getRefChr() != i.getQueryChr());
-                                alignmentMatchsMapT_cpy2.push_back(i);
-                            }
-                        }
-                        match_bin2.clear();
-                    }
-                    match_bin2.push_back(*it2);
-                } else if (it1->getRefChr() != prev_pair1->getRefChr() ||
-                           it1->getQueryChr() != prev_pair1->getQueryChr()) {
-                    orthologPairSortMatchBin(match_bin2);
-                    if (match_bin2.size() == 1 && match_bin2[0].getQueryChr() == match_bin2[0].getRefChr()
-                        && std::abs(match_bin2[0].getRefId() - match_bin2[0].getQueryId()) > OVER_LAP_WINDOW ){
-                        alignmentMatchsMapT_cpy2.push_back(match_bin2[0]);
-                    }
-                    if (match_bin2[0].getQueryChr() != match_bin2[0].getRefChr()){
-                        for (const AlignmentMatch &i: match_bin2) {
-                            assert( i.getRefChr() != i.getQueryChr());
-                            alignmentMatchsMapT_cpy2.push_back(i);
-                        }
-                    }
-                    match_bin2.clear();
-                    prev_pair2 = it2;
-                    match_bin2.push_back(*prev_pair2);
-                    continue;
-                }
-                prev_pair2 = it2;
-            }
-            orthologPairSortMatchBin(match_bin2);
-            if (match_bin2.size() == 1 && match_bin2[0].getQueryChr() == match_bin2[0].getRefChr()
-                && std::abs(match_bin2[0].getRefId() - match_bin2[0].getQueryId()) > OVER_LAP_WINDOW ){
-                alignmentMatchsMapT_cpy2.push_back(match_bin2[0]);
-            }
-            if (match_bin2[0].getQueryChr() != match_bin2[0].getRefChr()){
-                for (const AlignmentMatch &i: match_bin2) {
-                    assert( i.getRefChr() != i.getQueryChr());
-                    alignmentMatchsMapT_cpy2.push_back(i);
-                }
-            }
-            alignmentMatchsMapT.clear();
-            alignmentMatchsMapT = alignmentMatchsMapT_cpy2;
-
-            alignmentMatchsMapT_cpy2.clear();
-        }
 
         // begin setting index, they are necessary in the longest path approach
-        std::map<std::string, std::map<int, std::string>> queryIndexMap; // chr : index : queryGeneName
+        std::map <std::string, std::map<int, std::string>> queryIndexMap; // chr : index : queryGeneName
         for (const auto &ii: alignmentMatchsMapT) {
             if (queryIndexMap.find(ii.getQueryChr()) == queryIndexMap.end()) {
                 queryIndexMap[ii.getQueryChr()] = std::map<int, std::string>();
@@ -1755,7 +1634,7 @@ int pro(int argc, char **argv) {
             }
         }
 
-        std::map<std::string, std::map<int, std::string>> refIndexMap;  // chr : index : refGeneName
+        std::map <std::string, std::map<int, std::string>> refIndexMap;  // chr : index : refGeneName
         for (const auto &ii: alignmentMatchsMapT) {
             if (refIndexMap.find(ii.getRefChr()) == refIndexMap.end()) {
                 refIndexMap[ii.getRefChr()] = std::map<int, std::string>();
@@ -1768,16 +1647,124 @@ int pro(int argc, char **argv) {
             }
         }
 
-        orthologPairSortPosition(alignmentMatchsMapT);
-//        std::cout << "\t" << "line1739" << "\t" << alignmentMatchsMapT.size() << std::endl;
-        std::vector<double> block_score;
-//        for (AlignmentMatch &ortholog_pair: alignmentMatchsMapT) {
-//            std::cout << "line1746" << "\t" << ortholog_pair.getQueryChr()  << "\t" << ortholog_pair.getQueryGeneName() << "\t"  << ortholog_pair.getQueryId() << "\t" << ortholog_pair.getRefChr() << "\t" << ortholog_pair.getReferenceGeneName() << "\t" << ortholog_pair.getRefId() << "\t" << ortholog_pair.getScore() << std::endl;
-//        }
-//        exit(1);
-        longestPathQuotaGene(alignmentMatchsMapT, alignmentMatchsMap, refIndexMap, queryIndexMap,
-                             GAP_EXTENSION_PENALTY, GAP_OPEN_PENALTY, MIN_ALIGNMENT_SCORE, MAX_DIST_BETWEEN_MATCHES,
-                             refMaximumTimes, queryMaximumTimes, block_score, count_style, get_all_collinear_gene_pair);
+        std::map<std::string, int64_t> refTimes;  // key is the gene name
+        std::map<std::string, int64_t> queryTimes;  // key is the gene name
+        std::map<std::string, std::vector<AlignmentMatch>> groupedMapAlignmentMatch;
+        std::string kKey="pass";
+        if (get_all_collinear_gene_pair != 0) {
+            for (const auto &match : alignmentMatchsMapT){
+                groupedMapAlignmentMatch[match.getRefChr() + "_" + match.getQueryChr()].push_back(match);
+            }
+            alignmentMatchsMapT.clear();
+        }
+        else{
+            for (const auto &match : alignmentMatchsMapT){
+                groupedMapAlignmentMatch[kKey].push_back(match);
+            }
+            alignmentMatchsMapT.clear();
+        }
+
+        for (const auto &subAlignmentMatchT : groupedMapAlignmentMatch) {
+            alignmentMatchsMapT = subAlignmentMatchT.second;
+
+            // prepare data in RAM end
+            if (OVER_LAP_WINDOW != 0) {
+                orthologPairSortQuery(alignmentMatchsMapT);
+                // filter ref fake tandem gene by threshold five. This thought comes from MCScanX.
+                std::vector<AlignmentMatch>::const_iterator it1, prev_pair1;
+                std::vector <AlignmentMatch> alignmentMatchsMapT_cpy1;
+                std::vector <AlignmentMatch> match_bin1;
+                prev_pair1 = it1 = alignmentMatchsMapT.begin();
+                it1++;
+                // insert first pair
+                match_bin1.push_back(*prev_pair1);
+                // match_bin1[0] has a maximum identity value in the match_bin.
+                for (; it1 != alignmentMatchsMapT.end(); it1++) {
+                    if (it1->getRefChr() == prev_pair1->getRefChr() &&
+                        it1->getQueryChr() == prev_pair1->getQueryChr()) {
+                        if ((it1->getQueryId() != prev_pair1->getQueryId()) ||
+                            (std::abs(it1->getRefId() - prev_pair1->getRefId()) > OVER_LAP_WINDOW)) {
+                            orthologPairSortMatchBin(match_bin1);
+
+                            alignmentMatchsMapT_cpy1.push_back(match_bin1[0]);
+                            match_bin1.clear();
+                        }
+                        match_bin1.push_back(*it1);
+                    } else if (it1->getRefChr() != prev_pair1->getRefChr() ||
+                               it1->getQueryChr() != prev_pair1->getQueryChr()) {
+                        orthologPairSortMatchBin(match_bin1);
+
+                        alignmentMatchsMapT_cpy1.push_back(match_bin1[0]);
+                        match_bin1.clear();
+                        prev_pair1 = it1;
+                        match_bin1.push_back(*prev_pair1);
+                        continue;
+                    }
+                    prev_pair1 = it1;
+                }
+                orthologPairSortMatchBin(match_bin1);
+
+                alignmentMatchsMapT_cpy1.push_back(match_bin1[0]);
+                alignmentMatchsMapT.clear();
+                alignmentMatchsMapT = alignmentMatchsMapT_cpy1;
+                alignmentMatchsMapT_cpy1.clear();
+
+
+                orthologPairSortReference(alignmentMatchsMapT);
+                // filter query fake tandem gene by threshold five. This thought comes from MCScanX.
+                std::vector<AlignmentMatch>::const_iterator it2, prev_pair2;
+                std::vector <AlignmentMatch> alignmentMatchsMapT_cpy2;
+                std::vector <AlignmentMatch> match_bin2;
+                prev_pair2 = it2 = alignmentMatchsMapT.begin();
+                it2++;
+                // insert first pair
+                match_bin2.push_back(*prev_pair2);
+                // match_bin2[0] has a maximum identity value in the match_bin.
+                for (; it2 != alignmentMatchsMapT.end(); it2++) {
+                    if (it2->getRefChr() == prev_pair2->getRefChr() &&
+                        it2->getQueryChr() == prev_pair2->getQueryChr()) {
+                        if ((it2->getRefId() != prev_pair2->getRefId()) ||
+                            (std::abs(it2->getQueryId() - prev_pair2->getQueryId()) > OVER_LAP_WINDOW)) {
+                            orthologPairSortMatchBin(match_bin2);
+
+                            alignmentMatchsMapT_cpy2.push_back(match_bin2[0]);
+                            match_bin2.clear();
+                        }
+                        match_bin2.push_back(*it2);
+                    } else if (it1->getRefChr() != prev_pair1->getRefChr() ||
+                               it1->getQueryChr() != prev_pair1->getQueryChr()) {
+                        orthologPairSortMatchBin(match_bin2);
+
+                        alignmentMatchsMapT_cpy2.push_back(match_bin2[0]);
+                        match_bin2.clear();
+                        prev_pair2 = it2;
+                        match_bin2.push_back(*prev_pair2);
+                        continue;
+                    }
+                    prev_pair2 = it2;
+                }
+                orthologPairSortMatchBin(match_bin2);
+
+                alignmentMatchsMapT_cpy2.push_back(match_bin2[0]);
+                alignmentMatchsMapT.clear();
+                alignmentMatchsMapT = alignmentMatchsMapT_cpy2;
+                alignmentMatchsMapT_cpy2.clear();
+            }
+
+
+            orthologPairSortPosition(alignmentMatchsMapT);
+            if (strict_strand != 0) {
+                    longestPathQuotaGene(alignmentMatchsMapT, alignmentMatchsMap, refIndexMap, queryIndexMap,
+                                                   GAP_EXTENSION_PENALTY, GAP_OPEN_PENALTY, MIN_ALIGNMENT_SCORE,
+                                                   MAX_DIST_BETWEEN_MATCHES,refMaximumTimes, queryMaximumTimes,
+                                                   block_score, count_style, get_all_collinear_gene_pair, refTimes, queryTimes);
+                } else {
+                    longestPathQuotaGeneNonStrand(alignmentMatchsMapT, alignmentMatchsMap, refIndexMap, queryIndexMap,
+                                                            GAP_EXTENSION_PENALTY, GAP_OPEN_PENALTY, MIN_ALIGNMENT_SCORE,
+                                                            MAX_DIST_BETWEEN_MATCHES,refMaximumTimes, queryMaximumTimes,
+                                                            block_score, count_style, get_all_collinear_gene_pair, refTimes, queryTimes);
+            }
+        }
         // output anchors file.
         if (inputParser.cmdOptionExists("-o")) {
             std::string wholeCommand = argv[0];
@@ -1807,7 +1794,7 @@ int pro(int argc, char **argv) {
             for (std::vector<AlignmentMatch> v_am: alignmentMatchsMap) {
 //                if (v_am.size() >= 4) {
                     std::string plus_minus = "NEGATIVE";
-                    if (v_am[0].getStrand() == POSITIVE) {
+                    if (v_am[0].getQueryId() < v_am[1].getQueryId()) {
                         plus_minus = "POSITIVE";
                     }
                     offile << "##Alignment" << "\t" << blockIndex << "\t" << "N=" << v_am.size() << "\t"
@@ -1835,7 +1822,6 @@ int pro(int argc, char **argv) {
                                << i.getScore() << std::endl;
                         totalAnchors++;
                     }
-//                }
             }
             offile.close();
             std::cout << "totalAnchors:" << totalAnchors << std::endl;
@@ -1846,3 +1832,4 @@ int pro(int argc, char **argv) {
     }
     return 0;
 }
+
