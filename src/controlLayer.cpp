@@ -1485,17 +1485,18 @@ int geno(int argc, char **argv) {
 
 
 int pro(int argc, char **argv) {
-    double MIN_ALIGNMENT_SCORE = 2;
+    double MIN_ALIGNMENT_SCORE = 3;
     double GAP_OPEN_PENALTY = -0.02;
     double GAP_EXTENSION_PENALTY = -0.005;
     int MAX_DIST_BETWEEN_MATCHES = 25;
     int refMaximumTimes = 1;
     int queryMaximumTimes = 1;
-    int OVER_LAP_WINDOW = 0;
+    int OVER_LAP_WINDOW = 1;
     int delete_tandem_length = 0;
     int get_all_collinear_gene_pair = 0;
     int count_style = 1;
     int strict_strand = 1;
+    int strict_remove_overlap = 0;
 
     std::stringstream usage;
 
@@ -1511,14 +1512,15 @@ int pro(int argc, char **argv) {
           " -E   DOUBLE  chain gap extend penalty (default: " << GAP_EXTENSION_PENALTY << ")" << std::endl <<
           " -I   DOUBLE  minimum chain score (default: " << MIN_ALIGNMENT_SCORE << ")" << std::endl <<
           " -D   INT     maximum gap size for chain (default: " << MAX_DIST_BETWEEN_MATCHES << ")" << std::endl <<
-          " -m   INT     Specify whether to delete tandem gene pairs in the input file (default: " << delete_tandem_length << ")" << std::endl <<
-          "              Options: 0 means retain tandem gene pairs; 1 or any other integer means delete gene pairs with length less than this value)." << std::endl <<
-          "              When you are doing self vs self synteny alignment, we recommend you to delete tandem gene pairs."<< std::endl <<
-          " -W   INT     Collapse BLAST matches. Specify the maximum distance allowed, and only retain best homology pair" << "(default: " << OVER_LAP_WINDOW << ")" << std::endl <<
-          " -a   INT     Enable this flag to get all collinear results and disable the R and Q parameters (default: " << get_all_collinear_gene_pair << ")" << std::endl <<
-          "              Options: 0:enable R Q parameter; 1 or other integer: all collinear result" << std::endl <<
-          " -c   INT     For R Q count, 0: gene number count; 1 or other integer: block count (default: " << count_style << ")" << std::endl <<
-          " -s   INT     Specify whether the direction of the gene pair is the same as the block direction (default:  "<< strict_strand << ")"
+          " -m   INT     This parameter is useful only for self vs self synteny alignment. Options: 0 means retain tandem gene pairs;"<< std::endl <<
+          "              1 or any other integer means remove gene pairs with a tandem length shorter than the specified integer value.(default: " << delete_tandem_length << ")" << std::endl <<
+          "              When you are doing ks peaks analysis about WGD/Divergent event, you need set this parameter"<< std::endl <<
+          " -W   INT     Collapse BLAST matches. Specify the maximum distance allowed, and only retain best homology pair to synteny analysis under this distance condition(default: " << OVER_LAP_WINDOW << ")" << std::endl <<
+          " -a   INT     Enable this flag to get all collinear results and disable R and Q parameters (default: " << get_all_collinear_gene_pair << ")" << std::endl <<
+          "              Options: 0:enable R Q parameter; 1 or other integer: get all collinear result and disable R Q parameter" << std::endl <<
+          " -c   INT     R Q parameter's count style for a block, 0: count only the syntenic genes within a block; 1 or other integer: count all genes within a block(default: " << count_style << ")" << std::endl <<
+          " -s   INT     Specify whether the direction of the gene pairs within a block must be strictly the same or reverse as the block's direction. (1:yes;0:no. default:  "<< strict_strand << ")" << std::endl <<
+          " -f   INT     Specify whether to strictly remove square region gene pairs for a block to avoid overlap. (1:yes;0:no. default:  "<< strict_remove_overlap << ")"
           << std::endl;
 
     InputParser inputParser(argc, argv);
@@ -1566,6 +1568,9 @@ int pro(int argc, char **argv) {
         }
         if (inputParser.cmdOptionExists("-c")) {
             count_style = std::stoi(inputParser.getCmdOption("-c"));
+        }
+        if (inputParser.cmdOptionExists("-f")) {
+            strict_remove_overlap = std::stoi(inputParser.getCmdOption("-f"));
         }
 
         std::vector<double> block_score;
@@ -1757,12 +1762,12 @@ int pro(int argc, char **argv) {
                     longestPathQuotaGene(alignmentMatchsMapT, alignmentMatchsMap, refIndexMap, queryIndexMap,
                                                    GAP_EXTENSION_PENALTY, GAP_OPEN_PENALTY, MIN_ALIGNMENT_SCORE,
                                                    MAX_DIST_BETWEEN_MATCHES,refMaximumTimes, queryMaximumTimes,
-                                                   block_score, count_style, get_all_collinear_gene_pair, refTimes, queryTimes);
+                                                   block_score, count_style, get_all_collinear_gene_pair, refTimes, queryTimes, strict_remove_overlap);
                 } else {
                     longestPathQuotaGeneNonStrand(alignmentMatchsMapT, alignmentMatchsMap, refIndexMap, queryIndexMap,
                                                             GAP_EXTENSION_PENALTY, GAP_OPEN_PENALTY, MIN_ALIGNMENT_SCORE,
                                                             MAX_DIST_BETWEEN_MATCHES,refMaximumTimes, queryMaximumTimes,
-                                                            block_score, count_style, get_all_collinear_gene_pair, refTimes, queryTimes);
+                                                            block_score, count_style, get_all_collinear_gene_pair, refTimes, queryTimes, strict_remove_overlap);
             }
         }
         // output anchors file.
