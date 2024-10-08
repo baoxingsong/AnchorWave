@@ -1172,7 +1172,7 @@ void longestPathQuotaGene(std::vector<AlignmentMatch> pairedSimilarFragments, st
                           double &MIN_ALIGNMENT_SCORE, const int &MAX_DIST_BETWEEN_MATCHES,
                           int &refMaximumTimes, int &queryMaximumTimes,
                           std::vector<double> &block_score, const int &count_style, const int &get_all_collinear_gene_pair,
-                          std::map<std::string, int64_t> &refTimes, std::map<std::string, int64_t> &queryTimes) {
+                          std::map<std::string, int64_t> &refTimes, std::map<std::string, int64_t> &queryTimes, const int &strict_remove_overlap) {
 
     std::vector<Path> high;
     std::vector<int64_t> ans;
@@ -1535,19 +1535,21 @@ void longestPathQuotaGene(std::vector<AlignmentMatch> pairedSimilarFragments, st
                         }
                     }
                 }
-                for (int ii = 0; ii < n; ii++) { // this is to avoid nested chain
-                    if (pairedSimilarFragments[ii].getQueryChr() == pairedSimilarFragments[ans[0]].getQueryChr() && (
-                            (pairedSimilarFragments[ii].getQueryStartPos() <= chainQueryStart && chainQueryStart <= pairedSimilarFragments[ii].getQueryEndPos()) ||
-                            (pairedSimilarFragments[ii].getQueryStartPos() <= chainQueryEnd && chainQueryEnd <= pairedSimilarFragments[ii].getQueryEndPos()) ||
-                            (chainQueryStart <= pairedSimilarFragments[ii].getQueryStartPos() && pairedSimilarFragments[ii].getQueryStartPos() <= chainQueryEnd) ||
-                            (chainQueryStart <= pairedSimilarFragments[ii].getQueryEndPos() && pairedSimilarFragments[ii].getQueryEndPos() <= chainQueryEnd))
-                        && pairedSimilarFragments[ii].getRefChr() == pairedSimilarFragments[ans[0]].getRefChr() && (
-                                (pairedSimilarFragments[ii].getRefStartPos() <= chainRefStart && chainRefStart <= pairedSimilarFragments[ii].getRefEndPos()) ||
-                                (pairedSimilarFragments[ii].getRefStartPos() <= chainRefEnd && chainRefEnd <= pairedSimilarFragments[ii].getRefEndPos()) ||
-                                (chainRefStart <= pairedSimilarFragments[ii].getRefStartPos() && pairedSimilarFragments[ii].getRefStartPos() <= chainRefEnd) ||
-                                (chainRefStart <= pairedSimilarFragments[ii].getRefEndPos() && pairedSimilarFragments[ii].getRefEndPos() <= chainRefEnd))
-                            ) {
-                        prev[ii] = -2;
+                if (strict_remove_overlap != 0){
+                    for (int ii = 0; ii < n; ii++) { // this is to avoid nested chain
+                        if (pairedSimilarFragments[ii].getQueryChr() == pairedSimilarFragments[ans[0]].getQueryChr() && (
+                                (pairedSimilarFragments[ii].getQueryStartPos() <= chainQueryStart && chainQueryStart <= pairedSimilarFragments[ii].getQueryEndPos()) ||
+                                (pairedSimilarFragments[ii].getQueryStartPos() <= chainQueryEnd && chainQueryEnd <= pairedSimilarFragments[ii].getQueryEndPos()) ||
+                                (chainQueryStart <= pairedSimilarFragments[ii].getQueryStartPos() && pairedSimilarFragments[ii].getQueryStartPos() <= chainQueryEnd) ||
+                                (chainQueryStart <= pairedSimilarFragments[ii].getQueryEndPos() && pairedSimilarFragments[ii].getQueryEndPos() <= chainQueryEnd))
+                            && pairedSimilarFragments[ii].getRefChr() == pairedSimilarFragments[ans[0]].getRefChr() && (
+                                    (pairedSimilarFragments[ii].getRefStartPos() <= chainRefStart && chainRefStart <= pairedSimilarFragments[ii].getRefEndPos()) ||
+                                    (pairedSimilarFragments[ii].getRefStartPos() <= chainRefEnd && chainRefEnd <= pairedSimilarFragments[ii].getRefEndPos()) ||
+                                    (chainRefStart <= pairedSimilarFragments[ii].getRefStartPos() && pairedSimilarFragments[ii].getRefStartPos() <= chainRefEnd) ||
+                                    (chainRefStart <= pairedSimilarFragments[ii].getRefEndPos() && pairedSimilarFragments[ii].getRefEndPos() <= chainRefEnd))
+                                ) {
+                            prev[ii] = -2;
+                        }
                     }
                 }
             }
@@ -1585,7 +1587,7 @@ void longestPathQuotaGeneNonStrand(std::vector<AlignmentMatch> pairedSimilarFrag
                           double &MIN_ALIGNMENT_SCORE, const int &MAX_DIST_BETWEEN_MATCHES,
                           int &refMaximumTimes, int &queryMaximumTimes,
                           std::vector<double> &block_score, const int &count_style, const int &get_all_collinear_gene_pair,
-                          std::map<std::string, int64_t> &refTimes, std::map<std::string, int64_t> &queryTimes) {
+                          std::map<std::string, int64_t> &refTimes, std::map<std::string, int64_t> &queryTimes, const int &strict_remove_overlap) {
 
     std::vector<PathNonStrand> high;
     std::vector<int64_t> ans;
@@ -1997,20 +1999,22 @@ void longestPathQuotaGeneNonStrand(std::vector<AlignmentMatch> pairedSimilarFrag
                             }
                         }
                     }
-                    for (int ii = 0; ii < n; ii++) { // this is to avoid nested chain
-                        if (pairedSimilarFragments[ii].getQueryChr() == pairedSimilarFragments[ans[0]].getQueryChr() && (
-                                (pairedSimilarFragments[ii].getQueryStartPos() <= chainQueryStart && chainQueryStart <= pairedSimilarFragments[ii].getQueryEndPos()) ||
-                                (pairedSimilarFragments[ii].getQueryStartPos() <= chainQueryEnd && chainQueryEnd <= pairedSimilarFragments[ii].getQueryEndPos()) ||
-                                (chainQueryStart <= pairedSimilarFragments[ii].getQueryStartPos() && pairedSimilarFragments[ii].getQueryStartPos() <= chainQueryEnd) ||
-                                (chainQueryStart <= pairedSimilarFragments[ii].getQueryEndPos() && pairedSimilarFragments[ii].getQueryEndPos() <= chainQueryEnd))
-                            && pairedSimilarFragments[ii].getRefChr() == pairedSimilarFragments[ans[0]].getRefChr() && (
-                                    (pairedSimilarFragments[ii].getRefStartPos() <= chainRefStart && chainRefStart <= pairedSimilarFragments[ii].getRefEndPos()) ||
-                                    (pairedSimilarFragments[ii].getRefStartPos() <= chainRefEnd && chainRefEnd <= pairedSimilarFragments[ii].getRefEndPos()) ||
-                                    (chainRefStart <= pairedSimilarFragments[ii].getRefStartPos() && pairedSimilarFragments[ii].getRefStartPos() <= chainRefEnd) ||
-                                    (chainRefStart <= pairedSimilarFragments[ii].getRefEndPos() && pairedSimilarFragments[ii].getRefEndPos() <= chainRefEnd))
-                                ) {
-                            prev_positive[ii] = -2;
-                            prev_negative[ii] = -2;
+                    if (strict_remove_overlap !=0 ){
+                        for (int ii = 0; ii < n; ii++) { // this is to avoid nested chain
+                            if (pairedSimilarFragments[ii].getQueryChr() == pairedSimilarFragments[ans[0]].getQueryChr() && (
+                                    (pairedSimilarFragments[ii].getQueryStartPos() <= chainQueryStart && chainQueryStart <= pairedSimilarFragments[ii].getQueryEndPos()) ||
+                                    (pairedSimilarFragments[ii].getQueryStartPos() <= chainQueryEnd && chainQueryEnd <= pairedSimilarFragments[ii].getQueryEndPos()) ||
+                                    (chainQueryStart <= pairedSimilarFragments[ii].getQueryStartPos() && pairedSimilarFragments[ii].getQueryStartPos() <= chainQueryEnd) ||
+                                    (chainQueryStart <= pairedSimilarFragments[ii].getQueryEndPos() && pairedSimilarFragments[ii].getQueryEndPos() <= chainQueryEnd))
+                                && pairedSimilarFragments[ii].getRefChr() == pairedSimilarFragments[ans[0]].getRefChr() && (
+                                        (pairedSimilarFragments[ii].getRefStartPos() <= chainRefStart && chainRefStart <= pairedSimilarFragments[ii].getRefEndPos()) ||
+                                        (pairedSimilarFragments[ii].getRefStartPos() <= chainRefEnd && chainRefEnd <= pairedSimilarFragments[ii].getRefEndPos()) ||
+                                        (chainRefStart <= pairedSimilarFragments[ii].getRefStartPos() && pairedSimilarFragments[ii].getRefStartPos() <= chainRefEnd) ||
+                                        (chainRefStart <= pairedSimilarFragments[ii].getRefEndPos() && pairedSimilarFragments[ii].getRefEndPos() <= chainRefEnd))
+                                    ) {
+                                prev_positive[ii] = -2;
+                                prev_negative[ii] = -2;
+                            }
                         }
                     }
                 }
@@ -2127,20 +2131,22 @@ void longestPathQuotaGeneNonStrand(std::vector<AlignmentMatch> pairedSimilarFrag
                             }
                         }
                     }
-                    for (int ii = 0; ii < n; ii++) { // this is to avoid nested chain
-                        if (pairedSimilarFragments[ii].getQueryChr() == pairedSimilarFragments[ans[0]].getQueryChr() && (
-                                (pairedSimilarFragments[ii].getQueryStartPos() <= chainQueryStart && chainQueryStart <= pairedSimilarFragments[ii].getQueryEndPos()) ||
-                                (pairedSimilarFragments[ii].getQueryStartPos() <= chainQueryEnd && chainQueryEnd <= pairedSimilarFragments[ii].getQueryEndPos()) ||
-                                (chainQueryStart <= pairedSimilarFragments[ii].getQueryStartPos() && pairedSimilarFragments[ii].getQueryStartPos() <= chainQueryEnd) ||
-                                (chainQueryStart <= pairedSimilarFragments[ii].getQueryEndPos() && pairedSimilarFragments[ii].getQueryEndPos() <= chainQueryEnd))
-                            && pairedSimilarFragments[ii].getRefChr() == pairedSimilarFragments[ans[0]].getRefChr() && (
-                                    (pairedSimilarFragments[ii].getRefStartPos() <= chainRefStart && chainRefStart <= pairedSimilarFragments[ii].getRefEndPos()) ||
-                                    (pairedSimilarFragments[ii].getRefStartPos() <= chainRefEnd && chainRefEnd <= pairedSimilarFragments[ii].getRefEndPos()) ||
-                                    (chainRefStart <= pairedSimilarFragments[ii].getRefStartPos() && pairedSimilarFragments[ii].getRefStartPos() <= chainRefEnd) ||
-                                    (chainRefStart <= pairedSimilarFragments[ii].getRefEndPos() && pairedSimilarFragments[ii].getRefEndPos() <= chainRefEnd))
-                                ) {
-                            prev_negative[ii] = -2;
-                            prev_positive[ii] = -2;
+                    if (strict_remove_overlap != 0){
+                        for (int ii = 0; ii < n; ii++) { // this is to avoid nested chain
+                            if (pairedSimilarFragments[ii].getQueryChr() == pairedSimilarFragments[ans[0]].getQueryChr() && (
+                                    (pairedSimilarFragments[ii].getQueryStartPos() <= chainQueryStart && chainQueryStart <= pairedSimilarFragments[ii].getQueryEndPos()) ||
+                                    (pairedSimilarFragments[ii].getQueryStartPos() <= chainQueryEnd && chainQueryEnd <= pairedSimilarFragments[ii].getQueryEndPos()) ||
+                                    (chainQueryStart <= pairedSimilarFragments[ii].getQueryStartPos() && pairedSimilarFragments[ii].getQueryStartPos() <= chainQueryEnd) ||
+                                    (chainQueryStart <= pairedSimilarFragments[ii].getQueryEndPos() && pairedSimilarFragments[ii].getQueryEndPos() <= chainQueryEnd))
+                                && pairedSimilarFragments[ii].getRefChr() == pairedSimilarFragments[ans[0]].getRefChr() && (
+                                        (pairedSimilarFragments[ii].getRefStartPos() <= chainRefStart && chainRefStart <= pairedSimilarFragments[ii].getRefEndPos()) ||
+                                        (pairedSimilarFragments[ii].getRefStartPos() <= chainRefEnd && chainRefEnd <= pairedSimilarFragments[ii].getRefEndPos()) ||
+                                        (chainRefStart <= pairedSimilarFragments[ii].getRefStartPos() && pairedSimilarFragments[ii].getRefStartPos() <= chainRefEnd) ||
+                                        (chainRefStart <= pairedSimilarFragments[ii].getRefEndPos() && pairedSimilarFragments[ii].getRefEndPos() <= chainRefEnd))
+                                    ) {
+                                prev_negative[ii] = -2;
+                                prev_positive[ii] = -2;
+                            }
                         }
                     }
                 }

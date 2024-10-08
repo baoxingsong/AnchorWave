@@ -61,7 +61,7 @@ void longestPathQuotaGene(std::vector<AlignmentMatch> pairedSimilarFragments, st
                           double &MIN_ALIGNMENT_SCORE, const int &MAX_DIST_BETWEEN_MATCHES,
                           int &refMaximumTimes, int &queryMaximumTimes,
                           std::vector<double> &block_score, const int &count_style, const int &get_all_collinear_gene_pair,
-                          std::map<std::string, int64_t> &refTimes, std::map<std::string, int64_t> &queryTimes);
+                          std::map<std::string, int64_t> &refTimes, std::map<std::string, int64_t> &queryTimes, const int &strict_remove_overlap);
 
 void longestPathQuotaGeneNonStrand(std::vector<AlignmentMatch> pairedSimilarFragments, std::vector<std::vector<AlignmentMatch>> &sortedOrthologPairChains,
                           std::map<std::string, std::map<int, std::string>> &refIndexMap /*chr, index, refGeneName*/, std::map<std::string, std::map<int, std::string>> &queryIndexMap,
@@ -69,4 +69,4 @@ void longestPathQuotaGeneNonStrand(std::vector<AlignmentMatch> pairedSimilarFrag
                           double &MIN_ALIGNMENT_SCORE, const int &MAX_DIST_BETWEEN_MATCHES,
                           int &refMaximumTimes, int &queryMaximumTimes,
                           std::vector<double> &block_score, const int &count_style, const int &get_all_collinear_gene_pair,
-                          std::map<std::string, int64_t> &refTimes, std::map<std::string, int64_t> &queryTimes);
+                          std::map<std::string, int64_t> &refTimes, std::map<std::string, int64_t> &queryTimes, const int &strict_remove_overlap);
