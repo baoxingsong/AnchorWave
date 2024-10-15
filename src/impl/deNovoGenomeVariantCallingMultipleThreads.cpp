@@ -101,7 +101,7 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
                 endQuery = orthologPair.getQueryStartPos() - 1;
                 std::string refSeq = getSubsequence2(map_ref, refChr, startRef, endRef);
                 std::string querySeq = getSubsequence2(map_qry, queryChr, startQuery, endQuery);
-                std::string alignMethod = "UNKNOWN";
+                std::string alignMethod;
                 {
                     std::string _alignment_q;
                     std::string _alignment_d;
@@ -160,7 +160,7 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
                 {
                     std::string _alignment_q;
                     std::string _alignment_d;
-                    std::string alignMethod = "UNKNOWN";
+                    std::string alignMethod;
                     int64_t thiScore = alignSlidingWindow(querySeq, refSeq, _alignment_q, _alignment_d, alignMethod, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
                     if (alignMethod.compare("BANDED_MINIMAP2")==0 && checkResult) {
                         std::string tempd = _alignment_d;
@@ -306,7 +306,7 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
                 {
                     std::string _alignment_q;
                     std::string _alignment_d;
-                    std::string alignMethod = "UNKNOWN";
+                    std::string alignMethod;
                     int64_t thiScore = alignSlidingWindow(querySeq, refSeq, _alignment_q, _alignment_d, alignMethod, windowWidth,  matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
 
                     if (alignMethod.compare("BANDED_MINIMAP2")==0 && checkResult) {
@@ -359,7 +359,7 @@ void genomeAlignmentSingleThread(std::vector<AlignmentMatch> alignmentMatchs,
                 {
                     std::string _alignment_q;
                     std::string _alignment_d;
-                    std::string alignMethod = "UNKNOWN";
+                    std::string alignMethod;
 //                    std::cout << refSeq << std::endl << querySeq << std::endl << "line 276" << std::endl;
                     int64_t thiScore = alignSlidingWindow(querySeq, refSeq, _alignment_q, _alignment_d, alignMethod, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
 

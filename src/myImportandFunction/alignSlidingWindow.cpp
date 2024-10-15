@@ -414,7 +414,7 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
         if (_length_of_d < _length_of_q) {
             _alignment_d += std::string(count_, '-');
         }
-
+        _alignMethod = "FILLING";
         return totalScore;
     }
 
