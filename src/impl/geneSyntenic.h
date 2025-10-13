@@ -18,7 +18,13 @@ void myAlignmentMatchSort(std::vector<AlignmentMatch> &pairedSimilarFragments, c
 
 void myOrthologPairsSortQueryQuota(std::vector<AlignmentMatch> &pairedSimilarFragments);
 
+void myOrthologPairsSortQueryQuotaV2(std::vector<AlignmentMatch> &pairedSimilarFragments);
+
 void myOrthologPairsSortQuota(std::vector<AlignmentMatch> &pairedSimilarFragments);
+
+void myOrthologPairsSortQuotaV2(std::vector<AlignmentMatch> &pairedSimilarFragments);
+
+void orthologPairSortRefForAccelerate(std::vector<AlignmentMatch> &pairedSimilarFragments);
 
 void orthologPairSortMatchBin(std::vector<AlignmentMatch> &pairedSimilarFragments); // for delete tandem
 
@@ -28,7 +34,7 @@ void orthologPairSortReference(std::vector<AlignmentMatch> &pairedSimilarFragmen
 
 void orthologPairSortPosition(std::vector<AlignmentMatch> &pairedSimilarFragments);
 
-void longestPathQuotaGeneSubAccelerate(std::vector<AlignmentMatch> pairedSimilarFragments,
+void longestPathQuotaGeneSubAccelerate(std::vector<AlignmentMatch> &pairedSimilarFragments,
                                                 std::map<std::string, std::map<int, std::string>> &refIndexMap /*chr, index, refGeneName*/, std::map<std::string, std::map<int, std::string>> &queryIndexMap,
                                                 double &GAP_EXTENSION_PENALTY, double &GAP_OPEN_PENALTY,
                                                 double &MIN_ALIGNMENT_SCORE, const int &MAX_DIST_BETWEEN_MATCHES,
@@ -38,7 +44,7 @@ void longestPathQuotaGeneSubAccelerate(std::vector<AlignmentMatch> pairedSimilar
                                                 std::set<std::string> &untouchedRefChrs, std::set<std::string> &untouchedQueryChrs,
                                                 std::vector<double> &scoreArray, std::vector<int64_t> &prev);
 
-void longestPathQuotaGeneNonStrandSubAccelerate(std::vector<AlignmentMatch> pairedSimilarFragments,
+void longestPathQuotaGeneNonStrandSubAccelerate(std::vector<AlignmentMatch> &pairedSimilarFragments,
                                                 std::map<std::string, std::map<int, std::string>> &refIndexMap /*chr, index, refGeneName*/, std::map<std::string, std::map<int, std::string>> &queryIndexMap,
                                                 double &GAP_EXTENSION_PENALTY, double &GAP_OPEN_PENALTY,
                                                 double &MIN_ALIGNMENT_SCORE, const int &MAX_DIST_BETWEEN_MATCHES,
@@ -48,6 +54,13 @@ void longestPathQuotaGeneNonStrandSubAccelerate(std::vector<AlignmentMatch> pair
                                                 std::set<std::string> &untouchedRefChrs, std::set<std::string> &untouchedQueryChrs,
                                                 std::vector<double> &scoreArray_positive, std::vector<double> &scoreArray_negative,
                                                 std::vector<int64_t> &prev_positive, std::vector<int64_t> &prev_negative);
+
+void longestPathQuotav2SubAccelerate(std::vector<AlignmentMatch> &pairedSimilarFragments,
+                                    std::map<std::string, std::map<int64_t, AlignmentMatch>> &refIndexMap /*chr, index, AlignmentMatch*/, std::map<std::string, std::map<int64_t, AlignmentMatch>> &queryIndexMap,
+                                    double &INDEL_SCORE, double &GAP_OPEN_PENALTY, const int &MAX_DIST_BETWEEN_MATCHES,
+                                    int &refMaximumTimes, int &queryMaximumTimes,
+                                    double &calculateIndelDistance, std::map<std::string, int64_t> &refTimes, std::map<std::string, std::map<int64_t, int64_t>> &queryTimes,
+                                    std::vector<double> &scoreArray, std::vector<int64_t> &prev);
 
 void longestPathQuotav2(std::vector<AlignmentMatch> pairedSimilarFragments, std::vector<std::vector<AlignmentMatch>> &sortedOrthologPairChains,
                         std::map<std::string, std::map<int64_t, AlignmentMatch>> &refIndexMap, std::map<std::string, std::map<int64_t, AlignmentMatch>> &queryIndexMap,

@@ -25,15 +25,90 @@ void myOrthologPairsSortQuota(std::vector<AlignmentMatch> &pairedSimilarFragment
     });
 }
 
+void myOrthologPairsSortQuotaV2(std::vector<AlignmentMatch> &pairedSimilarFragments) {
+    std::sort(pairedSimilarFragments.begin(), pairedSimilarFragments.end(), [](const AlignmentMatch& a, const AlignmentMatch& b) {
+        if (a.getRefStartPos() < b.getRefStartPos()){
+            return true;
+        }
+        if ((a.getRefStartPos() == b.getRefStartPos()) && (a.getRefEndPos() < b.getRefEndPos())){
+            return true;
+        }
+        if ((a.getRefStartPos() == b.getRefStartPos()) && (a.getRefEndPos() == b.getRefEndPos())
+            && (a.getQueryStartPos() < b.getQueryStartPos())){
+            return true;
+        }
+        if ((a.getRefStartPos() == b.getRefStartPos()) && (a.getRefEndPos() == b.getRefEndPos())
+            && (a.getQueryStartPos() == b.getQueryStartPos()) && (a.getQueryEndPos() < b.getQueryEndPos())){
+            return true;
+        }
+        return false;
+    });
+}
+
 void myOrthologPairsSortQueryQuota(std::vector<AlignmentMatch> &pairedSimilarFragments) {
     std::sort(pairedSimilarFragments.begin(), pairedSimilarFragments.end(), [](AlignmentMatch a, AlignmentMatch b) {
         return a.getQueryStartPos() < b.getQueryStartPos();
     });
 }
 
+void myOrthologPairsSortQueryQuotaV2(std::vector<AlignmentMatch> &pairedSimilarFragments) {
+    std::sort(pairedSimilarFragments.begin(), pairedSimilarFragments.end(), [](const AlignmentMatch& a, const AlignmentMatch& b) {
+        if (a.getQueryStartPos() < b.getQueryStartPos()){
+            return true;
+        }
+        if ((a.getQueryStartPos() == b.getQueryStartPos()) && (a.getQueryEndPos() < b.getQueryEndPos())){
+            return true;
+        }
+        if ((a.getQueryStartPos() == b.getQueryStartPos()) && (a.getQueryEndPos() == b.getQueryEndPos())
+            && (a.getRefStartPos() < b.getRefStartPos())){
+            return true;
+        }
+        if ((a.getQueryStartPos() == b.getQueryStartPos()) && (a.getQueryEndPos() == b.getQueryEndPos())
+            && (a.getRefStartPos() == b.getRefStartPos()) && (a.getRefEndPos() < b.getRefEndPos())) {
+            return true;
+        }
+            return false;
+    });
+}
+
 void orthologPairSortMatchBin(std::vector<AlignmentMatch> &pairedSimilarFragments) {
     std::sort(pairedSimilarFragments.begin(), pairedSimilarFragments.end(), [](const AlignmentMatch& a, const AlignmentMatch& b) {
         if (a.getScore() > b.getScore()) {
+            return true;
+        }
+        return false;
+    });
+}
+
+void orthologPairSortRefForAccelerate(std::vector<AlignmentMatch> &pairedSimilarFragments) {
+    std::sort(pairedSimilarFragments.begin(), pairedSimilarFragments.end(), [](const AlignmentMatch& a, const AlignmentMatch& b) {
+        if (a.getRefChr() < b.getRefChr()) {
+            return true;
+        }
+        if (a.getRefChr() == b.getRefChr()
+            && a.getQueryChr() < b.getQueryChr()) {
+            return true;
+        }
+        if (a.getRefChr() == b.getRefChr()
+            && a.getQueryChr()== b.getQueryChr()
+            && (a.getRefStartPos() < b.getRefStartPos())){
+            return true;
+        }
+        if (a.getRefChr() == b.getRefChr()
+            && a.getQueryChr()== b.getQueryChr()
+            && (a.getRefStartPos() == b.getRefStartPos()) && (a.getRefEndPos() < b.getRefEndPos())){
+            return true;
+        }
+        if (a.getRefChr() == b.getRefChr()
+            && a.getQueryChr()== b.getQueryChr()
+            && (a.getRefStartPos() == b.getRefStartPos()) && (a.getRefEndPos() == b.getRefEndPos())
+            && (a.getQueryStartPos() < b.getQueryStartPos())){
+            return true;
+        }
+        if (a.getRefChr() == b.getRefChr()
+            && a.getQueryChr()== b.getQueryChr()
+            && (a.getRefStartPos() == b.getRefStartPos()) && (a.getRefEndPos() == b.getRefEndPos())
+            && (a.getQueryStartPos() == b.getQueryStartPos()) && (a.getQueryEndPos() < b.getQueryEndPos())){
             return true;
         }
         return false;
@@ -151,7 +226,7 @@ struct PathNonStrand {
     int direction;
 };
 
-void longestPathQuotaGeneSubAccelerate(std::vector<AlignmentMatch> pairedSimilarFragments,
+void longestPathQuotaGeneSubAccelerate(std::vector<AlignmentMatch> &pairedSimilarFragments,
                                         std::map<std::string, std::map<int, std::string>> &refIndexMap /*chr, index, refGeneName*/, std::map<std::string, std::map<int, std::string>> &queryIndexMap,
                                         double &GAP_EXTENSION_PENALTY, double &GAP_OPEN_PENALTY,
                                         double &MIN_ALIGNMENT_SCORE, const int &MAX_DIST_BETWEEN_MATCHES,
@@ -289,7 +364,7 @@ void longestPathQuotaGeneSubAccelerate(std::vector<AlignmentMatch> pairedSimilar
     }
 }
 
-void longestPathQuotaGeneNonStrandSubAccelerate(std::vector<AlignmentMatch> pairedSimilarFragments,
+void longestPathQuotaGeneNonStrandSubAccelerate(std::vector<AlignmentMatch> &pairedSimilarFragments,
                                                 std::map<std::string, std::map<int, std::string>> &refIndexMap /*chr, index, refGeneName*/, std::map<std::string, std::map<int, std::string>> &queryIndexMap,
                                                 double &GAP_EXTENSION_PENALTY, double &GAP_OPEN_PENALTY,
                                                 double &MIN_ALIGNMENT_SCORE, const int &MAX_DIST_BETWEEN_MATCHES,
@@ -694,6 +769,222 @@ void longestPath(std::vector<AlignmentMatch> &pairedSimilarFragments, std::vecto
 // INDEL_SCORE
 // GAP_OPEN_PENALTY
 
+void longestPathQuotav2SubAccelerate(std::vector<AlignmentMatch> &pairedSimilarFragments,
+                                    std::map<std::string, std::map<int64_t, AlignmentMatch>> &refIndexMap /*chr, index, AlignmentMatch*/, std::map<std::string, std::map<int64_t, AlignmentMatch>> &queryIndexMap,
+                                    double &INDEL_SCORE, double &GAP_OPEN_PENALTY, const int &MAX_DIST_BETWEEN_MATCHES,
+                                    int &refMaximumTimes, int &queryMaximumTimes,
+                                    double &calculateIndelDistance, std::map<std::string, int64_t> &refTimes, std::map<std::string, std::map<int64_t, int64_t>> &queryTimes,
+                                    std::vector<double> &scoreArray, std::vector<int64_t> &prev) {
+    int64_t n;
+    n = int(pairedSimilarFragments.size());
+    assert(n == int(prev.size()));
+    for (int idx = 1; idx < n; ++idx) {
+        double thisIndexScore = scoreArray[idx];
+        for (int jdx = idx - 1; jdx >= 0; --jdx) {// checking all previous nodes
+            // Because we swapped asm/query start position so that inversions were all increasing,
+            // we should always be on the diagonal.  If not, then we filter it.
+            // This gets rid of the noise, while preserving the inversions on
+            // the diagonal
+            // Are only looking at positions previous to our current "idx" position
+            if (pairedSimilarFragments[idx].getStrand() == pairedSimilarFragments[jdx].getStrand()) {
+                int query_del_test = std::abs( pairedSimilarFragments[idx].getQueryId() - pairedSimilarFragments[jdx].getQueryId());
+                if( query_del_test > 0 ){
+                    query_del_test = query_del_test -1.0;
+                }
+                // the node one the chain should be in the same STRAND, if not this is an INDEL
+                if (pairedSimilarFragments[idx].getStrand() == POSITIVE && pairedSimilarFragments[idx].getQueryId() > pairedSimilarFragments[jdx].getQueryId() &&
+                    pairedSimilarFragments[jdx].getQueryEndPos() < pairedSimilarFragments[idx].getQueryStartPos() &&
+                    pairedSimilarFragments[jdx].getRefEndPos() < pairedSimilarFragments[idx].getRefStartPos()) { //same strand
+                    //                            int ref_del = pairedSimilarFragments[idx].getRefId() - pairedSimilarFragments[jdx].getRefId()-1;
+                    //                            int query_del = pairedSimilarFragments[idx].getQueryId() - pairedSimilarFragments[jdx].getQueryId()-1;
+
+                    //                            int ref_del = 0;
+                    //                            for( int idi = pairedSimilarFragments[jdx].getRefId()+1; idi<pairedSimilarFragments[idx].getRefId(); ++idi){
+                    //                                ref_del += (refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getRefEndPos() - refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getRefStartPos() + 1 );
+                    //                            }
+                    //
+                    //                            int query_del =  0;
+                    //                            for( int idi = pairedSimilarFragments[jdx].getQueryId()+1; idi<pairedSimilarFragments[idx].getQueryId(); ++idi){
+                    //                                query_del += (queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryEndPos() - queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryStartPos() + 1 );
+                    //                            }
+                    if ( query_del_test > MAX_DIST_BETWEEN_MATCHES ) {
+                        break;
+                    }
+                    double ref_del = 0;
+                    //                            int smallerIdi = pairedSimilarFragments[jdx].getRefId();
+                    //                            int largerIdi = pairedSimilarFragments[idx].getRefId();
+                    //                            if ( smallerIdi > largerIdi ){
+                    //                                int temp = smallerIdi;
+                    //                                smallerIdi = largerIdi;
+                    //                                largerIdi = temp;
+                    //                            }
+                    //                            for( int idi = smallerIdi+1; idi<largerIdi; ++idi){
+                    for (int idi = pairedSimilarFragments[jdx].getRefId() + 1; idi < pairedSimilarFragments[idx].getRefId(); ++idi) {
+                        if (refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getReferenceGeneName().find("localAlignment") == std::string::npos) {
+                            ++ref_del;
+                            if (refTimes.find(refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getReferenceGeneName()) != refTimes.end() && refTimes[refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getReferenceGeneName()] >= refMaximumTimes) {
+                                ref_del += MAX_DIST_BETWEEN_MATCHES + MAX_DIST_BETWEEN_MATCHES;
+                                break;
+                            }
+                        }
+                    }
+
+                    //                            smallerIdi = pairedSimilarFragments[jdx].getQueryId();
+                    //                            largerIdi = pairedSimilarFragments[idx].getQueryId();
+                    //                            if ( smallerIdi > largerIdi ){
+                    //                                int temp = smallerIdi;
+                    //                                smallerIdi = largerIdi;
+                    //                                largerIdi = temp;
+                    //                            }
+                    double query_del = 0;
+                    //                            for( int idi = smallerIdi+1; idi<largerIdi; ++idi){
+                    for (int idi = pairedSimilarFragments[jdx].getQueryId() + 1; idi < pairedSimilarFragments[idx].getQueryId(); ++idi) {
+                        if (queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryGeneName().find("localAlignment") == std::string::npos) {
+                            ++query_del;
+                            //                                    std::cout << "line 410: " << pairedSimilarFragments[idx].getQueryChr() << "\t" << queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getReferenceGeneName() << " pairedSimilarFragments[idx].getQueryId():" << pairedSimilarFragments[idx].getQueryId() << " pairedSimilarFragments[jdx].getQueryId():" << pairedSimilarFragments[jdx].getQueryId() <<" idi:" << idi << " queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId():" << queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId() << std::endl;
+                            assert(queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId() == idi);
+                            if (queryTimes.find(pairedSimilarFragments[idx].getQueryChr()) != queryTimes.end()
+                                && queryTimes[pairedSimilarFragments[idx].getQueryChr()].find(idi) != queryTimes[pairedSimilarFragments[idx].getQueryChr()].end()
+                                && queryTimes[pairedSimilarFragments[idx].getQueryChr()][idi] >= queryMaximumTimes) {
+                                query_del += MAX_DIST_BETWEEN_MATCHES + MAX_DIST_BETWEEN_MATCHES;
+                                break;
+                                }
+                        }
+                    }
+                    if (std::abs(ref_del) > MAX_DIST_BETWEEN_MATCHES || std::abs(query_del) > MAX_DIST_BETWEEN_MATCHES) {
+                        // if this position is too large, then the last node of j could not be i and the chain restart from j
+                        break;
+                    }
+                    assert(ref_del >= 0);
+                    assert(query_del >= 0);
+                    double distance = (((ref_del + query_del) + std::abs(ref_del - query_del)) / (calculateIndelDistance));
+                    //                            if( withNovelAnchros ){
+                    //                                distance = (ref_del+query_del)/2;
+                    //                            }
+
+                    double thisScore = thisIndexScore;
+                    if (pairedSimilarFragments[idx].getRefId() != pairedSimilarFragments[jdx].getRefId()) {
+                        thisScore += scoreArray[jdx];
+                    }
+                    if (distance > 0) {
+                        if (pairedSimilarFragments[idx].getQueryGeneName().find("localAlignment") != std::string::npos || pairedSimilarFragments[jdx].getQueryGeneName().find("localAlignment") != std::string::npos) {
+                            thisScore = thisScore + INDEL_SCORE * distance;
+                        } else {
+                            thisScore = thisScore + GAP_OPEN_PENALTY + INDEL_SCORE * distance;
+                        }
+                    }
+
+                    //                            std::cout << "line 599 thisScore:" << thisScore << " distance:" << distance << " jdx:" << jdx << " idx:" << idx << " thisIndexScore:" << thisIndexScore << " scoreArray[jdx]:" << scoreArray[jdx] << " pairedSimilarFragments[idx].getRefId()" << pairedSimilarFragments[idx].getRefId() << " pairedSimilarFragments[jdx].getRefId():" << pairedSimilarFragments[jdx].getRefId() << std::endl;
+                    if (thisScore > scoreArray[idx] && pairedSimilarFragments[jdx].getQueryId() < pairedSimilarFragments[idx].getQueryId()) {
+                        scoreArray[idx] = thisScore;
+                        prev[idx] = jdx;
+                    }
+                    } else if (pairedSimilarFragments[idx].getStrand() == NEGATIVE && pairedSimilarFragments[jdx].getQueryId() > pairedSimilarFragments[idx].getQueryId() && pairedSimilarFragments[jdx].getQueryStartPos() > pairedSimilarFragments[idx].getQueryEndPos() &&
+                     pairedSimilarFragments[jdx].getRefEndPos() < pairedSimilarFragments[idx].getRefStartPos() ) { // inversion
+                        //                           int ref_del = pairedSimilarFragments[idx].getRefId() - pairedSimilarFragments[jdx].getRefId()-1;
+                        //                           int query_del = pairedSimilarFragments[jdx].getQueryId() - pairedSimilarFragments[idx].getQueryId()-1;
+
+                        //                            int ref_del = 0;
+                        //                            for( int idi = pairedSimilarFragments[jdx].getRefId()+1; idi<pairedSimilarFragments[idx].getRefId(); ++idi){
+                        //                                ref_del += (refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getRefEndPos() - refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getRefStartPos() + 1 );
+                        //                            }
+                        //                            int query_del =  0;
+                        //                            for( int idi = pairedSimilarFragments[idx].getQueryId()+1; idi<pairedSimilarFragments[jdx].getQueryId(); ++idi){
+                        //                                query_del += (queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryEndPos() - queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryStartPos() + 1 );
+                        //                            }
+                        /*
+                                                    double ref_del = 0;
+                                                    for( int idi = pairedSimilarFragments[jdx].getRefId()+1; idi<pairedSimilarFragments[idx].getRefId(); ++idi){
+                                                        if( refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getReferenceGeneName().find("localAlignment") == std::string::npos ){
+                                                            ++ref_del;
+                                                        }
+                                                    }
+
+                                                    double query_del =  0;
+                                                    for( int idi = pairedSimilarFragments[idx].getQueryId()+1; idi<pairedSimilarFragments[jdx].getQueryId(); ++idi){
+                                                        if( queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryGeneName().find("localAlignment") == std::string::npos ){
+                                                            ++query_del;
+                                                        }
+                                                    }
+                        */
+                        if ( query_del_test > MAX_DIST_BETWEEN_MATCHES ) {
+                            break;
+                        }
+                        double ref_del = 0;
+                        //                            int smallerIdi = pairedSimilarFragments[jdx].getRefId();
+                        //                            int largerIdi = pairedSimilarFragments[idx].getRefId();
+                        //                            if ( smallerIdi > largerIdi ){
+                        //                                int temp = smallerIdi;
+                        //                                smallerIdi = largerIdi;
+                        //                                largerIdi = temp;
+                        //                            }
+                        //                            for( int idi = smallerIdi+1; idi<largerIdi; ++idi){
+                        for (int idi = pairedSimilarFragments[jdx].getRefId() + 1; idi < pairedSimilarFragments[idx].getRefId(); ++idi) {
+                            if (refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getReferenceGeneName().find("localAlignment") == std::string::npos) {
+                                ++ref_del;
+                                if (refTimes.find(refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getReferenceGeneName()) != refTimes.end() && refTimes[refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getReferenceGeneName()] >= refMaximumTimes) {
+                                    ref_del += MAX_DIST_BETWEEN_MATCHES + MAX_DIST_BETWEEN_MATCHES;
+                                    break;
+                                }
+                            }
+                        }
+                        //
+                        //                            smallerIdi = pairedSimilarFragments[jdx].getQueryId();
+                        //                            largerIdi = pairedSimilarFragments[idx].getQueryId();
+                        //                            if ( smallerIdi > largerIdi ){
+                        //                                int temp = smallerIdi;
+                        //                                smallerIdi = largerIdi;
+                        //                                largerIdi = temp;
+                        //                            }
+                        double query_del = 0;
+                        for (int idi = pairedSimilarFragments[idx].getQueryId() + 1; idi < pairedSimilarFragments[jdx].getQueryId(); ++idi) {
+                            //                            for( int idi = smallerIdi+1; idi<largerIdi; ++idi){
+                            if (queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryGeneName().find("localAlignment") == std::string::npos) {
+                                ++query_del;
+                                //                                    std::cout << pairedSimilarFragments[idx].getQueryChr() << "\t" << queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getReferenceGeneName() << " pairedSimilarFragments[idx].getQueryId():" << pairedSimilarFragments[idx].getQueryId() << " pairedSimilarFragments[jdx].getQueryId():" << pairedSimilarFragments[jdx].getQueryId() <<" idi:" << idi << " queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId():" << queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId() << std::endl;
+                                assert(queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId() == idi);
+                                if (queryTimes.find(pairedSimilarFragments[idx].getQueryChr()) != queryTimes.end()
+                                    && queryTimes[pairedSimilarFragments[idx].getQueryChr()].find(idi) != queryTimes[pairedSimilarFragments[idx].getQueryChr()].end()
+                                    && queryTimes[pairedSimilarFragments[idx].getQueryChr()][idi] >= queryMaximumTimes) {
+                                    query_del += MAX_DIST_BETWEEN_MATCHES + MAX_DIST_BETWEEN_MATCHES;
+                                    break;
+                                    }
+                            }
+                        }
+                        if (std::abs(ref_del) > MAX_DIST_BETWEEN_MATCHES || std::abs(query_del) > MAX_DIST_BETWEEN_MATCHES) {
+                            // if this position is too large then the last node of j could not be i and the chain restart from j
+                            break;
+                        }
+                        assert(ref_del >= 0);
+                        assert(query_del >= 0);
+                        double distance = (((ref_del + query_del) + std::abs(ref_del - query_del)) / (calculateIndelDistance));
+                        //                            if( withNovelAnchros ){
+                        //                                distance = (ref_del+query_del)/2;
+                        //                            }
+
+                        double thisScore = thisIndexScore;
+                        if (pairedSimilarFragments[idx].getRefId() != pairedSimilarFragments[jdx].getRefId()) {
+                            thisScore += scoreArray[jdx];
+                        }
+                        if (distance > 0) {
+                            if (pairedSimilarFragments[idx].getQueryGeneName().find("localAlignment") != std::string::npos || pairedSimilarFragments[jdx].getQueryGeneName().find("localAlignment") != std::string::npos) {
+                                thisScore = thisScore + INDEL_SCORE * distance;
+                            } else {
+                                thisScore = thisScore + GAP_OPEN_PENALTY + INDEL_SCORE * distance;
+                            }
+                        }
+                        //                            std::cout << "line 544 thisScore:" << thisScore << " distance:" << distance << " jdx:" << jdx << " idx:" << idx << " thisIndexScore:" << thisIndexScore << " scoreArray[jdx]:" << scoreArray[jdx] << " pairedSimilarFragments[idx].getRefId()" << pairedSimilarFragments[idx].getRefId() << " pairedSimilarFragments[jdx].getRefId():" << pairedSimilarFragments[jdx].getRefId() << std::endl;
+                        if (thisScore > scoreArray[idx] &&
+                            pairedSimilarFragments[jdx].getQueryId() > pairedSimilarFragments[idx].getQueryId()) {
+                            scoreArray[idx] = thisScore;
+                            prev[idx] = jdx;
+                            }
+                    }
+            }
+        }
+    }
+}
+
 // since we will change pairedSimilarFragments, so do not use reference C++ data type here
 void longestPathQuotav2(std::vector<AlignmentMatch> pairedSimilarFragments, std::vector<std::vector<AlignmentMatch>> &sortedOrthologPairChains,
                         std::map<std::string, std::map<int64_t, AlignmentMatch>> &refIndexMap /*chr, index, AlignmentMatch*/, std::map<std::string, std::map<int64_t, AlignmentMatch>> &queryIndexMap,
@@ -728,6 +1019,7 @@ void longestPathQuotav2(std::vector<AlignmentMatch> pairedSimilarFragments, std:
         n = pairedSimilarFragments.size();
 //        std::cout << "line 322" << std::endl;
 
+        std::map<std::pair<std::string, std::string>, std::vector<AlignmentMatch>> groupedMapAlignmentMatchInner;
         for (int idx = 0; idx < n; ++idx) {
             if ( untouchedRefChrs.find(pairedSimilarFragments[idx].getRefChr() ) != untouchedRefChrs.end() || untouchedQeuryChrs.find(pairedSimilarFragments[idx].getQueryChr() ) != untouchedQeuryChrs.end() ) {
                 scoreArray[idx] = pairedSimilarFragments[idx].getScore();
@@ -738,228 +1030,74 @@ void longestPathQuotav2(std::vector<AlignmentMatch> pairedSimilarFragments, std:
         scoreArray[0] = pairedSimilarFragments[0].getScore();
         prev[0] = -1;
 //        std::cout << "line 333" << std::endl;
-        for (int idx = 1; idx < n; ++idx) {
-            if ( untouchedRefChrs.find(pairedSimilarFragments[idx].getRefChr() ) != untouchedRefChrs.end() || untouchedQeuryChrs.find(pairedSimilarFragments[idx].getQueryChr() ) != untouchedQeuryChrs.end() ) {
-                double thisIndexScore = scoreArray[idx];
-                for (int jdx = idx - 1; jdx >= 0; --jdx) {// checking all previous nodes
-                    // Because we swapped asm/query start position so that inversions were all increasing,
-                    // we should always be on the diagonal.  If not, then we filter it.
-                    // This gets rid of the noise, while preserving the inversions on
-                    // the diagonal
-                    // Are only looking at positions previous to our current "idx" position
-                    if (pairedSimilarFragments[idx].getQueryChr() == pairedSimilarFragments[jdx].getQueryChr()
-                        && pairedSimilarFragments[idx].getRefChr() == pairedSimilarFragments[jdx].getRefChr()) {
-                        if (pairedSimilarFragments[idx].getStrand() == pairedSimilarFragments[jdx].getStrand()) {
-                            // the node one the chain should be in the same STRAND, if not this is an INDEL
 
-                            int query_del_test = std::abs( pairedSimilarFragments[idx].getQueryId() - pairedSimilarFragments[jdx].getQueryId());
-                            if( query_del_test > 0 ){
-                                query_del_test = query_del_test -1.0;
-                            }
-
-                            if (pairedSimilarFragments[idx].getStrand() == POSITIVE && pairedSimilarFragments[idx].getQueryId() > pairedSimilarFragments[jdx].getQueryId() &&
-                                pairedSimilarFragments[jdx].getQueryEndPos() < pairedSimilarFragments[idx].getQueryStartPos() &&
-                                pairedSimilarFragments[jdx].getRefEndPos() < pairedSimilarFragments[idx].getRefStartPos()) { //same strand
-    //                            int ref_del = pairedSimilarFragments[idx].getRefId() - pairedSimilarFragments[jdx].getRefId()-1;
-    //                            int query_del = pairedSimilarFragments[idx].getQueryId() - pairedSimilarFragments[jdx].getQueryId()-1;
-
-    //                            int ref_del = 0;
-    //                            for( int idi = pairedSimilarFragments[jdx].getRefId()+1; idi<pairedSimilarFragments[idx].getRefId(); ++idi){
-    //                                ref_del += (refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getRefEndPos() - refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getRefStartPos() + 1 );
-    //                            }
-    //
-    //                            int query_del =  0;
-    //                            for( int idi = pairedSimilarFragments[jdx].getQueryId()+1; idi<pairedSimilarFragments[idx].getQueryId(); ++idi){
-    //                                query_del += (queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryEndPos() - queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryStartPos() + 1 );
-    //                            }
-                                if ( query_del_test > MAX_DIST_BETWEEN_MATCHES ) {
-                                    break;
-                                }
-
-                                double ref_del = 0;
-    //                            int smallerIdi = pairedSimilarFragments[jdx].getRefId();
-    //                            int largerIdi = pairedSimilarFragments[idx].getRefId();
-    //                            if ( smallerIdi > largerIdi ){
-    //                                int temp = smallerIdi;
-    //                                smallerIdi = largerIdi;
-    //                                largerIdi = temp;
-    //                            }
-    //                            for( int idi = smallerIdi+1; idi<largerIdi; ++idi){
-                                for (int idi = pairedSimilarFragments[jdx].getRefId() + 1; idi < pairedSimilarFragments[idx].getRefId(); ++idi) {
-                                    if (refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getReferenceGeneName().find("localAlignment") == std::string::npos) {
-                                        ++ref_del;
-                                        if (refTimes.find(refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getReferenceGeneName()) != refTimes.end() && refTimes[refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getReferenceGeneName()] >= refMaximumTimes) {
-                                            ref_del += MAX_DIST_BETWEEN_MATCHES + MAX_DIST_BETWEEN_MATCHES;
-                                        }
-                                    }
-                                }
-
-    //                            smallerIdi = pairedSimilarFragments[jdx].getQueryId();
-    //                            largerIdi = pairedSimilarFragments[idx].getQueryId();
-    //                            if ( smallerIdi > largerIdi ){
-    //                                int temp = smallerIdi;
-    //                                smallerIdi = largerIdi;
-    //                                largerIdi = temp;
-    //                            }
-                                double query_del = 0;
-    //                            for( int idi = smallerIdi+1; idi<largerIdi; ++idi){
-                                for (int idi = pairedSimilarFragments[jdx].getQueryId() + 1; idi < pairedSimilarFragments[idx].getQueryId(); ++idi) {
-                                    if (queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryGeneName().find("localAlignment") == std::string::npos) {
-                                        ++query_del;
-    //                                    std::cout << "line 410: " << pairedSimilarFragments[idx].getQueryChr() << "\t" << queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getReferenceGeneName() << " pairedSimilarFragments[idx].getQueryId():" << pairedSimilarFragments[idx].getQueryId() << " pairedSimilarFragments[jdx].getQueryId():" << pairedSimilarFragments[jdx].getQueryId() <<" idi:" << idi << " queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId():" << queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId() << std::endl;
-                                        assert(queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId() == idi);
-                                        if (queryTimes.find(pairedSimilarFragments[idx].getQueryChr()) != queryTimes.end()
-                                            && queryTimes[pairedSimilarFragments[idx].getQueryChr()].find(idi) != queryTimes[pairedSimilarFragments[idx].getQueryChr()].end()
-                                            && queryTimes[pairedSimilarFragments[idx].getQueryChr()][idi] >= queryMaximumTimes) {
-                                            query_del += MAX_DIST_BETWEEN_MATCHES + MAX_DIST_BETWEEN_MATCHES;
-                                        }
-                                    }
-                                }
-
-                                assert(ref_del >= 0);
-                                assert(query_del >= 0);
-                                double distance = (((ref_del + query_del) + std::abs(ref_del - query_del)) / (calculateIndelDistance));
-    //                            if( withNovelAnchros ){
-    //                                distance = (ref_del+query_del)/2;
-    //                            }
-
-                                if (std::abs(ref_del) > MAX_DIST_BETWEEN_MATCHES || std::abs(query_del) > MAX_DIST_BETWEEN_MATCHES) {
-                                    // if this position is too large, then the last node of j could not be i and the chain restart from j
-                                    break;
-                                }
-                                if (std::abs(std::abs(ref_del) - std::abs(query_del)) > MAX_DIST_BETWEEN_MATCHES) {
-                                    break;
-                                }
-
-                                double thisScore = thisIndexScore;
-                                if (pairedSimilarFragments[idx].getRefId() != pairedSimilarFragments[jdx].getRefId()) {
-                                    thisScore += scoreArray[jdx];
-                                }
-                                if (distance > 0) {
-                                    if (pairedSimilarFragments[idx].getQueryGeneName().find("localAlignment") != std::string::npos || pairedSimilarFragments[jdx].getQueryGeneName().find("localAlignment") != std::string::npos) {
-                                        thisScore = thisScore + INDEL_SCORE * distance;
-                                    } else {
-                                        thisScore = thisScore + GAP_OPEN_PENALTY + INDEL_SCORE * distance;
-                                    }
-                                }
-
-    //                            std::cout << "line 599 thisScore:" << thisScore << " distance:" << distance << " jdx:" << jdx << " idx:" << idx << " thisIndexScore:" << thisIndexScore << " scoreArray[jdx]:" << scoreArray[jdx] << " pairedSimilarFragments[idx].getRefId()" << pairedSimilarFragments[idx].getRefId() << " pairedSimilarFragments[jdx].getRefId():" << pairedSimilarFragments[jdx].getRefId() << std::endl;
-                                if (thisScore > scoreArray[idx] && pairedSimilarFragments[jdx].getQueryId() < pairedSimilarFragments[idx].getQueryId()) {
-                                    scoreArray[idx] = thisScore;
-                                    prev[idx] = jdx;
-                                }
-                            } else if (pairedSimilarFragments[idx].getStrand() == NEGATIVE && pairedSimilarFragments[jdx].getQueryId() > pairedSimilarFragments[idx].getQueryId() &&
-                                       pairedSimilarFragments[jdx].getQueryStartPos() > pairedSimilarFragments[idx].getQueryEndPos() &&
-                                       pairedSimilarFragments[jdx].getRefEndPos() < pairedSimilarFragments[idx].getRefStartPos()
-
-                                    ) { // inversion
-    //                           int ref_del = pairedSimilarFragments[idx].getRefId() - pairedSimilarFragments[jdx].getRefId()-1;
-    //                           int query_del = pairedSimilarFragments[jdx].getQueryId() - pairedSimilarFragments[idx].getQueryId()-1;
-
-    //                            int ref_del = 0;
-    //                            for( int idi = pairedSimilarFragments[jdx].getRefId()+1; idi<pairedSimilarFragments[idx].getRefId(); ++idi){
-    //                                ref_del += (refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getRefEndPos() - refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getRefStartPos() + 1 );
-    //                            }
-    //                            int query_del =  0;
-    //                            for( int idi = pairedSimilarFragments[idx].getQueryId()+1; idi<pairedSimilarFragments[jdx].getQueryId(); ++idi){
-    //                                query_del += (queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryEndPos() - queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryStartPos() + 1 );
-    //                            }
-    /*
-                                double ref_del = 0;
-                                for( int idi = pairedSimilarFragments[jdx].getRefId()+1; idi<pairedSimilarFragments[idx].getRefId(); ++idi){
-                                    if( refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getReferenceGeneName().find("localAlignment") == std::string::npos ){
-                                        ++ref_del;
-                                    }
-                                }
-
-                                double query_del =  0;
-                                for( int idi = pairedSimilarFragments[idx].getQueryId()+1; idi<pairedSimilarFragments[jdx].getQueryId(); ++idi){
-                                    if( queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryGeneName().find("localAlignment") == std::string::npos ){
-                                        ++query_del;
-                                    }
-                                }
-    */
-                                if ( query_del_test > MAX_DIST_BETWEEN_MATCHES ) {
-                                    break;
-                                }
-                                double ref_del = 0;
-    //                            int smallerIdi = pairedSimilarFragments[jdx].getRefId();
-    //                            int largerIdi = pairedSimilarFragments[idx].getRefId();
-    //                            if ( smallerIdi > largerIdi ){
-    //                                int temp = smallerIdi;
-    //                                smallerIdi = largerIdi;
-    //                                largerIdi = temp;
-    //                            }
-    //                            for( int idi = smallerIdi+1; idi<largerIdi; ++idi){
-                                for (int idi = pairedSimilarFragments[jdx].getRefId() + 1; idi < pairedSimilarFragments[idx].getRefId(); ++idi) {
-                                    if (refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getReferenceGeneName().find("localAlignment") == std::string::npos) {
-                                        ++ref_del;
-
-                                        if (refTimes.find(refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getReferenceGeneName()) != refTimes.end() && refTimes[refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getReferenceGeneName()] >= refMaximumTimes) {
-                                            ref_del += MAX_DIST_BETWEEN_MATCHES + MAX_DIST_BETWEEN_MATCHES;
-                                        }
-                                    }
-                                }
-    //
-    //                            smallerIdi = pairedSimilarFragments[jdx].getQueryId();
-    //                            largerIdi = pairedSimilarFragments[idx].getQueryId();
-    //                            if ( smallerIdi > largerIdi ){
-    //                                int temp = smallerIdi;
-    //                                smallerIdi = largerIdi;
-    //                                largerIdi = temp;
-    //                            }
-                                double query_del = 0;
-                                for (int idi = pairedSimilarFragments[idx].getQueryId() + 1; idi < pairedSimilarFragments[jdx].getQueryId(); ++idi) {
-    //                            for( int idi = smallerIdi+1; idi<largerIdi; ++idi){
-                                    if (queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryGeneName().find("localAlignment") == std::string::npos) {
-                                        ++query_del;
-    //                                    std::cout << pairedSimilarFragments[idx].getQueryChr() << "\t" << queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getReferenceGeneName() << " pairedSimilarFragments[idx].getQueryId():" << pairedSimilarFragments[idx].getQueryId() << " pairedSimilarFragments[jdx].getQueryId():" << pairedSimilarFragments[jdx].getQueryId() <<" idi:" << idi << " queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId():" << queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId() << std::endl;
-                                        assert(queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId() == idi);
-                                        if (queryTimes.find(pairedSimilarFragments[idx].getQueryChr()) != queryTimes.end()
-                                            && queryTimes[pairedSimilarFragments[idx].getQueryChr()].find(idi) != queryTimes[pairedSimilarFragments[idx].getQueryChr()].end()
-                                            && queryTimes[pairedSimilarFragments[idx].getQueryChr()][idi] >= queryMaximumTimes) {
-                                            query_del += MAX_DIST_BETWEEN_MATCHES + MAX_DIST_BETWEEN_MATCHES;
-                                        }
-                                    }
-                                }
-
-                                assert(ref_del >= 0);
-                                assert(query_del >= 0);
-                                double distance = (((ref_del + query_del) + std::abs(ref_del - query_del)) / (calculateIndelDistance));
-    //                            if( withNovelAnchros ){
-    //                                distance = (ref_del+query_del)/2;
-    //                            }
-                                if (std::abs(ref_del) > MAX_DIST_BETWEEN_MATCHES || std::abs(query_del) > MAX_DIST_BETWEEN_MATCHES) {
-                                    // if this position is too large then the last node of j could not be i and the chain restart from j
-                                    break;
-                                }
-                                if (std::abs(std::abs(ref_del) - std::abs(query_del)) > MAX_DIST_BETWEEN_MATCHES) {
-                                    break;
-                                }
-
-                                double thisScore = thisIndexScore;
-                                if (pairedSimilarFragments[idx].getRefId() != pairedSimilarFragments[jdx].getRefId()) {
-                                    thisScore += scoreArray[jdx];
-                                }
-                                if (distance > 0) {
-                                    if (pairedSimilarFragments[idx].getQueryGeneName().find("localAlignment") != std::string::npos || pairedSimilarFragments[jdx].getQueryGeneName().find("localAlignment") != std::string::npos) {
-                                        thisScore = thisScore + INDEL_SCORE * distance;
-                                    } else {
-                                        thisScore = thisScore + GAP_OPEN_PENALTY + INDEL_SCORE * distance;
-                                    }
-                                }
-    //                            std::cout << "line 544 thisScore:" << thisScore << " distance:" << distance << " jdx:" << jdx << " idx:" << idx << " thisIndexScore:" << thisIndexScore << " scoreArray[jdx]:" << scoreArray[jdx] << " pairedSimilarFragments[idx].getRefId()" << pairedSimilarFragments[idx].getRefId() << " pairedSimilarFragments[jdx].getRefId():" << pairedSimilarFragments[jdx].getRefId() << std::endl;
-                                if (thisScore > scoreArray[idx] &&
-                                    pairedSimilarFragments[jdx].getQueryId() > pairedSimilarFragments[idx].getQueryId()) {
-                                    scoreArray[idx] = thisScore;
-                                    prev[idx] = jdx;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        for (const auto &match : pairedSimilarFragments) {
+            const auto &refChr = match.getRefChr();
+            const auto &queryChr = match.getQueryChr();
+            auto key = std::make_pair(refChr, queryChr);
+            groupedMapAlignmentMatchInner[key].push_back(match);
         }
+
+        int64_t count_number;
+        count_number = 0;
+
+        int64_t total_chr_pair;
+        total_chr_pair = 0;
+
+        std::vector<std::pair<std::string, std::string>> key_vector;
+        for (const auto &subAlignmentMatchT : groupedMapAlignmentMatchInner) {
+            key_vector.push_back(subAlignmentMatchT.first);
+        }
+
+        std::sort(key_vector.begin(), key_vector.end(),
+                  [](const std::pair<std::string, std::string>& a,
+                     const std::pair<std::string, std::string>& b) {
+                      if (a.first != b.first) {
+                          return a.first < b.first;
+                      }
+                      return a.second < b.second;
+                  });
+
+        for (const auto &key_chr_pair : key_vector) {
+
+            std::vector<AlignmentMatch>& alignmentMatchsMapTSub = groupedMapAlignmentMatchInner[key_chr_pair];
+
+            int64_t count_chr_pair_number;
+            count_chr_pair_number = alignmentMatchsMapTSub.size();
+
+            assert((alignmentMatchsMapTSub[0].getRefChr() == alignmentMatchsMapTSub[alignmentMatchsMapTSub.size()-1].getRefChr()) && (alignmentMatchsMapTSub[0].getQueryChr() == alignmentMatchsMapTSub[alignmentMatchsMapTSub.size()-1].getQueryChr()));
+//                std::cout << "line2063" << "\t" << count_chr_pair_number << std::endl;alignmentMatchsMapTSub[0].getRefChr()
+            if ( untouchedRefChrs.find(alignmentMatchsMapTSub[0].getRefChr() ) != untouchedRefChrs.end() ||
+                 untouchedQeuryChrs.find(alignmentMatchsMapTSub[0].getQueryChr() ) != untouchedQeuryChrs.end() ) {
+                std::vector<double> scoreArray_sub(count_chr_pair_number);
+                std::vector<int64_t> prev_sub(count_chr_pair_number);
+                for (int i = 0; i < count_chr_pair_number; ++i) {
+                    scoreArray_sub[i] = alignmentMatchsMapTSub[i].getScore();
+                    prev_sub[i] = -1;
+                }
+                longestPathQuotav2SubAccelerate(alignmentMatchsMapTSub, refIndexMap /*chr, index, AlignmentMatch*/, queryIndexMap,
+                                                    INDEL_SCORE, GAP_OPEN_PENALTY, MAX_DIST_BETWEEN_MATCHES,
+                                                    refMaximumTimes, queryMaximumTimes,
+                                                    calculateIndelDistance, refTimes, queryTimes,
+                                                    scoreArray_sub, prev_sub);
+                for (int i = 0; i < count_chr_pair_number; ++i) {
+                    scoreArray[count_number] = scoreArray_sub[i];
+
+                    if (prev_sub[i] == -1){
+                        prev[count_number] = prev_sub[i];
+                    } else{
+                        prev[count_number] = prev_sub[i] + total_chr_pair;
+                    }
+
+                    count_number += 1;
+                }
+            } else{
+                count_number += count_chr_pair_number;
+            }
+            total_chr_pair += count_chr_pair_number;
+        }
+
+        assert(count_number == n);
         untouchedRefChrs.clear();
         untouchedQeuryChrs.clear();
 //        std::cout << "line 645" << std::endl;
@@ -1042,14 +1180,16 @@ void longestPathQuotav2(std::vector<AlignmentMatch> pairedSimilarFragments, std:
                 uint32_t chainQueryEnd = 0;
 //                std::cout << "line 426" << std::endl;
 //                std::cout << "line 669" << std::endl;
+                chainRefStart = std::min(pairedSimilarFragments[ans[0]].getRefStartPos(), pairedSimilarFragments[ans[s-1]].getRefStartPos());
+                chainQueryStart = std::min(pairedSimilarFragments[ans[0]].getQueryStartPos(), pairedSimilarFragments[ans[s-1]].getQueryStartPos());
                 for (j = 0; j < s; j++) {
                     prev[ans[j]] = -2;
 //                    std::cout << "line 672" << std::endl;
                     AlignmentMatch orthologPair2 = pairedSimilarFragments[ans[j]];
                     sortedOrthologPairChains[sortedOrthologPairChains.size() - 1].push_back(orthologPair2);
 //                    std::cout << "line 675" << std::endl;
-                    chainRefStart = chainRefStart < orthologPair2.getRefStartPos() ? chainRefStart : orthologPair2.getRefStartPos();
-                    chainQueryStart = chainQueryStart < orthologPair2.getQueryStartPos() ? chainQueryStart : orthologPair2.getQueryStartPos();
+                    // chainRefStart = chainRefStart < orthologPair2.getRefStartPos() ? chainRefStart : orthologPair2.getRefStartPos();
+                    // chainQueryStart = chainQueryStart < orthologPair2.getQueryStartPos() ? chainQueryStart : orthologPair2.getQueryStartPos();
                     chainRefEnd = chainRefEnd > orthologPair2.getRefEndPos() ? chainRefEnd : orthologPair2.getRefEndPos();
                     chainQueryEnd = chainQueryEnd > orthologPair2.getQueryEndPos() ? chainQueryEnd : orthologPair2.getQueryEndPos();
                 }
@@ -1110,6 +1250,16 @@ void longestPathQuotav2(std::vector<AlignmentMatch> pairedSimilarFragments, std:
                         prev[ii] = -2;
                     }
                 }
+
+                for (int ii = 0; ii < n; ii++) {
+                    if ((refTimes.find(pairedSimilarFragments[ii].getReferenceGeneName()) != refTimes.end() &&
+                    refTimes[pairedSimilarFragments[ii].getReferenceGeneName()] >= refMaximumTimes)||
+                    (queryTimes.find(pairedSimilarFragments[ii].getQueryChr()) != queryTimes.end() &&
+                    queryTimes[pairedSimilarFragments[ii].getQueryChr()].find(pairedSimilarFragments[ii].getQueryId()) != queryTimes[pairedSimilarFragments[ii].getQueryChr()].end() &&
+                    queryTimes[pairedSimilarFragments[ii].getQueryChr()][pairedSimilarFragments[ii].getQueryId()] >= queryMaximumTimes)) {
+                        prev[ii] = -2;
+                    }
+                }
             }
         }
 //        std::cout << "line 695" << std::endl;
@@ -1136,6 +1286,8 @@ void longestPathQuotav2(std::vector<AlignmentMatch> pairedSimilarFragments, std:
                         prev[j]=prev[i];
                         if( previousCurrentMap.find(prev[i]) == previousCurrentMap.end() ){
                             prev[j] = -1;
+                        } else {
+                            prev[j] = previousCurrentMap[prev[i]];
                         }
                         scoreArray[j] = scoreArray[i];
                     }
@@ -1146,7 +1298,7 @@ void longestPathQuotav2(std::vector<AlignmentMatch> pairedSimilarFragments, std:
             }
 
             pairedSimilarFragments.resize(j);
-            for ( i = 0; i < pairedSimilarFragments.size(); i++) {
+            /*for ( i = 0; i < pairedSimilarFragments.size(); i++) {
                 if( previousCurrentMap.find(prev[i]) != previousCurrentMap.end() ){
                     prev[i] = previousCurrentMap[prev[i]];
 //                    std::cout << "line 728\t" << pairedSimilarFragments[i].getRefChr() << "\t" << pairedSimilarFragments[prev[i]].getRefChr()
@@ -1155,7 +1307,7 @@ void longestPathQuotav2(std::vector<AlignmentMatch> pairedSimilarFragments, std:
                 }else{
                     prev[i] = -1;
                 }
-            }
+            }*/
 //            std::cout << "line 703 size: " <<  pairedSimilarFragments.size() << std::endl;
         }
 //        std::cout << "line 721" << std::endl;

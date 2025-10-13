@@ -1608,7 +1608,6 @@ int pro(int argc, char **argv) {
 
             if (refGene == queryGene) {
                 flag = 1;
-                continue;
             }
 
             if (refChr == queryChr && delete_tandem_length != 0 && std::abs(refId -queryId) <= delete_tandem_length && flag == 1) {
