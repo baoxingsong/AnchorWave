@@ -1237,7 +1237,7 @@ void setupAnchorsWithSpliceAlignmentResultQuota(const std::string &gffFilePath, 
         // begin setting index, they are necessary in the longest path approach
         std::map<std::string, int64_t> queryIndex;
         std::map<std::string, std::map<int64_t, AlignmentMatch>> queryIndexMap; // chr, index, AlignmentMatch
-        myOrthologPairsSortQueryQuota(alignmentMatchsMapT);
+        myOrthologPairsSortQueryQuotaV2(alignmentMatchsMapT);
         for (size_t ii = 0; ii < alignmentMatchsMapT.size(); ++ii) {
             if (queryIndex.find(alignmentMatchsMapT[ii].getQueryChr()) == queryIndex.end()) {
                 queryIndex[alignmentMatchsMapT[ii].getQueryChr()] = 0;
@@ -1252,7 +1252,7 @@ void setupAnchorsWithSpliceAlignmentResultQuota(const std::string &gffFilePath, 
 
 //        std::cout << "query id setting done" << std::endl;
 
-        myOrthologPairsSortQuota(alignmentMatchsMapT);
+        myOrthologPairsSortQuotaV2(alignmentMatchsMapT);
         std::map<std::string, int64_t> refIndex; // key is chr
         std::map<std::string, std::map<int64_t, AlignmentMatch>> refIndexMap; // chr, index, AlignmentMatch
         for (size_t ii = 0; ii < alignmentMatchsMapT.size(); ++ii) {
@@ -1269,9 +1269,8 @@ void setupAnchorsWithSpliceAlignmentResultQuota(const std::string &gffFilePath, 
 
         // index setting end
 //        std::cout << "reference id setting done" << std::endl;
-
+        orthologPairSortRefForAccelerate(alignmentMatchsMapT);
         longestPathQuotav2(alignmentMatchsMapT, alignmentMatchsMap, refIndexMap, queryIndexMap, INDEL_SCORE, GAP_OPEN_PENALTY, MIN_ALIGNMENT_SCORE, MAX_DIST_BETWEEN_MATCHES, refMaximumTimes, queryMaximumTimes, calculateIndelDistance, false);
-
         for (size_t i = 0; i < alignmentMatchsMap.size(); ++i) {
             std::vector<size_t> keepIndexs;
             std::set<size_t> keepIndexset;
