@@ -3,7 +3,9 @@
 //
 
 #include "TransferGffWithNucmerResult.h"
+#include "ReadSamUtils.h"
 
+#include <unordered_map>
 
 void readSam(std::vector<AlignmentMatch> &alignmentMatchsMapT, std::ifstream &infile,
              std::map<std::string, Transcript> &transcriptHashMap, int &expectCopy, const double &minimumSimilarity,
@@ -12,27 +14,24 @@ void readSam(std::vector<AlignmentMatch> &alignmentMatchsMapT, std::ifstream &in
              int32_t &extendGapPenalty1, int &k, bool &H, int &w,
              std::map<std::string, std::tuple<std::string, long, long, int> > &queryGenome) {
 
-    std::map<std::string, std::tuple<std::string, long, long, int> > anchorSequences2;
-    readFastaFile(anchorSequenceFile, anchorSequences2);
+    // The previous implementation loaded the anchor FASTA and fetched query
+    // sequence for every M operation to compute a local score that was never
+    // consumed. Keep the parameter for API compatibility, but avoid that I/O.
+    (void)anchorSequenceFile;
+
+    using anchorwave::read_sam_detail::CdsCoordinateIndex;
+    using anchorwave::read_sam_detail::CigarSummary;
+    using anchorwave::read_sam_detail::GenomicInterval;
+    using anchorwave::read_sam_detail::SamFields;
 
     std::string line;
-    char delim = '\t';
-    std::vector<std::string> elems;
-
-    std::string databaseChr;
-    int32_t databaseStart;
-    int32_t databaseEnd;
-    std::string queryChr;
-    int32_t queryStart;
-    int32_t queryEnd;
-
-    std::map<std::string, std::string> lastChr;
-    std::map<std::string, int32_t> lastPosition;
-
-    std::map<std::string, std::map<std::string, std::vector<double>> > geneScores; //fist key is gene name, second key is chr value is a vector of similarity
+    SamFields fields;
+    std::unordered_map<const Transcript *, CdsCoordinateIndex> coordinateIndexes;
+    std::unordered_map<std::string, std::pair<std::string, int32_t>> lastAlignment;
+    std::unordered_map<std::string, std::unordered_map<std::string, std::vector<double>>> geneScores;
 
     while (std::getline(infile, line)) { // no matter the transcript in on forward strand or reverse strand, it should do not matter
-        if (line.substr(0, 3) == "@PG") {
+        if (line.compare(0, 3, "@PG") == 0) {
             std::vector<std::string> elements;
             std::vector<std::string> elements2;
             char seperator = ' ';
@@ -67,226 +66,93 @@ void readSam(std::vector<AlignmentMatch> &alignmentMatchsMapT, std::ifstream &in
             }
         }
 
-        if (line.size()>1 && line[0] != '@') { //ignore the header
-//            elems.clear();
-            std::vector<std::string> elems;
-            split(line, delim, elems);
-            queryStart = stoi(elems[3]);
-            queryChr = elems[2];
+        if (line.size() > 1 && line[0] != '@') { //ignore the header
+            if (!anchorwave::read_sam_detail::parseSamFields(line, fields)) {
+                continue;
+            }
 
-            if (queryChr.compare("*") != 0 && transcriptHashMap.find(elems[0]) != transcriptHashMap.end() && queryGenome.find(queryChr) != queryGenome.end() ) { // ignore those none mapping records
-                databaseChr = transcriptHashMap[elems[0]].getChromeSomeName();
-                databaseStart = transcriptHashMap[elems[0]].getPStart();
-                databaseEnd = transcriptHashMap[elems[0]].getPEnd();
-                queryEnd = queryStart; // this 1 based position
+            std::map<std::string, Transcript>::iterator transcriptIt = transcriptHashMap.find(fields.queryName);
+            if (fields.referenceName != "*" && transcriptIt != transcriptHashMap.end() &&
+                queryGenome.find(fields.referenceName) != queryGenome.end()) { // ignore non-mapping records
+                Transcript &transcript = transcriptIt->second;
+                const std::string &geneName = fields.queryName;
+                const std::string &queryChr = fields.referenceName;
+                const std::string &databaseChr = transcript.getChromeSomeName();
+                const int32_t queryStart = fields.position;
+                const int samFlag = fields.flag;
+                // Preserve the legacy orientation test exactly. For the
+                // unpaired minimap2 records used here this is normally 0/16.
+                const bool reverseAlignment = samFlag % 32 != 0;
 
-                int samFlag = stoi(elems[1]);
-
-                double score = 0;
-                int32_t currentCDSPosition = 0; // 0 based position
-                int32_t currentqueryPosition = queryStart - 1; // 0 based position
-
-                std::string cdsSequence = getSubsequence2(anchorSequences2, elems[0]);
-
-                if (16 == samFlag % 32) {
-                    cdsSequence = getReverseComplementary(cdsSequence);
+                CigarSummary cigar;
+                if (!anchorwave::read_sam_detail::summarizeCigar(
+                        line, fields.cigarBegin, fields.cigarEnd, cigar)) {
+                    continue;
                 }
-
-                std::vector<std::string> cigarElems;
-                splitCIGAR(elems[5], cigarElems);
-                int headClipping = 0;
-                int tailClipping = 0;
-                int numberofMatch = 0;
-                std::string qseq;
-
-                for (size_t i = 0; i < cigarElems.size(); ++i) {
-                    std::string cVal = cigarElems[i];
-                    char cLetter = cVal[cVal.length() - 1];
-                    int cLen = stoi(cVal.substr(0, cVal.length() - 1));
-                    if (i == cigarElems.size() - 1 && (cLetter == 'H' || cLetter == 'S')) { // ignore the last soft/hard clipping
-                        tailClipping += cLen;
-                        continue;
-                    }
-
-                    switch (cLetter) {
-                        case 'H':
-                            headClipping += cLen;
-                            currentCDSPosition += cLen;
-                            break;
-                        case 'S':
-                            headClipping += cLen;
-                            currentCDSPosition += cLen;
-                            break;
-                        case 'M':
-                            queryEnd += cLen;
-                            numberofMatch += cLen;
-                            qseq = getSubsequence2(queryGenome, queryChr, currentqueryPosition, currentqueryPosition + cLen - 1);
-
-                            for (int32_t p = 0; p < cLen; p++) {
-                                if (cdsSequence[currentCDSPosition] == qseq[p] ) {
-                                    score += matchingScore;
-                                } else {
-                                    score += mismatchingPenalty;
-                                }
-                                ++currentCDSPosition;
-                                ++currentqueryPosition;
-                            }
-                            break;
-                        case '=':
-                            queryEnd += cLen;
-                            numberofMatch += cLen;
-                            score += cLen * matchingScore;
-                            currentCDSPosition += cLen;
-                            currentqueryPosition += cLen;
-                            break;
-                        case 'X':
-                            numberofMatch += cLen;
-                            queryEnd += cLen;
-                            score += cLen * mismatchingPenalty;
-                            currentCDSPosition += cLen;
-                            currentqueryPosition += cLen;
-                            break;
-                        case 'I':
-                            score += openGapPenalty1 + cLen * extendGapPenalty1;
-                            currentCDSPosition += cLen;
-                            break;
-                        case 'D':
-                            queryEnd += cLen;
-                            score += openGapPenalty1 + cLen * extendGapPenalty1;
-                            currentqueryPosition += cLen;
-                            break;
-                        case 'N': // do not use intron for score calculation
-                            queryEnd += cLen;
-                            currentqueryPosition += cLen;
-                            break;
-                        case 'P':
-                            break;
-                        default:
-                            std::cout << "current we could not deal with cigar letter " << cLetter << std::endl;
-                            break;
-                    }
+                const int32_t queryEnd = queryStart + cigar.referenceSpan - 1;
+                std::unordered_map<const Transcript *, CdsCoordinateIndex>::iterator coordinateIt =
+                    coordinateIndexes.find(&transcript);
+                if (coordinateIt == coordinateIndexes.end()) {
+                    coordinateIt = coordinateIndexes.emplace(
+                        &transcript, CdsCoordinateIndex::build(transcript)).first;
                 }
+                const CdsCoordinateIndex &coordinateIndex = coordinateIt->second;
+                const GenomicInterval databaseInterval =
+                    anchorwave::read_sam_detail::alignedTranscriptInterval(
+                        coordinateIndex, cigar.headClipping, cigar.tailClipping, reverseAlignment);
+                const int32_t databaseStart = databaseInterval.start;
+                const int32_t databaseEnd = databaseInterval.end;
+                assert(databaseStart < databaseEnd);
 
-                --queryEnd;
-
-                std::map<int32_t, int32_t> positionsMap;
-                size_t cdsSequenceLength = 0;
-                if (transcriptHashMap[elems[0]].getStrand() == POSITIVE) {
-                    int32_t cdsPosition = 0;
-                    int32_t chromosomePosition = transcriptHashMap[elems[0]].getPStart() - 1;
-                    for (size_t cdsIndex = 0; cdsIndex < transcriptHashMap[elems[0]].getCdsVector().size(); ++cdsIndex) {
-                        for (int32_t i = transcriptHashMap[elems[0]].getCdsVector()[cdsIndex].getStart(); i <= transcriptHashMap[elems[0]].getCdsVector()[cdsIndex].getEnd(); ++i) {
-                            cdsPosition++;
-                            chromosomePosition++;
-                            cdsSequenceLength++;
-                            positionsMap[cdsPosition] = chromosomePosition;
-                        }
-                        if (cdsIndex < transcriptHashMap[elems[0]].getCdsVector().size() - 1) { // for intron
-                            for (int32_t i = transcriptHashMap[elems[0]].getCdsVector()[cdsIndex].getEnd() + 1; i < transcriptHashMap[elems[0]].getCdsVector()[cdsIndex + 1].getStart(); ++i) {
-                                chromosomePosition++;
-                            }
-                        }
-                    }
-                    assert(chromosomePosition == transcriptHashMap[elems[0]].getPEnd());
-                } else {
-                    int32_t cdsPosition = 0;
-                    int32_t chromosomePosition = transcriptHashMap[elems[0]].getPEnd() + 1;
-                    for (int32_t cdsIndex = transcriptHashMap[elems[0]].getCdsVector().size() - 1; cdsIndex >= 0; --cdsIndex) {
-                        for (int32_t i = transcriptHashMap[elems[0]].getCdsVector()[cdsIndex].getEnd(); i >= transcriptHashMap[elems[0]].getCdsVector()[cdsIndex].getStart(); --i) {
-                            cdsPosition++;
-                            chromosomePosition--;
-                            cdsSequenceLength++;
-                            positionsMap[cdsPosition] = chromosomePosition;
-                        }
-                        if (cdsIndex > 0) { // for intron
-                            for (int32_t i = transcriptHashMap[elems[0]].getCdsVector()[cdsIndex].getStart() - 1; i > transcriptHashMap[elems[0]].getCdsVector()[cdsIndex - 1].getEnd(); --i) {
-                                chromosomePosition--;
-                            }
-                        }
-                    }
-                    assert(transcriptHashMap[elems[0]].getPStart() == chromosomePosition);
-                }
-
-                if (0 == samFlag % 32 && transcriptHashMap[elems[0]].getStrand() == POSITIVE) {
-                    databaseStart = positionsMap[headClipping + 1];
-                    databaseEnd = positionsMap[cdsSequenceLength - tailClipping];
-                    assert(databaseStart < databaseEnd);
-                } else if (0 == samFlag % 32 && transcriptHashMap[elems[0]].getStrand() == NEGATIVE) {
-                    databaseEnd = positionsMap[headClipping + 1];
-                    databaseStart = positionsMap[cdsSequenceLength - tailClipping];
-                    assert(databaseStart < databaseEnd);
-                } else if (0 != samFlag % 32 && transcriptHashMap[elems[0]].getStrand() == POSITIVE) {
-                    databaseEnd = positionsMap[cdsSequenceLength - headClipping];
-                    databaseStart = positionsMap[1 + tailClipping];
-                    assert(databaseStart < databaseEnd);
-                } else if (0 != samFlag % 32 && transcriptHashMap[elems[0]].getStrand() == NEGATIVE) {
-                    databaseStart = positionsMap[cdsSequenceLength - headClipping];
-                    databaseEnd = positionsMap[1 + tailClipping];
-                    assert(databaseStart < databaseEnd);
-                }
-
-                if (lastChr.find(elems[0]) != lastChr.end() && lastChr[elems[0]] == queryChr &&
-                    std::min((std::abs(lastPosition[elems[0]] - queryEnd)), std::abs(lastPosition[elems[0]] - queryStart)) < std::abs(transcriptHashMap[elems[0]].getPStart() - transcriptHashMap[elems[0]].getPEnd())) {
-                    blackGeneList.insert(elems[0]);
+                std::unordered_map<std::string, std::pair<std::string, int32_t>>::iterator lastIt =
+                    lastAlignment.find(geneName);
+                if (lastIt != lastAlignment.end() && lastIt->second.first == queryChr &&
+                    std::min(std::abs(lastIt->second.second - queryEnd),
+                             std::abs(lastIt->second.second - queryStart)) <
+                        std::abs(transcript.getPStart() - transcript.getPEnd())) {
+                    blackGeneList.insert(geneName);
                 } // remove those genes generated weired alignment
 
-                lastChr[elems[0]] = queryChr;
-                lastPosition[elems[0]] = queryEnd;
+                lastAlignment[geneName] = std::make_pair(queryChr, queryEnd);
 
-                //double thisScore = 1.0 - (tailClipping+headClipping)/(double)cdsSequenceLength;
-                double thisScore = (double) numberofMatch / (double) cdsSequenceLength;
-                //double thisScore = score;
+                const double thisScore = static_cast<double>(cigar.numberOfAlignedBases) /
+                                         static_cast<double>(coordinateIndex.cdsLength());
                 if (thisScore > minimumSimilarity) {
-                    if ((0 == samFlag % 32 && transcriptHashMap[elems[0]].getStrand() == POSITIVE)
-                        || (0 != samFlag % 32 && transcriptHashMap[elems[0]].getStrand() == NEGATIVE)) {
-
-                        AlignmentMatch orthologPair(databaseChr, queryChr, databaseStart, databaseEnd, queryStart, queryEnd, thisScore, POSITIVE, elems[0], elems[0]);
-                        alignmentMatchsMapT.push_back(orthologPair);
-                    } else {
-                        AlignmentMatch orthologPair(databaseChr, queryChr, databaseStart, databaseEnd, queryStart, queryEnd, thisScore, NEGATIVE, elems[0], elems[0]);
-                        alignmentMatchsMapT.push_back(orthologPair);
-                    }
-                    if (geneScores.find(elems[0]) == geneScores.end()) {
-                        std::map<std::string, std::vector<double>> a;
-                        geneScores[elems[0]] = a;
-                    }
-                    if (geneScores[elems[0]].find(queryChr) == geneScores[elems[0]].end()) {
-                        std::vector<double> a;
-                        geneScores[elems[0]][queryChr] = a;
-                    }
-                    geneScores[elems[0]][queryChr].push_back(thisScore);
+                    const bool sameOrientation =
+                        reverseAlignment == (transcript.getStrand() == NEGATIVE);
+                    alignmentMatchsMapT.emplace_back(
+                        databaseChr, queryChr, databaseStart, databaseEnd, queryStart, queryEnd,
+                        thisScore, sameOrientation ? POSITIVE : NEGATIVE, geneName, geneName);
+                    geneScores[geneName][queryChr].push_back(thisScore);
                 }
             }
         }
     }
 
-    std::vector<int> teRemoveIndexes;
     if (expectCopy > 0) {
-        for (std::map<std::string, std::map<std::string, std::vector<double>>>::iterator it0 = geneScores.begin(); it0 != geneScores.end(); ++it0) {
-            std::string geneName = it0->first;
-            for (std::map<std::string, std::vector<double>>::iterator it1 = geneScores[geneName].begin(); it1 != geneScores[geneName].end(); ++it1) {
-                std::vector<double> scores = it1->second;
-                std::sort(scores.begin(), scores.end());
-                std::reverse(scores.begin(), scores.end());
-                if (scores.size() > expectCopy && scores[expectCopy] / scores[0] > secondarySimilarity) {
-                    blackGeneList.insert(geneName);
+        for (auto &geneScore : geneScores) {
+            for (auto &chromosomeScore : geneScore.second) {
+                std::vector<double> &scores = chromosomeScore.second;
+                if (scores.size() > static_cast<size_t>(expectCopy)) {
+                    const double bestScore = *std::max_element(scores.begin(), scores.end());
+                    std::nth_element(scores.begin(), scores.begin() + expectCopy, scores.end(),
+                                     std::greater<double>());
+                    if (scores[expectCopy] / bestScore > secondarySimilarity) {
+                        blackGeneList.insert(geneScore.first);
+                    }
                 }
             }
         }
     }
 
-    for (size_t i = 0; i < alignmentMatchsMapT.size(); ++i) {
-        std::string geneName = alignmentMatchsMapT[i].getReferenceGeneName();
-        if (blackGeneList.find(geneName) != blackGeneList.end()) {
-            teRemoveIndexes.push_back(i);
-        }
-    }
+    alignmentMatchsMapT.erase(
+        std::remove_if(alignmentMatchsMapT.begin(), alignmentMatchsMapT.end(),
+                       [&blackGeneList](const AlignmentMatch &match) {
+                           return blackGeneList.find(match.getReferenceGeneName()) != blackGeneList.end();
+                       }),
+        alignmentMatchsMapT.end());
 
-    for (int j = teRemoveIndexes.size() - 1; j >= 0; --j) {
-        alignmentMatchsMapT.erase(alignmentMatchsMapT.begin() + teRemoveIndexes[j]);
-    }
-
-    if (alignmentMatchsMapT.size() == 0) {
+    if (alignmentMatchsMapT.empty()) {
         std::cout << "there is no match anchor found in the input sam file" << std::endl;
         std::exit(1);
     }
@@ -297,24 +163,19 @@ void readSam(std::vector<AlignmentMatch> &alignmentMatchsMapT, std::ifstream &in
              int32_t &matchingScore, int32_t &mismatchingPenalty, int32_t &openGapPenalty1,
              int32_t &extendGapPenalty1, int &k, bool &H, int &w) {
 
+    using anchorwave::read_sam_detail::CdsCoordinateIndex;
+    using anchorwave::read_sam_detail::CigarSummary;
+    using anchorwave::read_sam_detail::GenomicInterval;
+    using anchorwave::read_sam_detail::SamFields;
+
     std::string line;
-    char delim = '\t';
-    std::vector<std::string> elems;
-
-    std::string databaseChr;
-    int32_t databaseStart;
-    int32_t databaseEnd;
-    std::string queryChr;
-    int32_t queryStart;
-    int32_t queryEnd;
-
-    std::map<std::string, std::string> lastChr;
-    std::map<std::string, int32_t> lastPosition;
-
-    std::map<std::string, std::map<std::string, std::vector<double>>> geneScores; //first key is gene name, second key is chr value is a vector of similarity
+    SamFields fields;
+    std::unordered_map<const Transcript *, CdsCoordinateIndex> coordinateIndexes;
+    std::unordered_map<std::string, std::pair<std::string, int32_t>> lastAlignment;
+    std::unordered_map<std::string, std::unordered_map<std::string, std::vector<double>>> geneScores;
 
     while (std::getline(infile, line)) { // no matter the transcript in on forward strand or reverse strand, it should do not matter
-        if (line.substr(0, 3) == "@PG") {
+        if (line.compare(0, 3, "@PG") == 0) {
             std::vector<std::string> elements;
             std::vector<std::string> elements2;
             char seperator = ' ';
@@ -350,188 +211,93 @@ void readSam(std::vector<AlignmentMatch> &alignmentMatchsMapT, std::ifstream &in
             }
         }
 
-        if (line.size()>1 && line[0] != '@') { //ignore the header
-            elems.clear();
-            split(line, delim, elems);
-            queryStart = stoi(elems[3]);
-            queryChr = elems[2];
-            if (queryChr.compare("*") != 0 && transcriptHashMap.find(elems[0]) != transcriptHashMap.end()) { // ignore those none mapping records
-                databaseChr = transcriptHashMap[elems[0]].getChromeSomeName();
+        if (line.size() > 1 && line[0] != '@') { //ignore the header
+            if (!anchorwave::read_sam_detail::parseSamFields(line, fields)) {
+                continue;
+            }
 
-                databaseStart = transcriptHashMap[elems[0]].getPStart();
-                databaseEnd = transcriptHashMap[elems[0]].getPEnd();
-                queryEnd = queryStart;
-                std::vector<std::string> cigarElems;
-                splitCIGAR(elems[5], cigarElems);
-                int headClipping = 0;
-                int tailClipping = 0;
-                int numberofMatch = 0;
-                for (size_t i = 0; i < cigarElems.size(); ++i) {
-                    std::string cVal = cigarElems[i];
-                    char cLetter = cVal[cVal.length() - 1];
-                    int cLen = stoi(cVal.substr(0, cVal.length() - 1));
-                    if (i == cigarElems.size() - 1 && (cLetter == 'H' || cLetter == 'S')) { // ignore the last soft/hard clipping
-                        tailClipping += cLen;
-                        continue;
-                    }
-                    switch (cLetter) {
-                        case 'H':
-                            headClipping += cLen;
-                            break;
-                        case 'S':
-                            headClipping += cLen;
-                            break;
-                        case 'M':
-                            queryEnd += cLen;
-                            numberofMatch += cLen;
-                            break;
-                        case '=':
-                            queryEnd += cLen;
-                            numberofMatch += cLen;
-                            break;
-                        case 'X':
-                            numberofMatch += cLen;
-                            queryEnd += cLen;
-                            break;
-                        case 'I':
-                            break;
-                        case 'D':
-                            queryEnd += cLen;
-                            break;
-                        case 'N':
-                            queryEnd += cLen;
-                            break;
-                        case 'P':
-                            break;
-                        default:
-                            std::cout << "current we could not deal with cigar letter " << cLetter << std::endl;
-                            break;
-                    }
+            std::map<std::string, Transcript>::iterator transcriptIt = transcriptHashMap.find(fields.queryName);
+            if (fields.referenceName != "*" && transcriptIt != transcriptHashMap.end()) { // ignore non-mapping records
+                Transcript &transcript = transcriptIt->second;
+                const std::string &geneName = fields.queryName;
+                const std::string &queryChr = fields.referenceName;
+                const std::string &databaseChr = transcript.getChromeSomeName();
+                const int32_t queryStart = fields.position;
+                const int samFlag = fields.flag;
+                // Preserve the legacy orientation test exactly. For the
+                // unpaired minimap2 records used here this is normally 0/16.
+                const bool reverseAlignment = samFlag % 32 != 0;
+
+                CigarSummary cigar;
+                if (!anchorwave::read_sam_detail::summarizeCigar(
+                        line, fields.cigarBegin, fields.cigarEnd, cigar)) {
+                    continue;
                 }
+                const int32_t queryEnd = queryStart + cigar.referenceSpan - 1;
 
-                --queryEnd;
-                int samFlag = stoi(elems[1]);
-
-                std::map<int32_t, int32_t> positionsMap;
-                size_t cdsSequenceLength = 0;
-                if (transcriptHashMap[elems[0]].getStrand() == POSITIVE) {
-                    int32_t cdsPosition = 0;
-                    int32_t chromosomePosition = transcriptHashMap[elems[0]].getPStart() - 1;
-                    for (size_t cdsIndex = 0; cdsIndex < transcriptHashMap[elems[0]].getCdsVector().size(); ++cdsIndex) {
-                        for (int32_t i = transcriptHashMap[elems[0]].getCdsVector()[cdsIndex].getStart(); i <= transcriptHashMap[elems[0]].getCdsVector()[cdsIndex].getEnd(); ++i) {
-                            cdsPosition++;
-                            chromosomePosition++;
-                            cdsSequenceLength++;
-                            positionsMap[cdsPosition] = chromosomePosition;
-                        }
-                        if (cdsIndex < transcriptHashMap[elems[0]].getCdsVector().size() - 1) { // for intron
-                            for (int32_t i = transcriptHashMap[elems[0]].getCdsVector()[cdsIndex].getEnd() + 1; i < transcriptHashMap[elems[0]].getCdsVector()[cdsIndex + 1].getStart(); ++i) {
-                                chromosomePosition++;
-                            }
-                        }
-                    }
-
-                    assert(chromosomePosition == transcriptHashMap[elems[0]].getPEnd());
-                } else {
-                    int32_t cdsPosition = 0;
-                    int32_t chromosomePosition = transcriptHashMap[elems[0]].getPEnd() + 1;
-                    for (int32_t cdsIndex = transcriptHashMap[elems[0]].getCdsVector().size() - 1; cdsIndex >= 0; --cdsIndex) {
-                        for (int32_t i = transcriptHashMap[elems[0]].getCdsVector()[cdsIndex].getEnd(); i >= transcriptHashMap[elems[0]].getCdsVector()[cdsIndex].getStart(); --i) {
-                            cdsPosition++;
-                            chromosomePosition--;
-                            cdsSequenceLength++;
-                            positionsMap[cdsPosition] = chromosomePosition;
-                        }
-                        if (cdsIndex > 0) { // for intron
-                            for (int32_t i = transcriptHashMap[elems[0]].getCdsVector()[cdsIndex].getStart() - 1; i > transcriptHashMap[elems[0]].getCdsVector()[cdsIndex - 1].getEnd(); --i) {
-                                chromosomePosition--;
-                            }
-                        }
-                    }
-
-                    assert(transcriptHashMap[elems[0]].getPStart() == chromosomePosition);
+                std::unordered_map<const Transcript *, CdsCoordinateIndex>::iterator coordinateIt =
+                    coordinateIndexes.find(&transcript);
+                if (coordinateIt == coordinateIndexes.end()) {
+                    coordinateIt = coordinateIndexes.emplace(
+                        &transcript, CdsCoordinateIndex::build(transcript)).first;
                 }
+                const CdsCoordinateIndex &coordinateIndex = coordinateIt->second;
+                const GenomicInterval databaseInterval =
+                    anchorwave::read_sam_detail::alignedTranscriptInterval(
+                        coordinateIndex, cigar.headClipping, cigar.tailClipping, reverseAlignment);
+                const int32_t databaseStart = databaseInterval.start;
+                const int32_t databaseEnd = databaseInterval.end;
+                assert(databaseStart < databaseEnd);
 
-                if (0 == samFlag % 32 && transcriptHashMap[elems[0]].getStrand() == POSITIVE) {
-                    databaseStart = positionsMap[headClipping + 1];
-                    databaseEnd = positionsMap[cdsSequenceLength - tailClipping];
-                    assert(databaseStart < databaseEnd);
-                } else if (0 == samFlag % 32 && transcriptHashMap[elems[0]].getStrand() == NEGATIVE) {
-                    databaseEnd = positionsMap[headClipping + 1];
-                    databaseStart = positionsMap[cdsSequenceLength - tailClipping];
-                    assert(databaseStart < databaseEnd);
-                } else if (0 != samFlag % 32 && transcriptHashMap[elems[0]].getStrand() == POSITIVE) {
-                    databaseEnd = positionsMap[cdsSequenceLength - headClipping];
-                    databaseStart = positionsMap[1 + tailClipping];
-                    assert(databaseStart < databaseEnd);
-                } else if (0 != samFlag % 32 && transcriptHashMap[elems[0]].getStrand() == NEGATIVE) {
-                    databaseStart = positionsMap[cdsSequenceLength - headClipping];
-                    databaseEnd = positionsMap[1 + tailClipping];
-                    assert(databaseStart < databaseEnd);
-                }
-
-                if (lastChr.find(elems[0]) != lastChr.end() && lastChr[elems[0]] == queryChr &&
-                    std::min((std::abs(lastPosition[elems[0]] - queryEnd)), std::abs(lastPosition[elems[0]] - queryStart)) < std::abs(transcriptHashMap[elems[0]].getPStart() - transcriptHashMap[elems[0]].getPEnd())) {
-                    blackGeneList.insert(elems[0]);
+                std::unordered_map<std::string, std::pair<std::string, int32_t>>::iterator lastIt =
+                    lastAlignment.find(geneName);
+                if (lastIt != lastAlignment.end() && lastIt->second.first == queryChr &&
+                    std::min(std::abs(lastIt->second.second - queryEnd),
+                             std::abs(lastIt->second.second - queryStart)) <
+                        std::abs(transcript.getPStart() - transcript.getPEnd())) {
+                    blackGeneList.insert(geneName);
                 } // remove those genes generated weired alignment
 
-                lastChr[elems[0]] = queryChr;
-                lastPosition[elems[0]] = queryEnd;
+                lastAlignment[geneName] = std::make_pair(queryChr, queryEnd);
 
-                //double thisScore = 1.0 - (tailClipping+headClipping)/(double)cdsSequenceLength;
-                double thisScore = (double) numberofMatch / (double) cdsSequenceLength;
+                const double thisScore = static_cast<double>(cigar.numberOfAlignedBases) /
+                                         static_cast<double>(coordinateIndex.cdsLength());
                 if (thisScore > minimumSimilarity) {
-                    if ((0 == samFlag % 32 && transcriptHashMap[elems[0]].getStrand() == POSITIVE) || (0 != samFlag % 32 && transcriptHashMap[elems[0]].getStrand() == NEGATIVE)) {
-                        AlignmentMatch orthologPair(databaseChr, queryChr, databaseStart, databaseEnd, queryStart, queryEnd, thisScore, POSITIVE, elems[0], elems[0]);
-                        alignmentMatchsMapT.push_back(orthologPair);
-                    } else {
-                        AlignmentMatch orthologPair(databaseChr, queryChr, databaseStart, databaseEnd, queryStart, queryEnd, thisScore, NEGATIVE, elems[0], elems[0]);
-                        alignmentMatchsMapT.push_back(orthologPair);
-                    }
-
-                    if (geneScores.find(elems[0]) == geneScores.end()) {
-                        std::map<std::string, std::vector<double>> a;
-                        geneScores[elems[0]] = a;
-                    }
-
-                    if (geneScores[elems[0]].find(queryChr) == geneScores[elems[0]].end()) {
-                        std::vector<double> a;
-                        geneScores[elems[0]][queryChr] = a;
-                    }
-                    geneScores[elems[0]][queryChr].push_back(thisScore);
+                    const bool sameOrientation =
+                        reverseAlignment == (transcript.getStrand() == NEGATIVE);
+                    alignmentMatchsMapT.emplace_back(
+                        databaseChr, queryChr, databaseStart, databaseEnd, queryStart, queryEnd,
+                        thisScore, sameOrientation ? POSITIVE : NEGATIVE, geneName, geneName);
+                    geneScores[geneName][queryChr].push_back(thisScore);
                 }
             }
         }
     }
 
-    std::vector<int> teRemoveIndexes;
     if (expectCopy > 0) {
-        for (std::map<std::string, std::map<std::string, std::vector<double>>>::iterator it0 = geneScores.begin(); it0 != geneScores.end(); ++it0) {  // remove those genes with too much copies
-            std::string geneName = it0->first;
-            for (std::map<std::string, std::vector<double>>::iterator it1 = geneScores[geneName].begin(); it1 != geneScores[geneName].end(); ++it1) {
-                std::vector<double> scores = it1->second;
-                std::sort(scores.begin(), scores.end());
-                std::reverse(scores.begin(), scores.end());
-                if (scores.size() > expectCopy && scores[expectCopy] / scores[0] > secondarySimilarity) {
-                    blackGeneList.insert(geneName);
-//                    std::cout << "removing " << geneName << " due to too much copies. " << it1->first << "\t" << scores.size() << "\t" << scores[0] << "\t" << scores[expectCopy] << std::endl;
+        for (auto &geneScore : geneScores) {
+            for (auto &chromosomeScore : geneScore.second) {
+                std::vector<double> &scores = chromosomeScore.second;
+                if (scores.size() > static_cast<size_t>(expectCopy)) {
+                    const double bestScore = *std::max_element(scores.begin(), scores.end());
+                    std::nth_element(scores.begin(), scores.begin() + expectCopy, scores.end(),
+                                     std::greater<double>());
+                    if (scores[expectCopy] / bestScore > secondarySimilarity) {
+                        blackGeneList.insert(geneScore.first);
+                    }
                 }
             }
         }
     }
 
-    for (size_t i = 0; i < alignmentMatchsMapT.size(); ++i) {
-        std::string geneName = alignmentMatchsMapT[i].getReferenceGeneName();
-        if (blackGeneList.find(geneName) != blackGeneList.end()) {
-            teRemoveIndexes.push_back(i);
-        }
-    }
+    alignmentMatchsMapT.erase(
+        std::remove_if(alignmentMatchsMapT.begin(), alignmentMatchsMapT.end(),
+                       [&blackGeneList](const AlignmentMatch &match) {
+                           return blackGeneList.find(match.getReferenceGeneName()) != blackGeneList.end();
+                       }),
+        alignmentMatchsMapT.end());
 
-    for (int j = teRemoveIndexes.size() - 1; j >= 0; --j) {
-        alignmentMatchsMapT.erase(alignmentMatchsMapT.begin() + teRemoveIndexes[j]);
-    }
-
-    if (alignmentMatchsMapT.size() == 0) {
+    if (alignmentMatchsMapT.empty()) {
         std::cout << "there is no match anchor found in the input sam file" << std::endl;
         std::exit(1);
     }

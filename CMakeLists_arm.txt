@@ -69,6 +69,7 @@ add_executable(anchorwave
 
         src/service/TransferGffWithNucmerResult.cpp
         src/service/TransferGffWithNucmerResult.h
+        src/service/ReadSamUtils.h
 
         src/util/myutil.cpp
         src/util/myutil.h
