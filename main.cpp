@@ -15,6 +15,7 @@
  * =====================================================================================
  */
 #include <stdlib.h>
+#include "src/cpu_arch.h"
 #include "src/controlLayer.h"
 #include "./googletest/googletest/include/gtest/gtest.h"
 
@@ -34,13 +35,15 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-#ifdef __AVX512BW__
+#ifdef __SSE2NEON__
+    std::cerr << "ARM NEON is enabled through SSE2NEON" << std::endl;
+#elif defined(__AVX512BW__)
     std::cerr << "AVX512 is enabled" << std::endl;
-#elif __AVX2__
+#elif defined(__AVX2__)
     std::cerr << "AVX2 is enabled" << std::endl;
-#elif __SSE4_1__
+#elif defined(__SSE4_1__)
     std::cerr << "SSE4.1 is enabled" << std::endl;
-#elif __SSE2__
+#elif defined(__SSE2__)
     std::cerr << "SSE2 is enabled" << std::endl;
 #else
     std::cerr << "The code has not been tested on you hardware platform." << std::endl;

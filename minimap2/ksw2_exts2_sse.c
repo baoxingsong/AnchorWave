@@ -6,7 +6,7 @@
 #ifdef __SSE2__
 #ifdef USE_SIMDE
 #include <simde/x86/sse2.h>
-#else
+#elif !defined(__SSE2NEON__)
 #include <emmintrin.h>
 #endif
 #ifdef KSW_SSE2_ONLY
@@ -16,7 +16,7 @@
 #ifdef __SSE4_1__
 #ifdef USE_SIMDE
 #include <simde/x86/sse4.1.h>
-#else
+#elif !defined(__SSE2NEON__)
 #include <smmintrin.h>
 #endif
 #endif

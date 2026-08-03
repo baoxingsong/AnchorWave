@@ -5,7 +5,7 @@
 
 #ifdef USE_SIMDE
 #include <simde/x86/sse2.h>
-#else
+#elif !defined(__SSE2NEON__)
 #include <emmintrin.h>
 #endif
 

@@ -1,58 +1,19 @@
 # Installation
-AnchorWave uses the SIMD instructions to speed up the dynamic programming algorithm. Specific functions have been implemented for SSE2, SSE4.1, AVX2 and AVX512 instruction sets.  
-Empirically, the time cost: SSE2 > SSE4.1 > AVX2 > AVX512.  
-The conda version compile all of them and pick the fastest version to run.  
-To check what CPU instructions are supported by your machine with Linux system, you could run this command:
-```cat /proc/cpuinfo | grep "flags" | uniq```  
-By default, we assume the machine supports SSE4.1.  
 
-## If you are using machine with AVX512 and would like to take the advantage of that
-Clone the repository, and replace the default CMakeLists.txt with the avx512 one.
+AnchorWave uses SIMD instructions to speed up the dynamic programming algorithm.
+The single CMake configuration detects native x86 CPUs automatically and enables
+their supported instruction set (SSE2, SSE4.1, AVX2, or AVX-512). ARM builds are
+detected from compiler architecture macros and use NEON through SSE2NEON. During
+cross-compilation, the CMake toolchain remains responsible for target CPU flags.
+
+## Build
+
 ```
 git clone https://github.com/baoxingsong/anchorwave.git
 cd anchorwave
-mv CMakeLists_avx512.txt CMakeLists.txt
 cmake ./
 make
 ```
-
-
-## If you are using machine with AVX2 and would like to take the advantage of AVX2
-Clone the repository, and replace the default CMakeLists.txt with the avx2 one.
-```
-git clone https://github.com/baoxingsong/anchorwave.git
-cd anchorwave
-mv CMakeLists_avx2.txt CMakeLists.txt
-cmake ./
-make
-```
-
-
-## If you are using machine with ARM CPU and NEON instructions
-
-Clone the repository, and replace the default CMakeLists.txt with the ARM one.
-```
-git clone https://github.com/baoxingsong/anchorwave.git
-cd anchorwave
-mv CMakeLists_arm.txt CMakeLists.txt
-cmake ./
-make
-```
-
-## If you are using old machine with SSE2 but not SSE4.1
-
-Clone the repository, and replace the default CMakeLists.txt with the sse2 one.
-```
-git clone https://github.com/baoxingsong/anchorwave.git
-cd anchorwave
-mv CMakeLists_sse2.txt CMakeLists.txt
-cmake ./
-make
-```
-
-
-## If you are using very old CPU or CPU with other architecture (i.e. ARM)
-AnchorWave was not tested on that kind of platforms. High likely would not work properly.
 
 # Time cost comparison using different installation ways
 ## Hardware

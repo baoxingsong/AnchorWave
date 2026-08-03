@@ -1,6 +1,7 @@
 #ifndef KSW2_H_
 #define KSW2_H_
 
+#include "../src/cpu_arch.h"
 #include <stdint.h>
 
 #include <string.h>
@@ -196,5 +197,4 @@ static inline int ksw_apply_zdrop(ksw_extz_t *ez, int is_rot, int32_t H, int a, 
     return 0;
 }
 #endif
-
 

@@ -1,23 +1,42 @@
-cmake_minimum_required(VERSION 3.0)
-project(anchorwave)
+cmake_minimum_required(VERSION 3.10)
+project(anchorwave LANGUAGES C CXX)
 
-#include(CheckCXXCompilerFlag)
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS ON)
 set(CMAKE_CXX_STANDARD 14)
-#
-#if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-#    set(MACOSX TRUE)
-##else()
-##    set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++")
-#endif()
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS ON)
 
-find_package(ZLIB)
+find_package(Threads REQUIRED)
+find_package(ZLIB REQUIRED)
 
-set(CMAKE_CXX_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -msse4.1 -msse4.2 -I ./ -std=gnu++14 -pthread -lrt") # the -mavx* is for GNU compiler and xCORE* are for intel compiler
-set(CMAKE_C_FLAGS " -lm -lz -Wall -g3 -O3 -funroll-all-loops -msse4.1 -msse4.2 -I ./ -pthread -lrt")
+# The source code selects the x86 intrinsic headers or the SSE2NEON adapter from
+# compiler-provided architecture macros.  For a native x86 build, let the
+# compiler enable exactly the SIMD extensions supported by the build CPU.  A
+# cross build deliberately keeps the toolchain's target settings unchanged.
+set(ANCHORWAVE_NATIVE_SIMD OFF)
+if(NOT CMAKE_CROSSCOMPILING AND
+   CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64|i[3-6]86)$" AND
+   CMAKE_C_COMPILER_ID MATCHES "GNU|Clang" AND
+   CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    set(ANCHORWAVE_NATIVE_SIMD ON)
+    message(STATUS "AnchorWave CPU architecture: ${CMAKE_SYSTEM_PROCESSOR} (native SIMD auto-detection)")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64|arm|ARM)")
+    message(STATUS "AnchorWave CPU architecture: ${CMAKE_SYSTEM_PROCESSOR} (NEON via SSE2NEON)")
+else()
+    message(STATUS "AnchorWave CPU architecture: ${CMAKE_SYSTEM_PROCESSOR} (toolchain defaults)")
+endif()
 
 
 #for google unit test
 add_subdirectory(./googletest/googletest)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    # This bundled GoogleTest enables -Werror and some newer compilers emit a
+    # false-positive warning for its stack-direction probe.
+    target_compile_options(gtest PRIVATE -Wno-error=maybe-uninitialized)
+    target_compile_options(gtest_main PRIVATE -Wno-error=maybe-uninitialized)
+endif()
 include_directories(googletest/googletest/include googletest/googletest)
 
 
@@ -197,6 +216,18 @@ add_executable(anchorwave
         minimap2/sdust.h
         )
 
-target_link_libraries(anchorwave gtest gtest_main ZLIB::ZLIB)
+target_include_directories(anchorwave PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(anchorwave PRIVATE
+        -Wall
+        -O3
+        -funroll-loops
+        $<$<BOOL:${ANCHORWAVE_NATIVE_SIMD}>:-march=native>)
+
+target_link_libraries(anchorwave PRIVATE gtest gtest_main ZLIB::ZLIB Threads::Threads ${CMAKE_DL_LIBS})
+if(UNIX AND NOT APPLE)
+    target_link_libraries(anchorwave PRIVATE rt m)
+elseif(UNIX)
+    target_link_libraries(anchorwave PRIVATE m)
+endif()
 
 install(TARGETS anchorwave DESTINATION bin)

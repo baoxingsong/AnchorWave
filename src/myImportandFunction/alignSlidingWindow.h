@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "../cpu_arch.h"
+
 #ifdef __SSE2NEON__
 #include "../../sse2neon.h"
 #else
