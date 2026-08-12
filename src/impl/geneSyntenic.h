@@ -55,18 +55,19 @@ void longestPathQuotaGeneNonStrandSubAccelerate(std::vector<AlignmentMatch> &pai
                                                 std::vector<double> &scoreArray_positive, std::vector<double> &scoreArray_negative,
                                                 std::vector<int64_t> &prev_positive, std::vector<int64_t> &prev_negative);
 
-void longestPathQuotav2SubAccelerate(std::vector<AlignmentMatch> &pairedSimilarFragments,
-                                    std::map<std::string, std::map<int64_t, AlignmentMatch>> &refIndexMap /*chr, index, AlignmentMatch*/, std::map<std::string, std::map<int64_t, AlignmentMatch>> &queryIndexMap,
+void longestPathQuotav2SubAccelerate(const std::vector<AlignmentMatch> &pairedSimilarFragments,
+                                    const std::map<std::string, std::map<int64_t, AlignmentMatch>> &refIndexMap /*chr, index, AlignmentMatch*/, const std::map<std::string, std::map<int64_t, AlignmentMatch>> &queryIndexMap,
                                     double &INDEL_SCORE, double &GAP_OPEN_PENALTY, const int &MAX_DIST_BETWEEN_MATCHES,
                                     int &refMaximumTimes, int &queryMaximumTimes,
-                                    double &calculateIndelDistance, std::map<std::string, int64_t> &refTimes, std::map<std::string, std::map<int64_t, int64_t>> &queryTimes,
+                                    double &calculateIndelDistance, const std::map<std::string, int64_t> &refTimes, const std::map<std::string, std::map<int64_t, int64_t>> &queryTimes,
                                     std::vector<double> &scoreArray, std::vector<int64_t> &prev);
 
 void longestPathQuotav2(std::vector<AlignmentMatch> pairedSimilarFragments, std::vector<std::vector<AlignmentMatch>> &sortedOrthologPairChains,
                         std::map<std::string, std::map<int64_t, AlignmentMatch>> &refIndexMap, std::map<std::string, std::map<int64_t, AlignmentMatch>> &queryIndexMap,
                         double &INDEL_SCORE, double &GAP_OPEN_PENALTY,
                         double &MIN_ALIGNMENT_SCORE, const int &MAX_DIST_BETWEEN_MATCHES, int &refMaximumTimes, int &queryMaximumTimes,
-                        double &calculateIndelDistance, bool withNovelAnchors);
+                        double &calculateIndelDistance, bool withNovelAnchors,
+                        int maxThreads = 1);
 
 void longestPathQuotaGene(std::vector<AlignmentMatch> pairedSimilarFragments, std::vector<std::vector<AlignmentMatch>> &sortedOrthologPairChains,
                           std::map<std::string, std::map<int, std::string>> &refIndexMap /*chr, index, refGeneName*/, std::map<std::string, std::map<int, std::string>> &queryIndexMap,

@@ -5,6 +5,16 @@
 /cmake_install.cmake
 /CMakeCache.txt
 /cmake-build-debug/
+/build*/
+/optimization-runs/
+/testMaize/
+/benchmark-data/
+/alignment_trace.tsv
+/AGENTS.md
+/CODEX_HANDOFF.md
+/continue-codex.sh
+__pycache__/
+*.py[cod]
 /CMakeFiles/
 /googletest/googletest/CMakeFiles/
 /googletest/googletest/cmake_install.cmake

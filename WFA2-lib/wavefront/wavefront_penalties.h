@@ -32,9 +32,9 @@
 #ifndef WAVEFRONT_WAVEFRONT_PENALTIES_H_
 #define WAVEFRONT_WAVEFRONT_PENALTIES_H_
 
-#include "../alignment/linear_penalties.h"
-#include "../alignment/affine_penalties.h"
-#include "../alignment/affine2p_penalties.h"
+#include "alignment/linear_penalties.h"
+#include "alignment/affine_penalties.h"
+#include "alignment/affine2p_penalties.h"
 
 /*
  * Distance metrics
@@ -51,13 +51,20 @@ typedef enum {
  * Wavefront Penalties
  */
 typedef struct {
-  distance_metric_t distance_metric;  // Alignment metric/distance used
-  int match;             // (M <= 0) (Internal variable change to M=0 for WFA)
+  // Alignment metric/distance used
+  distance_metric_t distance_metric;
+  // Penalty values
+  int match;             // (M <= 0)
   int mismatch;          // (X > 0)
   int gap_opening1;      // (O1 >= 0)
   int gap_extension1;    // (E1 > 0)
   int gap_opening2;      // (O2 >= 0)
   int gap_extension2;    // (E2 > 0)
+  // Internals
+  linear_penalties_t linear_penalties;     // Original gap-linear penalties
+  affine_penalties_t affine_penalties;     // Original gap-affine penalties
+  affine2p_penalties_t affine2p_penalties; // Original gap-affine2p penalties
+  int internal_gap_e;                      // Original gap-extension value (used for z-drop)
 } wavefront_penalties_t;
 
 /*
@@ -81,25 +88,6 @@ void wavefront_penalties_set_affine(
 void wavefront_penalties_set_affine2p(
     wavefront_penalties_t* const wf_penalties,
     affine2p_penalties_t* const affine2p_penalties);
-
-/*
- * Score conversion
- */
-int wavefront_penalties_get_score_indel(
-    wavefront_penalties_t* const wf_penalties,
-    const int score);
-int wavefront_penalties_get_score_edit(
-    wavefront_penalties_t* const wf_penalties,
-    const int score);
-int wavefront_penalties_get_score_linear(
-    wavefront_penalties_t* const wf_penalties,
-    const int score);
-int wavefront_penalties_get_score_affine(
-    wavefront_penalties_t* const wf_penalties,
-    const int score);
-int wavefront_penalties_get_score_affine2p(
-    wavefront_penalties_t* const wf_penalties,
-    const int score);
 
 /*
  * Display

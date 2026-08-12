@@ -3,6 +3,10 @@
 //
 
 #include "geneSyntenic.h"
+#include "../service/AnchorTaskExecutor.h"
+
+#include <chrono>
+#include <stdexcept>
 
 /**
  * this function try to keep those genes in the syntenic region using a longest path algorithm
@@ -769,15 +773,18 @@ void longestPath(std::vector<AlignmentMatch> &pairedSimilarFragments, std::vecto
 // INDEL_SCORE
 // GAP_OPEN_PENALTY
 
-void longestPathQuotav2SubAccelerate(std::vector<AlignmentMatch> &pairedSimilarFragments,
-                                    std::map<std::string, std::map<int64_t, AlignmentMatch>> &refIndexMap /*chr, index, AlignmentMatch*/, std::map<std::string, std::map<int64_t, AlignmentMatch>> &queryIndexMap,
+void longestPathQuotav2SubAccelerate(const std::vector<AlignmentMatch> &pairedSimilarFragments,
+                                    const std::map<std::string, std::map<int64_t, AlignmentMatch>> &refIndexMap /*chr, index, AlignmentMatch*/, const std::map<std::string, std::map<int64_t, AlignmentMatch>> &queryIndexMap,
                                     double &INDEL_SCORE, double &GAP_OPEN_PENALTY, const int &MAX_DIST_BETWEEN_MATCHES,
                                     int &refMaximumTimes, int &queryMaximumTimes,
-                                    double &calculateIndelDistance, std::map<std::string, int64_t> &refTimes, std::map<std::string, std::map<int64_t, int64_t>> &queryTimes,
+                                    double &calculateIndelDistance, const std::map<std::string, int64_t> &refTimes, const std::map<std::string, std::map<int64_t, int64_t>> &queryTimes,
                                     std::vector<double> &scoreArray, std::vector<int64_t> &prev) {
     int64_t n;
     n = int(pairedSimilarFragments.size());
-    assert(n == int(prev.size()));
+    if (scoreArray.size() != pairedSimilarFragments.size() ||
+        prev.size() != pairedSimilarFragments.size()) {
+        throw std::logic_error("quota DP vector size mismatch");
+    }
     for (int idx = 1; idx < n; ++idx) {
         double thisIndexScore = scoreArray[idx];
         for (int jdx = idx - 1; jdx >= 0; --jdx) {// checking all previous nodes
@@ -819,10 +826,14 @@ void longestPathQuotav2SubAccelerate(std::vector<AlignmentMatch> &pairedSimilarF
                     //                                largerIdi = temp;
                     //                            }
                     //                            for( int idi = smallerIdi+1; idi<largerIdi; ++idi){
+                    const auto &refChromosome =
+                            refIndexMap.at(pairedSimilarFragments[idx].getRefChr());
                     for (int idi = pairedSimilarFragments[jdx].getRefId() + 1; idi < pairedSimilarFragments[idx].getRefId(); ++idi) {
-                        if (refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getReferenceGeneName().find("localAlignment") == std::string::npos) {
+                        const AlignmentMatch &indexedMatch = refChromosome.at(idi);
+                        if (indexedMatch.getReferenceGeneName().find("localAlignment") == std::string::npos) {
                             ++ref_del;
-                            if (refTimes.find(refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getReferenceGeneName()) != refTimes.end() && refTimes[refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getReferenceGeneName()] >= refMaximumTimes) {
+                            const auto used = refTimes.find(indexedMatch.getReferenceGeneName());
+                            if (used != refTimes.end() && used->second >= refMaximumTimes) {
                                 ref_del += MAX_DIST_BETWEEN_MATCHES + MAX_DIST_BETWEEN_MATCHES;
                                 break;
                             }
@@ -838,17 +849,24 @@ void longestPathQuotav2SubAccelerate(std::vector<AlignmentMatch> &pairedSimilarF
                     //                            }
                     double query_del = 0;
                     //                            for( int idi = smallerIdi+1; idi<largerIdi; ++idi){
+                    const auto &queryChromosome =
+                            queryIndexMap.at(pairedSimilarFragments[idx].getQueryChr());
                     for (int idi = pairedSimilarFragments[jdx].getQueryId() + 1; idi < pairedSimilarFragments[idx].getQueryId(); ++idi) {
-                        if (queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryGeneName().find("localAlignment") == std::string::npos) {
+                        const AlignmentMatch &indexedMatch = queryChromosome.at(idi);
+                        if (indexedMatch.getQueryGeneName().find("localAlignment") == std::string::npos) {
                             ++query_del;
                             //                                    std::cout << "line 410: " << pairedSimilarFragments[idx].getQueryChr() << "\t" << queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getReferenceGeneName() << " pairedSimilarFragments[idx].getQueryId():" << pairedSimilarFragments[idx].getQueryId() << " pairedSimilarFragments[jdx].getQueryId():" << pairedSimilarFragments[jdx].getQueryId() <<" idi:" << idi << " queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId():" << queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId() << std::endl;
-                            assert(queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId() == idi);
-                            if (queryTimes.find(pairedSimilarFragments[idx].getQueryChr()) != queryTimes.end()
-                                && queryTimes[pairedSimilarFragments[idx].getQueryChr()].find(idi) != queryTimes[pairedSimilarFragments[idx].getQueryChr()].end()
-                                && queryTimes[pairedSimilarFragments[idx].getQueryChr()][idi] >= queryMaximumTimes) {
+                            assert(indexedMatch.getQueryId() == idi);
+                            const auto chromosomeUsed =
+                                    queryTimes.find(pairedSimilarFragments[idx].getQueryChr());
+                            if (chromosomeUsed != queryTimes.end()) {
+                                const auto positionUsed = chromosomeUsed->second.find(idi);
+                                if (positionUsed != chromosomeUsed->second.end() &&
+                                    positionUsed->second >= queryMaximumTimes) {
                                 query_del += MAX_DIST_BETWEEN_MATCHES + MAX_DIST_BETWEEN_MATCHES;
                                 break;
                                 }
+                            }
                         }
                     }
                     if (std::abs(ref_del) > MAX_DIST_BETWEEN_MATCHES || std::abs(query_del) > MAX_DIST_BETWEEN_MATCHES) {
@@ -919,10 +937,14 @@ void longestPathQuotav2SubAccelerate(std::vector<AlignmentMatch> &pairedSimilarF
                         //                                largerIdi = temp;
                         //                            }
                         //                            for( int idi = smallerIdi+1; idi<largerIdi; ++idi){
+                        const auto &refChromosome =
+                                refIndexMap.at(pairedSimilarFragments[idx].getRefChr());
                         for (int idi = pairedSimilarFragments[jdx].getRefId() + 1; idi < pairedSimilarFragments[idx].getRefId(); ++idi) {
-                            if (refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getReferenceGeneName().find("localAlignment") == std::string::npos) {
+                            const AlignmentMatch &indexedMatch = refChromosome.at(idi);
+                            if (indexedMatch.getReferenceGeneName().find("localAlignment") == std::string::npos) {
                                 ++ref_del;
-                                if (refTimes.find(refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getReferenceGeneName()) != refTimes.end() && refTimes[refIndexMap[pairedSimilarFragments[idx].getRefChr()][idi].getReferenceGeneName()] >= refMaximumTimes) {
+                                const auto used = refTimes.find(indexedMatch.getReferenceGeneName());
+                                if (used != refTimes.end() && used->second >= refMaximumTimes) {
                                     ref_del += MAX_DIST_BETWEEN_MATCHES + MAX_DIST_BETWEEN_MATCHES;
                                     break;
                                 }
@@ -937,18 +959,25 @@ void longestPathQuotav2SubAccelerate(std::vector<AlignmentMatch> &pairedSimilarF
                         //                                largerIdi = temp;
                         //                            }
                         double query_del = 0;
+                        const auto &queryChromosome =
+                                queryIndexMap.at(pairedSimilarFragments[idx].getQueryChr());
                         for (int idi = pairedSimilarFragments[idx].getQueryId() + 1; idi < pairedSimilarFragments[jdx].getQueryId(); ++idi) {
                             //                            for( int idi = smallerIdi+1; idi<largerIdi; ++idi){
-                            if (queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryGeneName().find("localAlignment") == std::string::npos) {
+                            const AlignmentMatch &indexedMatch = queryChromosome.at(idi);
+                            if (indexedMatch.getQueryGeneName().find("localAlignment") == std::string::npos) {
                                 ++query_del;
                                 //                                    std::cout << pairedSimilarFragments[idx].getQueryChr() << "\t" << queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getReferenceGeneName() << " pairedSimilarFragments[idx].getQueryId():" << pairedSimilarFragments[idx].getQueryId() << " pairedSimilarFragments[jdx].getQueryId():" << pairedSimilarFragments[jdx].getQueryId() <<" idi:" << idi << " queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId():" << queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId() << std::endl;
-                                assert(queryIndexMap[pairedSimilarFragments[idx].getQueryChr()][idi].getQueryId() == idi);
-                                if (queryTimes.find(pairedSimilarFragments[idx].getQueryChr()) != queryTimes.end()
-                                    && queryTimes[pairedSimilarFragments[idx].getQueryChr()].find(idi) != queryTimes[pairedSimilarFragments[idx].getQueryChr()].end()
-                                    && queryTimes[pairedSimilarFragments[idx].getQueryChr()][idi] >= queryMaximumTimes) {
+                                assert(indexedMatch.getQueryId() == idi);
+                                const auto chromosomeUsed =
+                                        queryTimes.find(pairedSimilarFragments[idx].getQueryChr());
+                                if (chromosomeUsed != queryTimes.end()) {
+                                    const auto positionUsed = chromosomeUsed->second.find(idi);
+                                    if (positionUsed != chromosomeUsed->second.end() &&
+                                        positionUsed->second >= queryMaximumTimes) {
                                     query_del += MAX_DIST_BETWEEN_MATCHES + MAX_DIST_BETWEEN_MATCHES;
                                     break;
                                     }
+                                }
                             }
                         }
                         if (std::abs(ref_del) > MAX_DIST_BETWEEN_MATCHES || std::abs(query_del) > MAX_DIST_BETWEEN_MATCHES) {
@@ -990,7 +1019,8 @@ void longestPathQuotav2(std::vector<AlignmentMatch> pairedSimilarFragments, std:
                         std::map<std::string, std::map<int64_t, AlignmentMatch>> &refIndexMap /*chr, index, AlignmentMatch*/, std::map<std::string, std::map<int64_t, AlignmentMatch>> &queryIndexMap,
                         double &INDEL_SCORE, double &GAP_OPEN_PENALTY,
                         double &MIN_ALIGNMENT_SCORE, const int &MAX_DIST_BETWEEN_MATCHES, int &refMaximumTimes, int &queryMaximumTimes,
-                        double &calculateIndelDistance, bool withNovelAnchors) {
+                        double &calculateIndelDistance, bool withNovelAnchors,
+                        int maxThreads) {
     sortedOrthologPairChains.clear();
     std::map<std::string, int64_t> refTimes;
     std::map<std::string, std::map<int64_t, int64_t>> queryTimes;  // key is the id set above
@@ -1002,9 +1032,16 @@ void longestPathQuotav2(std::vector<AlignmentMatch> pairedSimilarFragments, std:
     std::set<std::string> untouchedRefChrs;
     std::set<std::string> untouchedQeuryChrs;
     n = pairedSimilarFragments.size();
+    if (n == 0) {
+        return;
+    }
 //        std::cout << "longest path n:" << n << std::endl;
-    double scoreArray[n]; // arrays of scores
-    int prev[n];  // index of previous node in longest path
+    std::vector<double> scoreArray(static_cast<std::size_t>(n));
+    std::vector<int64_t> prev(static_cast<std::size_t>(n));
+
+    anchorwave::AnchorTaskExecutor quotaExecutor(std::max(1, maxThreads));
+    std::size_t quotaSubproblemCount = 0;
+    const auto quotaStageStart = std::chrono::steady_clock::now();
 
     for (int idx = 0; idx < n; ++idx) {
         scoreArray[idx] = pairedSimilarFragments[idx].getScore();
@@ -1015,6 +1052,9 @@ void longestPathQuotav2(std::vector<AlignmentMatch> pairedSimilarFragments, std:
     }
 
     do {
+        if (pairedSimilarFragments.empty()) {
+            break;
+        }
         done = true;
         n = pairedSimilarFragments.size();
 //        std::cout << "line 322" << std::endl;
@@ -1038,12 +1078,6 @@ void longestPathQuotav2(std::vector<AlignmentMatch> pairedSimilarFragments, std:
             groupedMapAlignmentMatchInner[key].push_back(match);
         }
 
-        int64_t count_number;
-        count_number = 0;
-
-        int64_t total_chr_pair;
-        total_chr_pair = 0;
-
         std::vector<std::pair<std::string, std::string>> key_vector;
         for (const auto &subAlignmentMatchT : groupedMapAlignmentMatchInner) {
             key_vector.push_back(subAlignmentMatchT.first);
@@ -1058,46 +1092,78 @@ void longestPathQuotav2(std::vector<AlignmentMatch> pairedSimilarFragments, std:
                       return a.second < b.second;
                   });
 
+        struct QuotaSubproblem {
+            const std::vector<AlignmentMatch> *matches = nullptr;
+            int64_t globalOffset = 0;
+            std::vector<double> scores;
+            std::vector<int64_t> previous;
+        };
+        std::vector<QuotaSubproblem> subproblems;
+        subproblems.reserve(key_vector.size());
+
+        int64_t globalOffset = 0;
         for (const auto &key_chr_pair : key_vector) {
-
-            std::vector<AlignmentMatch>& alignmentMatchsMapTSub = groupedMapAlignmentMatchInner[key_chr_pair];
-
-            int64_t count_chr_pair_number;
-            count_chr_pair_number = alignmentMatchsMapTSub.size();
-
-            assert((alignmentMatchsMapTSub[0].getRefChr() == alignmentMatchsMapTSub[alignmentMatchsMapTSub.size()-1].getRefChr()) && (alignmentMatchsMapTSub[0].getQueryChr() == alignmentMatchsMapTSub[alignmentMatchsMapTSub.size()-1].getQueryChr()));
-//                std::cout << "line2063" << "\t" << count_chr_pair_number << std::endl;alignmentMatchsMapTSub[0].getRefChr()
-            if ( untouchedRefChrs.find(alignmentMatchsMapTSub[0].getRefChr() ) != untouchedRefChrs.end() ||
-                 untouchedQeuryChrs.find(alignmentMatchsMapTSub[0].getQueryChr() ) != untouchedQeuryChrs.end() ) {
-                std::vector<double> scoreArray_sub(count_chr_pair_number);
-                std::vector<int64_t> prev_sub(count_chr_pair_number);
-                for (int i = 0; i < count_chr_pair_number; ++i) {
-                    scoreArray_sub[i] = alignmentMatchsMapTSub[i].getScore();
-                    prev_sub[i] = -1;
+            const auto &matches = groupedMapAlignmentMatchInner.at(key_chr_pair);
+            assert(!matches.empty());
+            assert(matches.front().getRefChr() == matches.back().getRefChr() &&
+                   matches.front().getQueryChr() == matches.back().getQueryChr());
+            if (untouchedRefChrs.find(matches.front().getRefChr()) != untouchedRefChrs.end() ||
+                untouchedQeuryChrs.find(matches.front().getQueryChr()) != untouchedQeuryChrs.end()) {
+                QuotaSubproblem work;
+                work.matches = &matches;
+                work.globalOffset = globalOffset;
+                work.scores.reserve(matches.size());
+                for (const AlignmentMatch &match : matches) {
+                    work.scores.push_back(match.getScore());
                 }
-                longestPathQuotav2SubAccelerate(alignmentMatchsMapTSub, refIndexMap /*chr, index, AlignmentMatch*/, queryIndexMap,
-                                                    INDEL_SCORE, GAP_OPEN_PENALTY, MAX_DIST_BETWEEN_MATCHES,
-                                                    refMaximumTimes, queryMaximumTimes,
-                                                    calculateIndelDistance, refTimes, queryTimes,
-                                                    scoreArray_sub, prev_sub);
-                for (int i = 0; i < count_chr_pair_number; ++i) {
-                    scoreArray[count_number] = scoreArray_sub[i];
-
-                    if (prev_sub[i] == -1){
-                        prev[count_number] = prev_sub[i];
-                    } else{
-                        prev[count_number] = prev_sub[i] + total_chr_pair;
-                    }
-
-                    count_number += 1;
-                }
-            } else{
-                count_number += count_chr_pair_number;
+                work.previous.assign(matches.size(), -1);
+                subproblems.push_back(std::move(work));
             }
-            total_chr_pair += count_chr_pair_number;
+            globalOffset += static_cast<int64_t>(matches.size());
+        }
+        if (globalOffset != n) {
+            throw std::logic_error("quota DP chromosome offsets do not cover all anchors");
         }
 
-        assert(count_number == n);
+        anchorwave::AnchorTaskGroup quotaGroup;
+        for (std::size_t workIndex = 0; workIndex < subproblems.size(); ++workIndex) {
+            const uint64_t estimatedCost = anchorwave::anchorTaskEstimatedCost(
+                    subproblems[workIndex].matches->size());
+            quotaExecutor.submit(
+                    quotaGroup, estimatedCost,
+                    [&, workIndex]() {
+                        QuotaSubproblem &work = subproblems[workIndex];
+                        longestPathQuotav2SubAccelerate(
+                                *work.matches, refIndexMap, queryIndexMap,
+                                INDEL_SCORE, GAP_OPEN_PENALTY,
+                                MAX_DIST_BETWEEN_MATCHES,
+                                refMaximumTimes, queryMaximumTimes,
+                                calculateIndelDistance, refTimes, queryTimes,
+                                work.scores, work.previous);
+                    });
+        }
+        quotaSubproblemCount += subproblems.size();
+        quotaExecutor.waitForGroup(quotaGroup);
+
+        for (const QuotaSubproblem &work : subproblems) {
+            for (std::size_t localIndex = 0;
+                 localIndex < work.scores.size(); ++localIndex) {
+                const int64_t outputIndex =
+                        work.globalOffset + static_cast<int64_t>(localIndex);
+                if (outputIndex < 0 || outputIndex >= n) {
+                    throw std::logic_error("quota DP output index is out of range");
+                }
+                if (work.previous[localIndex] >=
+                    static_cast<int64_t>(work.previous.size())) {
+                    throw std::logic_error("quota DP predecessor is out of range");
+                }
+                scoreArray[outputIndex] = work.scores[localIndex];
+                prev[outputIndex] = work.previous[localIndex] < 0
+                        ? work.previous[localIndex]
+                        : work.previous[localIndex] + work.globalOffset;
+            }
+        }
+
         untouchedRefChrs.clear();
         untouchedQeuryChrs.clear();
 //        std::cout << "line 645" << std::endl;
@@ -1298,6 +1364,10 @@ void longestPathQuotav2(std::vector<AlignmentMatch> pairedSimilarFragments, std:
             }
 
             pairedSimilarFragments.resize(j);
+            if (pairedSimilarFragments.empty()) {
+                done = true;
+                break;
+            }
             /*for ( i = 0; i < pairedSimilarFragments.size(); i++) {
                 if( previousCurrentMap.find(prev[i]) != previousCurrentMap.end() ){
                     prev[i] = previousCurrentMap[prev[i]];
@@ -1312,6 +1382,14 @@ void longestPathQuotav2(std::vector<AlignmentMatch> pairedSimilarFragments, std:
         }
 //        std::cout << "line 721" << std::endl;
     } while (!done);
+    std::cerr << "AnchorWave quota scheduler: worker_count="
+              << quotaExecutor.workerCount()
+              << ", peak_active_tasks=" << quotaExecutor.peakActiveTasks()
+              << ", subproblems=" << quotaSubproblemCount
+              << ", wall_seconds=" << std::chrono::duration<double>(
+                         std::chrono::steady_clock::now() -
+                         quotaStageStart).count()
+              << std::endl;
 //    std::cout << "line 724" << std::endl;
 }
 
@@ -1584,6 +1662,10 @@ void longestPathQuotaGene(std::vector<AlignmentMatch> pairedSimilarFragments, st
 
                 if (prev[j] >= 0) {
                     while (j >= 0) {
+                        if (j >= n) {
+                            throw std::logic_error(
+                                    "quota DP traceback index is out of range");
+                        }
                         ans.push_back(j);
                         j = prev[j];
                     }
@@ -2368,4 +2450,3 @@ void longestPathQuotaGeneNonStrand(std::vector<AlignmentMatch> pairedSimilarFrag
         }
     } while (!done);
 }
-

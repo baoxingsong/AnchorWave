@@ -29,6 +29,8 @@
  * DESCRIPTION: WaveFront-Alignment module for display and report
  */
 
+#include "utils/commons.h"
+#include "system/mm_allocator.h"
 #include "wavefront_display.h"
 #include "wavefront_aligner.h"
 #include "wavefront_compute.h"
@@ -125,7 +127,7 @@ void wavefront_display_print_element(
         PRINT_CHAR_REP(stream,' ',bt_length-effective_pcigar_length);
       }
     } else {
-      fprintf(stream,"[  ]");
+      fprintf(stream,"[ *]");
       PRINT_CHAR_REP(stream,' ',bt_length);
     }
   } else {

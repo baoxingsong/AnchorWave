@@ -10,8 +10,9 @@
 
 class AlignmentMatch {
 private:
-    std::string refChr;
-    std::string queryChr;
+    // Highly repetitive values are interned in a process-lifetime pool.
+    const std::string *refChr;
+    const std::string *queryChr;
     uint32_t refStartPos; // start reference coordinate
     uint32_t refEndPos; // end reference coordinate
     uint32_t queryStartPos; // start position of assembly/query
@@ -20,8 +21,8 @@ private:
     STRAND strand; // positive means same strand and negative means different strand
     int refId;
     int queryId;
-    std::string referenceGeneName;
-    std::string queryGeneName;
+    const std::string *referenceGeneName;
+    const std::string *queryGeneName;
 public:
     AlignmentMatch();
 

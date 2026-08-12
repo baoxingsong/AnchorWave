@@ -1,0 +1,4 @@
+taxon_a	taxon_b	maf	anchor_map	score_profile	weight
+I1	I2	I1_I2.maf	.	default	1.0
+I1	O1	I1_O1.maf	.	default	1.0
+I2	O1	I2_O1.maf	.	default	1.0

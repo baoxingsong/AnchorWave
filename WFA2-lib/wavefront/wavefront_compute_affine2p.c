@@ -29,7 +29,8 @@
  * DESCRIPTION: WaveFront alignment module for computing wavefronts (gap-affine-2p)
  */
 
-#include "../utils/string_padded.h"
+#include "utils/commons.h"
+#include "system/mm_allocator.h"
 #include "wavefront_compute.h"
 #include "wavefront_compute_affine.h"
 #include "wavefront_backtrace_offload.h"
@@ -47,8 +48,9 @@ void wavefront_compute_affine2p_idm(
     const int lo,
     const int hi) {
   // Parameters
-  const int pattern_length = wf_aligner->pattern_length;
-  const int text_length = wf_aligner->text_length;
+  wavefront_sequences_t* const sequences = &wf_aligner->sequences;
+  const int pattern_length = sequences->pattern_length;
+  const int text_length = sequences->text_length;
   // In Offsets
   const wf_offset_t* const m_misms = wavefront_set->in_mwavefront_misms->offsets;
   const wf_offset_t* const m_open1 = wavefront_set->in_mwavefront_open1->offsets;
@@ -111,8 +113,9 @@ void wavefront_compute_affine2p_idm_piggyback(
     const int lo,
     const int hi) {
   // Parameters
-  const int pattern_length = wf_aligner->pattern_length;
-  const int text_length = wf_aligner->text_length;
+  wavefront_sequences_t* const sequences = &wf_aligner->sequences;
+  const int pattern_length = sequences->pattern_length;
+  const int text_length = sequences->text_length;
   // In Offsets
   const wf_offset_t* const m_misms   = wavefront_set->in_mwavefront_misms->offsets;
   const wf_offset_t* const m_open1 = wavefront_set->in_mwavefront_open1->offsets;
@@ -322,6 +325,10 @@ void wavefront_compute_affine2p_dispatcher_omp(
       int t_lo, t_hi;
       const int thread_id = omp_get_thread_num();
       const int thread_num = omp_get_num_threads();
+      if (thread_id == 0) {
+        wf_aligner->align_status.max_num_threads_used = MAX(
+            wf_aligner->align_status.max_num_threads_used,thread_num);
+      }
       wavefront_compute_thread_limits(thread_id,thread_num,lo,hi,&t_lo,&t_hi);
       wavefront_compute_affine2p_dispatcher(wf_aligner,wavefront_set,t_lo,t_hi);
     }
@@ -363,4 +370,3 @@ void wavefront_compute_affine2p(
   // Process wavefront ends
   wavefront_compute_process_ends(wf_aligner,&wavefront_set,score);
 }
-

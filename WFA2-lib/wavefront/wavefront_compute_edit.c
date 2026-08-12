@@ -29,7 +29,8 @@
  * DESCRIPTION: WaveFront alignment module for computing wavefronts (edit/indel)
  */
 
-#include "../utils/string_padded.h"
+#include "utils/commons.h"
+#include "system/mm_allocator.h"
 #include "wavefront_compute.h"
 #include "wavefront_backtrace_offload.h"
 
@@ -47,8 +48,9 @@ void wavefront_compute_indel_idm(
     const int lo,
     const int hi) {
   // Parameters
-  const int pattern_length = wf_aligner->pattern_length;
-  const int text_length = wf_aligner->text_length;
+  wavefront_sequences_t* const sequences = &wf_aligner->sequences;
+  const int pattern_length = sequences->pattern_length;
+  const int text_length = sequences->text_length;
   const wf_offset_t* const prev_offsets = wf_prev->offsets;
   wf_offset_t* const curr_offsets = wf_curr->offsets;
   // Compute-Next kernel loop
@@ -74,8 +76,9 @@ void wavefront_compute_edit_idm(
     const int lo,
     const int hi) {
   // Parameters
-  const int pattern_length = wf_aligner->pattern_length;
-  const int text_length = wf_aligner->text_length;
+  wavefront_sequences_t* const sequences = &wf_aligner->sequences;
+  const int pattern_length = sequences->pattern_length;
+  const int text_length = sequences->text_length;
   const wf_offset_t* const prev_offsets = wf_prev->offsets;
   wf_offset_t* const curr_offsets = wf_curr->offsets;
   // Compute-Next kernel loop
@@ -106,8 +109,9 @@ void wavefront_compute_indel_idm_piggyback(
     const int hi,
     const int score) {
   // Parameters
-  const int pattern_length = wf_aligner->pattern_length;
-  const int text_length = wf_aligner->text_length;
+  wavefront_sequences_t* const sequences = &wf_aligner->sequences;
+  const int pattern_length = sequences->pattern_length;
+  const int text_length = sequences->text_length;
   // Previous WF
   const wf_offset_t* const prev_offsets = wf_prev->offsets;
   const pcigar_t* const prev_pcigar = wf_prev->bt_pcigar;
@@ -148,8 +152,9 @@ void wavefront_compute_edit_idm_piggyback(
     const int hi,
     const int score) {
   // Parameters
-  const int pattern_length = wf_aligner->pattern_length;
-  const int text_length = wf_aligner->text_length;
+  wavefront_sequences_t* const sequences = &wf_aligner->sequences;
+  const int pattern_length = sequences->pattern_length;
+  const int text_length = sequences->text_length;
   // Previous WF
   const wf_offset_t* const prev_offsets = wf_prev->offsets;
   const pcigar_t* const prev_pcigar = wf_prev->bt_pcigar;
@@ -215,8 +220,9 @@ void wavefront_compute_edit_exact_prune(
     wavefront_aligner_t* const wf_aligner,
     wavefront_t* const wavefront) {
   // Parameters
-  const int plen = wf_aligner->pattern_length;
-  const int tlen = wf_aligner->text_length;
+  wavefront_sequences_t* const sequences = &wf_aligner->sequences;
+  const int plen = sequences->pattern_length;
+  const int tlen = sequences->text_length;
   wf_offset_t* const offsets = wavefront->offsets;
   const int lo = wavefront->lo;
   const int hi = wavefront->hi;
@@ -313,6 +319,10 @@ void wavefront_compute_edit_dispatcher_omp(
       int t_lo, t_hi;
       const int thread_id = omp_get_thread_num();
       const int thread_num = omp_get_num_threads();
+      if (thread_id == 0) {
+        wf_aligner->align_status.max_num_threads_used = MAX(
+            wf_aligner->align_status.max_num_threads_used,thread_num);
+      }
       wavefront_compute_thread_limits(thread_id,thread_num,lo,hi,&t_lo,&t_hi);
       wavefront_compute_edit_dispatcher(
           wf_aligner,score,wf_prev,wf_curr,t_lo,t_hi);
@@ -366,5 +376,3 @@ void wavefront_compute_edit(
     wavefront_compute_edit_exact_prune(wf_aligner,wf_curr);
   }
 }
-
-

@@ -22,6 +22,8 @@
  * DESCRIPTION: Edit-Distance based BPM alignment algorithm
  */
 
+#include "utils/commons.h"
+#include "system/mm_allocator.h"
 #include "edit/edit_bpm.h"
 #include "utils/dna_text.h"
 
@@ -153,7 +155,7 @@ void edit_bpm_matrix_allocate(
   bpm_matrix->Mv = Mv;
   bpm_matrix->Pv = Pv;
   // CIGAR
-  bpm_matrix->cigar = cigar_new(pattern_length+text_length,mm_allocator);
+  bpm_matrix->cigar = cigar_new(pattern_length+text_length);
 }
 void edit_bpm_matrix_free(
     bpm_matrix_t* const bpm_matrix,

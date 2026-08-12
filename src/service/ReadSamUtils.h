@@ -14,6 +14,35 @@
 namespace anchorwave {
 namespace read_sam_detail {
 
+inline void retainTopCopyScores(std::vector<double> &scores, double score,
+                                int expectedCopies) {
+    if (expectedCopies <= 0) {
+        return;
+    }
+    const std::size_t limit =
+            static_cast<std::size_t>(expectedCopies) + 1;
+    if (scores.size() < limit) {
+        scores.push_back(score);
+        return;
+    }
+    const auto smallest = std::min_element(scores.begin(), scores.end());
+    if (score > *smallest) {
+        *smallest = score;
+    }
+}
+
+inline bool secondaryCopyExceeds(const std::vector<double> &scores,
+                                 int expectedCopies,
+                                 double similarityFraction) {
+    if (expectedCopies <= 0 ||
+        scores.size() <= static_cast<std::size_t>(expectedCopies)) {
+        return false;
+    }
+    const double best = *std::max_element(scores.begin(), scores.end());
+    const double extra = *std::min_element(scores.begin(), scores.end());
+    return best > 0.0 && extra / best > similarityFraction;
+}
+
 struct SamFields {
     std::string queryName;
     int flag = 0;
@@ -157,9 +186,9 @@ struct CdsSegment {
 
 class CdsCoordinateIndex {
 public:
-    static CdsCoordinateIndex build(Transcript &transcript) {
+    static CdsCoordinateIndex build(const Transcript &transcript) {
         CdsCoordinateIndex index;
-        std::vector<GenomeBasicFeature> &cds = transcript.getCdsVector();
+        const std::vector<GenomeBasicFeature> &cds = transcript.getCdsVector();
         int32_t cumulativeEnd = 0;
 
         if (transcript.getStrand() == POSITIVE) {

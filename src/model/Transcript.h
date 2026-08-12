@@ -23,16 +23,13 @@
 #include "GenomeBasicFeature.h"
 #include "STRAND.h"
 #include <vector>
-#include <set>
 #include <algorithm>
 #include <limits>
 
 class Transcript {
 private:
     std::string _name;
-    std::set<GenomeBasicFeature> _cdsHashSet;
     std::vector<GenomeBasicFeature> _cdsVector;
-    std::set<GenomeBasicFeature> _exonHashSet;
     std::vector<GenomeBasicFeature> _exonVector;
     std::vector<GenomeBasicFeature> _threePrimerUtrVector;
     std::vector<GenomeBasicFeature> _fivePrimerUtrVector;
@@ -70,11 +67,9 @@ public:
 
     void setName(const std::string &name);
 
-    std::set<GenomeBasicFeature> &getCdsHashSet();
-
     std::vector<GenomeBasicFeature> &getCdsVector();
 
-    std::set<GenomeBasicFeature> &getExonHashSet();
+    const std::vector<GenomeBasicFeature> &getCdsVector() const;
 
     std::vector<GenomeBasicFeature> &getExonVector();
 

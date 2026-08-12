@@ -27,6 +27,7 @@
 #define KSW_EZ_SPLICE_FOR  0x100
 #define KSW_EZ_SPLICE_REV  0x200
 #define KSW_EZ_SPLICE_FLANK 0x400
+#define KSW_EZ_SEMIGLOBAL_END 0x800 // traceback to the better sequence end
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,8 +41,22 @@ typedef struct {
     int score;             // max score reaching both ends; may be KSW_NEG_INF
     int m_cigar, n_cigar;
     int reach_end;
+    int stopped;            // cooperative progress callback requested stop
     uint32_t *cigar;
 } ksw_extz_t;
+
+// Optional per-thread progress callback used by AnchorWave to enforce a
+// runtime deadline inside long extd2 calls. Returning zero stops the kernel
+// before traceback and sets ez->stopped. The callback state is thread-local,
+// so independent genome-alignment workers do not interfere with each other.
+typedef int (*ksw_progress_callback_t)(void *arguments,
+                                       int antidiagonal,
+                                       int total_antidiagonals);
+void ksw_set_progress_callback(ksw_progress_callback_t callback,
+                               void *arguments,
+                               int antidiagonal_interval);
+void ksw_clear_progress_callback(void);
+int ksw_progress_continue(int antidiagonal, int total_antidiagonals);
 
 /**
  * NW-like extension
@@ -176,7 +191,7 @@ static inline void ksw_reset_extz(ksw_extz_t *ez)
 {
     ez->max_q = ez->max_t = ez->mqe_t = ez->mte_q = -1;
     ez->max = 0, ez->score = ez->mqe = ez->mte = KSW_NEG_INF;
-    ez->n_cigar = 0, ez->zdropped = 0, ez->reach_end = 0;
+    ez->n_cigar = 0, ez->zdropped = 0, ez->reach_end = 0, ez->stopped = 0;
 }
 
 static inline int ksw_apply_zdrop(ksw_extz_t *ez, int is_rot, int32_t H, int a, int b, int zdrop, int8_t e)
@@ -197,4 +212,3 @@ static inline int ksw_apply_zdrop(ksw_extz_t *ez, int is_rot, int32_t H, int a, 
     return 0;
 }
 #endif
-

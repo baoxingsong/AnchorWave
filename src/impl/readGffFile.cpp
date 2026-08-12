@@ -3,9 +3,25 @@
 //
 
 #include "readGffFile.h"
+#include "../io/CompressedInput.h"
+
+#include <utility>
+
+namespace {
+
+std::string readableAnnotationPath(const std::string &filePath) {
+    try {
+        return anchorwave::io::materializeInputFile(filePath);
+    } catch (const std::exception &error) {
+        std::cerr << error.what() << std::endl;
+        exit(1);
+    }
+}
+
+}  // namespace
 
 void get_map_from_gff(const std::string &filePath, std::map <std::string, std::string> &map_transcript_to_gene) {
-    std::ifstream infile(filePath);
+    std::ifstream infile(readableAnnotationPath(filePath));
     if (!infile.good()) {
         std::cerr << "error in opening GFF/GTF file " << filePath << std::endl;
         exit(1);
@@ -50,7 +66,7 @@ void get_map_from_gff(const std::string &filePath, std::map <std::string, std::s
 
 void readGffFile(const std::string &filePath, std::map <std::string, std::vector<Transcript>> &transcriptHashSet, const std::string &type, const int &minExon) {
     std::map <std::string, Transcript> transcriptHashMap;
-    std::ifstream infile(filePath);
+    std::ifstream infile(readableAnnotationPath(filePath));
     if (!infile.good()) {
         std::cerr << "error in opening GFF/GTF file " << filePath << std::endl;
         exit(1);
@@ -121,11 +137,12 @@ void readGffFile(const std::string &filePath, std::map <std::string, std::vector
         }
 
         it->second.updateInforCds();
-        transcriptHashSet[it->second.getChromeSomeName()].push_back(it->second);
+        const std::string chromosome = it->second.getChromeSomeName();
+        transcriptHashSet[chromosome].push_back(std::move(it->second));
     }
 
     for (std::map < std::string, std::vector < Transcript >> ::iterator it = transcriptHashSet.begin(); it != transcriptHashSet.end(); ++it) {
-        std::sort(it->second.begin(), it->second.end(), [](Transcript a, Transcript b) {
+        std::sort(it->second.begin(), it->second.end(), [](const Transcript &a, const Transcript &b) {
             return a.getPStart() < b.getPStart();
         });
     }
@@ -133,7 +150,7 @@ void readGffFile(const std::string &filePath, std::map <std::string, std::vector
 
 void readGffFile1(const std::string &filePath, std::map <std::string, std::vector<Transcript>> &transcriptHashSet, const std::string &cdsParentRegex, const int &minExon) {
     std::map <std::string, Transcript> transcriptHashMap;
-    std::ifstream infile(filePath);
+    std::ifstream infile(readableAnnotationPath(filePath));
     if (!infile.good()) {
         std::cerr << "error in opening GFF/GTF file " << filePath << std::endl;
         exit(1);
@@ -180,17 +197,18 @@ void readGffFile1(const std::string &filePath, std::map <std::string, std::vecto
             transcriptHashSet[it->second.getChromeSomeName()] = std::vector<Transcript>();
         }
         it->second.updateInforCds();
-        transcriptHashSet[it->second.getChromeSomeName()].push_back(it->second);
+        const std::string chromosome = it->second.getChromeSomeName();
+        transcriptHashSet[chromosome].push_back(std::move(it->second));
     }
     for (std::map < std::string, std::vector < Transcript >> ::iterator it = transcriptHashSet.begin(); it != transcriptHashSet.end(); ++it) {
-        std::sort(it->second.begin(), it->second.end(), [](Transcript a, Transcript b) {
+        std::sort(it->second.begin(), it->second.end(), [](const Transcript &a, const Transcript &b) {
             return a.getPStart() < b.getPStart();
         });
     }
 }
 void readGffFile_exon(const std::string &filePath, std::map <std::string, std::vector<Transcript>> &transcriptHashSet, const std::string &cdsParentRegex, const int &minExon) {
     std::map <std::string, Transcript> transcriptHashMap;
-    std::ifstream infile(filePath);
+    std::ifstream infile(readableAnnotationPath(filePath));
     if (!infile.good()) {
         std::cerr << "error in opening GFF/GTF file " << filePath << std::endl;
         exit(1);
@@ -238,10 +256,11 @@ void readGffFile_exon(const std::string &filePath, std::map <std::string, std::v
             transcriptHashSet[it->second.getChromeSomeName()] = std::vector<Transcript>();
         }
         it->second.updateInforCds();
-        transcriptHashSet[it->second.getChromeSomeName()].push_back(it->second);
+        const std::string chromosome = it->second.getChromeSomeName();
+        transcriptHashSet[chromosome].push_back(std::move(it->second));
     }
     for (std::map < std::string, std::vector < Transcript >> ::iterator it = transcriptHashSet.begin(); it != transcriptHashSet.end(); ++it) {
-        std::sort(it->second.begin(), it->second.end(), [](Transcript a, Transcript b) {
+        std::sort(it->second.begin(), it->second.end(), [](const Transcript &a, const Transcript &b) {
             return a.getPStart() < b.getPStart();
         });
     }

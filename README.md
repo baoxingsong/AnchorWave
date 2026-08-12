@@ -11,8 +11,49 @@ By performing sensitive sequence alignment for each shorter interval via a 2-pie
 </p>
 
 AnchorWave takes the reference genome sequence and gene annotation in GFF3 format as input and extracts reference full-length coding sequences (CDS) to use as anchors. 
+
+Genome FASTA and GFF/GTF inputs may be plain text, gzip, or BGZF. AnchorWave
+detects compression from the file signature, not the filename extension, so no
+compression option is required. Compressed FASTA files are materialized once in
+`$TMPDIR` to preserve random-access behavior, cached for the process lifetime,
+and removed on normal exit. Ensure that `$TMPDIR` has enough free space for the
+decompressed genomes.
+
+See [Compressed genome and annotation inputs](docs/COMPRESSED_INPUTS.md) for
+temporary-file behavior, supported formats, and validation details.
 Using a splice aware alignment program (minimap2 and GMAP have been tested) to lift over the start and end position of reference full-length CDS to the query genome (step 1). 
 AnchorWave then identifies collinear anchors using one of three user-specified algorithm options (step 2) and uses the [WFA](https://github.com/smarco/WFA2-lib) and [minimap2](https://github.com/lh3/minimap2) algorithm to perform alignment for each anchor and inter anchor interval (step 4). Some anchor/inter-anchor regions cannot be aligned using our standard approach due to high memory and computational time costs. For these, AnchorWave either identifies novel anchors within long inter-anchor regions (step 3), or for those that cannot be split by novel anchors, aligns using the ksw_extd2 function implemented in minimap2 or a reimplemented sliding window approach (step 4). AnchorWave concatenates base pair sequence alignment for each anchor and inter-anchor region and outputs the alignment in MAF format (step 5).
+
+Version 1.3.0 uses two strict alignment-quality tiers. The exact tier contains
+WFA-Singletrack high, standard WFA high/medium/low, full KSW2, and rescue-only
+score-certified KSW2. The fallback tier contains banded KSW2 and
+`alignSlidingWindow`; the selector predicts which will return the larger score
+and normally runs only that method. BiWFA is retained only in developer
+benchmarks and is not part of the production selector.
+
+The vendored WFA2 implementation is pinned to upstream
+`main@2fc4a1afac0f624e7020ee5aadb7692b38157eaa`. `genoAli` and `proali`
+rank all memory-feasible exact candidates dynamically: WFA-Singletrack high,
+standard WFA high/medium/low and full KSW2. Score-certified KSW2 is considered
+only as a rescue when Singletrack, WFA-high and full KSW2 are structurally
+memory-infeasible. The scheduler uses the
+user-specified thread and process-memory limits to minimize predicted global
+completion time while reserving memory inside `-M`. Banded KSW2 and the
+sliding-window method share the fallback tier. Banded KSW2 is admitted
+only when its band is at least the longer input and that complete matrix fits
+the per-task budget; narrow-band speed shortcuts are not used. See the
+[selector and resource model](docs/ALIGNMENT_ALGORITHM_SELECTOR.md), the
+[WFA2 integration history](docs/WFA2_BIWFA_UPGRADE.md), and the
+[v1.3.0 release notes](RELEASE_NOTES.md).
+
+`genoAli` also uses `-t` during global anchor organization. Reference and query
+chromosomes are scheduled through one cost-prioritized worker pool and merged
+deterministically; see the
+[parallel anchor-organization design and B73/Mo17 benchmark](docs/GENOALI_ANCHOR_PARALLELISM.md).
+
+The sequence-alignment stage also supports bounded fine-grained inter-anchor
+tasks; see the
+[sequence-alignment parallelism design and B73/Mo17 validation](docs/SEQUENCE_ALIGNMENT_PARALLELISM.md).
 
 
 Table of Contents
@@ -38,7 +79,7 @@ Table of Contents
 ### Installation from source code
 #### Dependencies
 GNU GCC >=7.0  
-Cmake >= 3.0  
+CMake >= 3.10
 [minimap2](https://github.com/lh3/minimap2) or [GMAP](http://research-pub.gene.com/gmap/)  
 Operating System: Linux or MAC  
 Memory: > 20 Gb  
@@ -51,10 +92,13 @@ If you are using old x86_64 CPUs without SSE4.1 but with SSE2, please also refer
 ```
 git clone https://github.com/baoxingsong/anchorwave.git
 cd anchorwave
-cmake ./
-make
+mkdir build && cd build
+cmake -DCMAKE_BUILD_TYPE=Release ..
+cmake --build . -- -j4
 ```
-You will get an executable file named ```anchorwave ```.
+You will get an executable file named ```build/anchorwave``` (native SIMD is
+selected by default). See [installation.md](installation.md) for portable SIMD,
+OpenMP, and test-build options.
 The code has been tested under Ubuntu 20.2 and CentOS 7 with intel/AMD CPU. It should work well on other REDHAT or Debian based Linux Distributions.  
 ### Installation using conda
 ```
@@ -70,6 +114,7 @@ Test the installation: \
 
 
 ## Usage
+
 In general, totally four commands are need to run through the whole pipeline.  
 1) extract CDS  
 2) align CDS to the reference genome  
@@ -78,8 +123,9 @@ In general, totally four commands are need to run through the whole pipeline.
 ### Note
 * [AnchorWave use prior informations about whole genome duplication, chromosome rearrangement etc to guide the genome alignment, while AnchorWave could not figure out those evolution events automatically. Users need to know those informations before running AnchorWave and tune the parameters accordingly. Users might need to draw some plots to figure out if you would like to use `genoAli` or `proali`. If `genoAli` is proper, then need to think about if you would like to set `IV`.
 If `proali` is proper, then need to think about how to set the values of `R`, `Q` and maybe `-e`.](#Note)
-Could refer [guideline.pdf](./doc/guideline.pdf) or [#16](./issues/16) for how to do that.
-* To alignment highly diverse genomes, the command 4 might cost a couple of CPU days. </span> If you have large memory available, this step could be paralyzed. Without heavily parameters turning, for highly diverse genomes, using a single thread, AnchorWave uses ~20Gb memory. Increasing a thread would cost an extra ~10Gb memory. If the two genomes have very similar sequences, the time and memory cost would be significantly less.
+Could refer [guideline.pdf](./doc/guideline.pdf) or
+[#16](https://github.com/baoxingsong/AnchorWave/issues/16) for how to do that.
+* Alignment of highly diverse genomes can still take a couple of CPU days. The default `-w 100000` sets a hard per-alignment algorithm budget of `w^2 = 10,000,000,000` bytes (about 9.3 GiB) and retains its KSW2 matrix/band/window role. The effective sliding chunk is automatically reduced when SIMD/page-rounded traceback metadata would otherwise exceed `w^2`. Banded KSW2 is eligible only when its band is at least the longer input and that complete traceback fits the same ceiling. Within WFA, `-w` is only a memory ceiling; it is not compared with sequence length, length difference, or alignment score. Set `-t` as the maximum worker count and `-M` as the predictive maximum total AnchorWave memory in GiB. `-M` never raises the per-task `w^2` ceiling: it deducts loaded-genome RSS and an in-limit safety reserve, then dynamically admits guarded WFA/KSW2 predictions plus transient sequence/output storage. Because this is an in-process predictive guard, use a cgroup or job-scheduler limit when the operating system must enforce a hard cap. Small tasks can use all `-t` workers without each reserving the worst-case `w^2` amount.
 
 
 Options:
@@ -101,8 +147,8 @@ Options of the ```gff2seq``` function:
 Usage: anchorwave gff2seq -i inputGffFile -r inputGenome -o outputSequences 
 Options
  -h        produce help message
- -i FILE   reference genome annotation in GFF/GTF format
- -r FILE   reference genome sequence in fasta format
+ -i FILE   reference GFF/GTF (plain or gzip/BGZF; auto-detected)
+ -r FILE   reference FASTA (plain or gzip/BGZF; auto-detected)
  -o FILE   output file of the longest CDS/exon for each gene
  -x        use exon records instead of CDS from the GFF file
  -m INT    minimum exon length to output (default: 20)
@@ -180,23 +226,30 @@ Options of the ```genoAli``` function:
 Usage: anchorwave genoAli -i refGffFile -r refGenome -a cds.sam -as cds.fa -ar ref.sam -s targetGenome -n outputAnchorFile -o output.maf -f output.fragmentation.maf 
 Options
  -h           produce help message
- -i   FILE    reference GFF/GTF file
- -r   FILE    reference genome sequence file in fasta format
+ -i   FILE    reference GFF/GTF (plain or gzip/BGZF; auto-detected)
+ -r   FILE    reference FASTA (plain or gzip/BGZF; auto-detected)
  -as  FILE    anchor sequence file. (output from the gff2seq command)
  -a   FILE    sam file generated by mapping conserved sequence to query genome
- -s   FILE    target genome sequence file in fasta format
+ -s   FILE    target FASTA (plain or gzip/BGZF; auto-detected)
               Those sequences with the same name in the reference genome and query genome file would be aligned
  -n   FILE    output anchors file
  -o   FILE    output file in maf format
  -f   FILE    output sequence alignment for each anchor/inter-anchor region in maf format
- -b   FILE    output the sequence alignment method used for each anchor/inter-anchor region, in bed format
- -t   INT     number of threads (default: 1)
+ -b   FILE    output the actual alignment method for each interval in BED format
+              all WFA memory modes are reported as WAVEFRONT
+ -t   INT     maximum number of anchor-organization and alignment threads (default: 1)
+ -M   FLOAT   predictive maximum total AnchorWave memory in GiB
+              enables dynamic scheduling; must be at least w^2 bytes
+ -bt  FLOAT   exact-DP prediction/runtime ceiling per interval in minutes (default: 0)
+              0 selects exact-first mode; a positive value selects balanced mode
  -m   INT     minimum exon length to use (default: 20, should be identical with the setting of gff2seq function)
  -mi  DOUBLE  minimum full-length CDS anchor hit similarity to use (default:0.95)
  -mi2 DOUBLE  minimum novel anchor hit similarity to use (default:0.2)
  -ar  FILE    sam file generated by mapping conserved sequence to reference genome
- -w   INT     sequence alignment window width (default: 100000)
- -fa3 INT     if the inter-anchor length is shorter than this value, stop trying to find new anchors (default: 100000)
+ -w   INT     alignment window and hard per-thread algorithm budget w^2 bytes
+              (default: 100000, about 9.3 GiB per thread)
+ -fa3 INT     minimum side length for novel-anchor search: require
+              reference_length * query_length > fa3^2 (default: 100000)
  -B   INT     mismatching penalty (default: -6)
  -O1  INT     gap open penalty (default: -8)
  -E1  INT     gap extension penalty (default: -2)
@@ -220,10 +273,11 @@ Maize B73 v4 reference genome and GFF3 annotation file;
 Maize Mo17 assembly.
 ```
 wget https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-34/gff3/zea_mays/Zea_mays.AGPv4.34.gff3.gz
-gunzip Zea_mays.AGPv4.34.gff3.gz
 wget https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-34/fasta/zea_mays/dna/Zea_mays.AGPv4.dna.toplevel.fa.gz
-gunzip Zea_mays.AGPv4.dna.toplevel.fa.gz
 wget https://download.maizegdb.org/Zm-Mo17-REFERENCE-CAU-1.0/Zm-Mo17-REFERENCE-CAU-1.0.fa.gz
+# All three .gz files can be supplied directly; these commands are optional.
+gunzip Zea_mays.AGPv4.34.gff3.gz
+gunzip Zea_mays.AGPv4.dna.toplevel.fa.gz
 gunzip Zm-Mo17-REFERENCE-CAU-1.0.fa.gz
 ```
 Please make sure the chromosomes from reference genome and query genomes were named in the same way. Chromosomes with the same names would be aligned.
@@ -264,8 +318,13 @@ anchorwave genoAli -i Zea_mays.AGPv4.34.gff3 -as cds.fa -r Zea_mays.AGPv4.dna.to
 anchorwave genoAli -i Zea_mays.AGPv4.34.gff3 -as cds.fa -r Zea_mays.AGPv4.dna.toplevel.fa -a cds.sam -ar ref.sam -s Zm-Mo17-REFERENCE-CAU-1.0.fa -n anchors -o anchorwave.maf -f anchorwave.f.maf -IV -m 0
 ```
 
-This command might cost a couple of days (~ one day on our computer) and 20 Gb memory. Reduce the values of parameters ```-w``` and ```-fa3``` could reduce memory usage and CPU time but would also reduce the sequence alignment quality.  
-If you have larger memory and multiple CPU cores available, you could increase the value of ```-t``` to run the command using multiple threads. By increasing each thread, ~10Gb more memory would be used. The memory cost is associated with sequence diversity. The above dataset is roughly represent the dataset that cost largest memory.
+This command might still cost a couple of days. WFA-Singletrack high and WFA high are the fast exact paths; memory-feasible intervals can also use medium/low WFA or full KSW2. Score-certified KSW2 is an internal exact rescue path used only when Singletrack, WFA-high and full KSW2 are structurally memory-infeasible. It first computes the unbanded global optimum without traceback, then accepts an adaptively widened banded traceback only when its score is identical. Every sequence-alignment engine is capped at `w^2`; `-M` controls only process-wide admission and concurrency. An immediately runnable high WFA that is no slower than the fastest calibrated exact runtime is not charged the normal memory-shadow penalty, but a faster KSW2 path still wins. If current memory is busy, AnchorWave compares predicted wait plus runtime across exact candidates, parks eligible gap tasks without occupying a worker, and drains memory near the workload tail or after aging. The default `-bt 0` selects exact-first mode and disables exact runtime deadlines. Setting a positive value selects balanced mode: every admission quantile currently modeled (P50 and P90) must be within `-bt`, and the cumulative exact-attempt runtime for an interval is cooperatively stopped at the same limit. Only after eligible exact candidates are exhausted or that explicit deadline is reached does the shared fallback tier run. KSW2 fallback requires `band >= max(query, reference)` plus a full traceback that fits `w^2`; sliding uses the same per-attempt ceiling. The selector compares their predicted score loss and chooses the result expected to be closer to full DP, using runtime only as a tie-breaker. Long predicted gaps are prefetched early within a bounded rolling window while results are still emitted in anchor order. Reducing ```-w``` lowers every WFA and exact/fallback KSW2 attempt ceiling regardless of whether `-M` is set. `-M` is a predictive in-process envelope with an internal reserve, not an operating-system hard cap; use a cgroup or job-scheduler memory limit when kill-at-cap enforcement is required. Reducing ```-fa3``` changes novel-anchor splitting and can affect runtime and alignment quality.
+
+Version 1.3.0 fixes a historical 32-bit overflow in the `-fa3` comparison.
+Novel-anchor search now consistently requires
+`reference_length * query_length > fa3^2`. Consequently, an anchor file made
+with v1.3.0 can contain fewer novel anchors than one made by an affected older
+build at the same default; this is an intentional correctness change.
 
 ### Genome alignment with relocation variation, chromosome fusion or whole genome duplication (an option of command 4)
 When comparing two genomes undergone different genome duplications (goldfish genome, plant genomes and maybe hexapod genomes), this program implemented algorithm to identify collinear blocks with user specified coverage, and perform base pair resolution genome alignment for each collinear block.  \
@@ -313,18 +372,25 @@ Options of the ```proali``` function:
 Usage: anchorwave proali -i refGffFile -r refGenome -a cds.sam -as cds.fa -ar ref.sam -s targetGenome -n outputAnchorFile -o output.maf -f output.fragmentation.maf -R 1 -Q 1
 Options
  -h           produce help message
- -i   FILE    reference GFF/GTF file
- -r   FILE    reference genome sequence
+ -i   FILE    reference GFF/GTF (plain or gzip/BGZF; auto-detected)
+ -r   FILE    reference FASTA (plain or gzip/BGZF; auto-detected)
  -as  FILE    anchor sequence file. (output from the gff2seq command)
  -a   FILE    sam file by mapping conserved sequence to query genome
- -s   FILE    target genome sequence
+ -s   FILE    target FASTA (plain or gzip/BGZF; auto-detected)
  -n   FILE    output anchors file
  -o   FILE    output file in maf format
  -f   FILE    output sequence alignment for each anchor/inter-anchor region in maf format
- -b   FILE    output the sequence alignment method used for each anchor/inter-anchor region, in bed format
- -t   INT     number of threads (default: 1)
- -fa3 INT     if the inter-anchor length is shorter than this value, stop trying to find new anchors (default: 100000)
- -w   INT     sequence alignment window width (default: 100000)
+ -b   FILE    output the actual alignment method for each interval in BED format
+              all WFA memory modes are reported as WAVEFRONT
+ -t   INT     maximum number of anchor-organization and alignment threads (default: 1)
+ -M   FLOAT   predictive maximum total AnchorWave memory in GiB
+              enables dynamic scheduling; must be at least w^2 bytes
+ -bt  FLOAT   exact-DP prediction/runtime ceiling per interval in minutes (default: 0)
+              0 selects exact-first mode; a positive value selects balanced mode
+ -fa3 INT     minimum side length for novel-anchor search: require
+              reference_length * query_length > fa3^2 (default: 100000)
+ -w   INT     alignment window and hard per-thread algorithm budget w^2 bytes
+              (default: 100000, about 9.3 GiB per thread)
  -R   INT     reference genome maximum alignment coverage 
  -Q   INT     query genome maximum alignment coverage 
  -B   INT     mismatching penalty (default: -4)

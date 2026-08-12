@@ -32,8 +32,9 @@
 #ifndef AFFINE2P_MATRIX_H_
 #define AFFINE2P_MATRIX_H_
 
-#include "utils/commons.h"
 #include "alignment/cigar.h"
+#include "system/mm_allocator.h"
+#include "utils/commons.h"
 
 /*
  * Constants

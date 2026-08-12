@@ -1,0 +1,6 @@
+#anchorwave-copy-relations-v1
+record_type	family_id	ancestral_copy_id	parent_copy_id	born_on_edge	taxon_id	member_type	member_id	seq	start0	end0	strand	expected_count	relation	confidence	constraint	source
+GROUP	F1	A1	.	pre_root	.	.	.	.	.	.	.	.	.	1.0	hard	fixture
+MEMBER	F1	A1	.	.	I1	interval	.	I1chr	0	4	+	.	ortholog	1.0	hard	fixture
+MEMBER	F1	A1	.	.	I2	interval	.	I2chr	0	4	+	.	ortholog	1.0	hard	fixture
+MEMBER	F1	A1	.	.	O1	interval	.	O1chr	0	4	+	.	ortholog	1.0	hard	fixture

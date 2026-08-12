@@ -11,6 +11,7 @@
 #include "../model/Transcript.h"
 #include "../myImportandFunction/alignSlidingWindow.h"
 #include "../util//myutil.h"
+#include "AnchorTaskExecutor.h"
 
 #include "../../minimap2/minimap.h"
 
@@ -22,13 +23,15 @@ void setupAnchorsWithSpliceAlignmentResult(const std::string &gffFilePath, const
                                            double &inversion_PENALTY, double &MIN_ALIGNMENT_SCORE, bool &considerInversion, const int &minExon, const int64_t &windowWidth, const double &minimumSimilarity, const double &minimumSimilarity2,
                                            std::map<std::string, std::tuple<std::string, long, long, int> > &map_ref,
                                            std::map<std::string, std::tuple<std::string, long, long, int> > &map_qry,
-                                           int &expectedCopies, double &maximumSimilarity, const std::string &referenceSamFilePath, const int32_t &wfaSize3, const bool &searchForNewAnchors, const bool &exonModel);
+                                           int &expectedCopies, double &maximumSimilarity, const std::string &referenceSamFilePath, const int64_t &wfaSize3, const bool &searchForNewAnchors, const bool &exonModel,
+                                           const int &maxThreads);
 
 void setupAnchorsWithSpliceAlignmentResultQuota(const std::string &gffFilePath, const std::string &samFile, const std::string &cdsSequenceFile, std::vector<std::vector<AlignmentMatch>> &alignmentMatchsMap,
                                                 double &INDEL_SCORE, double &GAP_OPEN_PENALTY, double &MIN_ALIGNMENT_SCORE, int &MAX_DIST_BETWEEN_MATCHES, int &refMaximumTimes, int &queryMaximumTimes,
                                                 double &calculateIndelDistance, const int &minExon, const int64_t &windowWidth, const double &minimumSimilarity, const double &minimumSimilarity2,
                                                 std::map<std::string, std::tuple<std::string, long, long, int> > &map_ref,
                                                 std::map<std::string, std::tuple<std::string, long, long, int> > &map_qry,
-                                                int &expectedCopies, const int32_t &wfaSize3,
+                                                int &expectedCopies, const int64_t &wfaSize3,
                                                 double &maximumSimilarity, const std::string &referenceSamFilePath,
-                                                bool &searchForNewAnchors, const bool &exonModel);
+                                                bool &searchForNewAnchors, const bool &exonModel,
+                                                const int &maxThreads);

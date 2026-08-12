@@ -32,10 +32,9 @@
 #ifndef WAVEFRONT_WAVEFRONT_COMPONENTS_H_
 #define WAVEFRONT_WAVEFRONT_COMPONENTS_H_
 
-#include "../utils/commons.h"
-#include "../wavefront/wavefront.h"
-#include "../wavefront/wavefront_backtrace_buffer.h"
-#include "../wavefront/wavefront_penalties.h"
+#include "wavefront/wavefront.h"
+#include "wavefront/wavefront_backtrace_buffer.h"
+#include "wavefront/wavefront_penalties.h"
 
 /*
  * Wavefront Components

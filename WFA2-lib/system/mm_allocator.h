@@ -35,7 +35,8 @@
 #ifndef MM_ALLOCATOR_H_
 #define MM_ALLOCATOR_H_
 
-#include "../utils/vector.h"
+#include <stdbool.h>
+#include "utils/vector.h"
 
 /*
  * Configuration

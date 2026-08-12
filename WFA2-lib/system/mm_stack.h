@@ -35,7 +35,7 @@
 #ifndef MM_STACK_H_
 #define MM_STACK_H_
 
-#include "../utils/vector.h"
+#include "utils/vector.h"
 
 /*
  * Configuration

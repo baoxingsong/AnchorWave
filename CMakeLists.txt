@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(anchorwave LANGUAGES C CXX)
+project(anchorwave VERSION 1.3.0 LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -11,17 +11,49 @@ set(CMAKE_CXX_EXTENSIONS ON)
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
 
+# Inner-wavefront parallelism is dormant at runtime unless an attempt sets
+# max_num_threads > 1. AnchorWave keeps the default at one and only grants
+# 2/4/8 threads to selected tail tasks, avoiding ordinary oversubscription.
+option(ANCHORWAVE_ENABLE_WFA_PARALLEL
+       "Compile OpenMP support for per-attempt WFA tail parallelism" ON)
+if(ANCHORWAVE_ENABLE_WFA_PARALLEL)
+    find_package(OpenMP QUIET)
+endif()
+
 # The source code selects the x86 intrinsic headers or the SSE2NEON adapter from
 # compiler-provided architecture macros.  For a native x86 build, let the
-# compiler enable exactly the SIMD extensions supported by the build CPU.  A
-# cross build deliberately keeps the toolchain's target settings unchanged.
-set(ANCHORWAVE_NATIVE_SIMD OFF)
-if(NOT CMAKE_CROSSCOMPILING AND
-   CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64|i[3-6]86)$" AND
+# compiler enable exactly the SIMD extensions supported by the build CPU.  The
+# explicit targets below are for reproducible SIMD regression builds; a cross
+# build deliberately keeps the toolchain's target settings unchanged.
+set(ANCHORWAVE_SIMD_TARGET "native" CACHE STRING
+    "x86 SIMD target: native, avx2, sse4, sse2, or toolchain")
+set_property(CACHE ANCHORWAVE_SIMD_TARGET PROPERTY STRINGS
+             native avx2 sse4 sse2 toolchain)
+set(ANCHORWAVE_SIMD_COMPILE_OPTIONS)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64|i[3-6]86)$" AND
    CMAKE_C_COMPILER_ID MATCHES "GNU|Clang" AND
    CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    set(ANCHORWAVE_NATIVE_SIMD ON)
-    message(STATUS "AnchorWave CPU architecture: ${CMAKE_SYSTEM_PROCESSOR} (native SIMD auto-detection)")
+    if(ANCHORWAVE_SIMD_TARGET STREQUAL "native")
+        if(NOT CMAKE_CROSSCOMPILING)
+            list(APPEND ANCHORWAVE_SIMD_COMPILE_OPTIONS -march=native)
+            message(STATUS "AnchorWave CPU architecture: ${CMAKE_SYSTEM_PROCESSOR} (native SIMD auto-detection)")
+        else()
+            message(STATUS "AnchorWave CPU architecture: ${CMAKE_SYSTEM_PROCESSOR} (cross-toolchain SIMD flags)")
+        endif()
+    elseif(ANCHORWAVE_SIMD_TARGET STREQUAL "avx2")
+        list(APPEND ANCHORWAVE_SIMD_COMPILE_OPTIONS -march=haswell)
+        message(STATUS "AnchorWave x86 SIMD target: AVX2")
+    elseif(ANCHORWAVE_SIMD_TARGET STREQUAL "sse4")
+        # Some supported GCC toolchains do not accept the Penryn alias even
+        # though they support SSE4.1.  Express the same ISA floor explicitly.
+        list(APPEND ANCHORWAVE_SIMD_COMPILE_OPTIONS -march=core2 -msse4.1)
+        message(STATUS "AnchorWave x86 SIMD target: SSE4.1")
+    elseif(ANCHORWAVE_SIMD_TARGET STREQUAL "sse2")
+        list(APPEND ANCHORWAVE_SIMD_COMPILE_OPTIONS -march=x86-64)
+        message(STATUS "AnchorWave x86 SIMD target: SSE2")
+    elseif(NOT ANCHORWAVE_SIMD_TARGET STREQUAL "toolchain")
+        message(FATAL_ERROR "Unsupported ANCHORWAVE_SIMD_TARGET=${ANCHORWAVE_SIMD_TARGET}")
+    endif()
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64|arm|ARM)")
     message(STATUS "AnchorWave CPU architecture: ${CMAKE_SYSTEM_PROCESSOR} (NEON via SSE2NEON)")
 else()
@@ -39,6 +71,304 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 include_directories(googletest/googletest/include googletest/googletest)
 
+set(ANCHORWAVE_TRIO_SOURCES
+        src/trio/TrioGraphCommand.cpp
+        src/trio/Phylogeny.cpp
+        src/trio/io/TaxonManifestReader.cpp
+        src/trio/io/PairwiseManifestReader.cpp
+        src/trio/io/CopyConstraintReader.cpp
+        src/trio/io/BlockProjectionReader.cpp
+        src/trio/io/FastaEvidenceValidator.cpp
+        src/trio/io/MafEvidenceReader.cpp
+        src/trio/io/GraphWriters.cpp
+        src/trio/model/TrioTypes.cpp
+        src/trio/model/StableId.cpp
+        src/trio/model/AlignmentEvidence.cpp
+        src/trio/model/AlignmentSiteGraph.cpp
+        src/trio/impl/CopyRelationshipResolver.cpp
+        src/trio/alignment/TwoPieceAffine.cpp
+        src/trio/impl/LocalizedPoaRepair.cpp
+        src/trio/impl/GraphRepairEngine.cpp
+        src/trio/evolution/AncestralInference.cpp
+        src/trio/evolution/AncestralAdjacency.cpp)
+
+add_library(anchorwave_trio_core STATIC ${ANCHORWAVE_TRIO_SOURCES})
+target_include_directories(anchorwave_trio_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(anchorwave_trio_core PRIVATE -Wall -Wextra -pedantic)
+target_link_libraries(anchorwave_trio_core PUBLIC ZLIB::ZLIB)
+
+# Keep the vendored WFA2 sources in a dedicated target.  This list mirrors
+# smarco/WFA2-lib main@2fc4a1afac0f624e7020ee5aadb7692b38157eaa and makes it
+# possible to unit-test AnchorWave's BiWFA adapter without linking the complete
+# genoAli/proali executable.
+set(ANCHORWAVE_WFA2_SOURCES
+        WFA2-lib/wavefront/wavefront_align.c
+        WFA2-lib/wavefront/wavefront_aligner.c
+        WFA2-lib/wavefront/wavefront_attributes.c
+        WFA2-lib/wavefront/wavefront_backtrace_buffer.c
+        WFA2-lib/wavefront/wavefront_backtrace.c
+        WFA2-lib/wavefront/wavefront_backtrace_offload.c
+        WFA2-lib/wavefront/wavefront_bialign.c
+        WFA2-lib/wavefront/wavefront_bialigner.c
+        WFA2-lib/wavefront/wavefront.c
+        WFA2-lib/wavefront/wavefront_components.c
+        WFA2-lib/wavefront/wavefront_compute_affine2p.c
+        WFA2-lib/wavefront/wavefront_compute_affine.c
+        WFA2-lib/wavefront/wavefront_compute.c
+        WFA2-lib/wavefront/wavefront_compute_edit.c
+        WFA2-lib/wavefront/wavefront_compute_linear.c
+        WFA2-lib/wavefront/wavefront_debug.c
+        WFA2-lib/wavefront/wavefront_display.c
+        WFA2-lib/wavefront/wavefront_extend.c
+        WFA2-lib/wavefront/wavefront_extend_kernels.c
+        WFA2-lib/wavefront/wavefront_extend_kernels_avx.c
+        WFA2-lib/wavefront/wavefront_heuristic.c
+        WFA2-lib/wavefront/wavefront_pcigar.c
+        WFA2-lib/wavefront/wavefront_penalties.c
+        WFA2-lib/wavefront/wavefront_plot.c
+        WFA2-lib/wavefront/wavefront_sequences.c
+        WFA2-lib/wavefront/wavefront_slab.c
+        WFA2-lib/wavefront/wavefront_termination.c
+        WFA2-lib/wavefront/wavefront_unialign.c
+        WFA2-lib/system/mm_stack.c
+        WFA2-lib/system/mm_allocator.c
+        WFA2-lib/system/profiler_counter.c
+        WFA2-lib/system/profiler_timer.c
+        WFA2-lib/utils/bitmap.c
+        WFA2-lib/utils/dna_text.c
+        WFA2-lib/utils/sequence_buffer.c
+        WFA2-lib/utils/vector.c
+        WFA2-lib/utils/commons.c
+        WFA2-lib/utils/heatmap.c
+        WFA2-lib/alignment/affine2p_penalties.c
+        WFA2-lib/alignment/affine_penalties.c
+        WFA2-lib/alignment/cigar.c
+        WFA2-lib/alignment/cigar_utils.c
+        WFA2-lib/alignment/score_matrix.c)
+
+add_library(anchorwave_wfa2_core STATIC
+        ${ANCHORWAVE_WFA2_SOURCES}
+        src/myImportandFunction/AlignmentAlgorithmSelector.cpp
+        src/myImportandFunction/AlignmentResourceScheduler.cpp
+        src/myImportandFunction/WfaAlignment.cpp)
+target_include_directories(anchorwave_wfa2_core PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/WFA2-lib")
+target_compile_options(anchorwave_wfa2_core PRIVATE
+        -Wall
+        -O3
+        -funroll-loops
+        ${ANCHORWAVE_SIMD_COMPILE_OPTIONS})
+if(ANCHORWAVE_ENABLE_WFA_PARALLEL AND OpenMP_C_FOUND)
+    target_compile_definitions(anchorwave_wfa2_core PRIVATE WFA_PARALLEL)
+    target_link_libraries(anchorwave_wfa2_core PUBLIC OpenMP::OpenMP_C)
+    message(STATUS "AnchorWave inner-WFA OpenMP support: enabled (runtime default: 1 thread)")
+elseif(ANCHORWAVE_ENABLE_WFA_PARALLEL)
+    message(STATUS "AnchorWave inner-WFA OpenMP support: unavailable; max_num_threads remains advisory")
+endif()
+if(UNIX)
+    target_link_libraries(anchorwave_wfa2_core PUBLIC m Threads::Threads)
+endif()
+
+add_library(anchorwave_anchor_scheduler STATIC
+        src/service/AnchorTaskExecutor.cpp
+        src/service/AlignmentGapPlanner.cpp)
+target_include_directories(anchorwave_anchor_scheduler PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(anchorwave_anchor_scheduler PRIVATE
+        -Wall -Wextra -pedantic)
+target_link_libraries(anchorwave_anchor_scheduler PUBLIC Threads::Threads)
+
+add_library(anchorwave_compressed_input STATIC
+        src/io/CompressedInput.cpp)
+target_include_directories(anchorwave_compressed_input PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(anchorwave_compressed_input PRIVATE
+        -Wall -Wextra -pedantic)
+target_link_libraries(anchorwave_compressed_input PUBLIC ZLIB::ZLIB)
+
+option(ANCHORWAVE_BUILD_TESTS "Build AnchorWave unit tests" ON)
+option(ANCHORWAVE_BUILD_BENCHMARKS "Build AnchorWave microbenchmarks" OFF)
+option(ANCHORWAVE_ENABLE_SANITIZERS "Enable ASan and UBSan for testable core targets" OFF)
+if(ANCHORWAVE_ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(anchorwave_trio_core PRIVATE
+            -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_libraries(anchorwave_trio_core PUBLIC -fsanitize=address,undefined)
+    target_compile_options(anchorwave_wfa2_core PRIVATE
+            -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_libraries(anchorwave_wfa2_core PUBLIC -fsanitize=address,undefined)
+    target_compile_options(anchorwave_anchor_scheduler PRIVATE
+            -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_libraries(anchorwave_anchor_scheduler PUBLIC
+            -fsanitize=address,undefined)
+    target_compile_options(anchorwave_compressed_input PRIVATE
+            -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_libraries(anchorwave_compressed_input PUBLIC
+            -fsanitize=address,undefined)
+endif()
+
+if(ANCHORWAVE_BUILD_BENCHMARKS)
+    add_executable(anchorwave_wfa_mode_benchmark
+            benchmarks/WfaMemoryModeBenchmark.cpp)
+    target_include_directories(anchorwave_wfa_mode_benchmark PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_compile_options(anchorwave_wfa_mode_benchmark PRIVATE
+            -Wall -Wextra -pedantic -O3)
+    target_link_libraries(anchorwave_wfa_mode_benchmark PRIVATE
+            anchorwave_wfa2_core Threads::Threads)
+
+    # Replays one real MAF block through every Tier-1 engine.  This is kept
+    # outside the production binary so model calibration can observe
+    # counterfactual runtimes and verify exact-score consistency without
+    # adding a user-facing force-algorithm switch.
+    add_executable(anchorwave_exact_candidate_benchmark
+            benchmarks/ExactCandidateBenchmark.cpp
+            src/myImportandFunction/alignSlidingWindow.cpp
+            src/impl/GetReverseComplementary.cpp
+            src/impl/getSubsequence.cpp
+            src/util/myutil.cpp
+            minimap2/kalloc.c
+            minimap2/ksw2_progress.c
+            minimap2/ksw2_extd2_sse.c
+            minimap2/ksw2_extd2_avx.c)
+    target_include_directories(anchorwave_exact_candidate_benchmark PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_compile_options(anchorwave_exact_candidate_benchmark PRIVATE
+            -Wall -Wextra -pedantic -O3
+            ${ANCHORWAVE_SIMD_COMPILE_OPTIONS})
+    target_link_libraries(anchorwave_exact_candidate_benchmark PRIVATE
+            anchorwave_wfa2_core anchorwave_anchor_scheduler
+            Threads::Threads)
+endif()
+
+if(ANCHORWAVE_BUILD_TESTS)
+    enable_testing()
+    add_executable(anchorwave_trio_tests
+            tests/trio/ManifestReaders_test.cpp
+            tests/trio/BlockProjectionReader_test.cpp
+            tests/trio/FastaEvidenceValidator_test.cpp
+            tests/trio/MafEvidenceReader_test.cpp
+            tests/trio/AlignmentEvidence_test.cpp
+            tests/trio/AlignmentSiteGraph_test.cpp
+            tests/trio/GraphWriters_test.cpp
+            tests/trio/CopyRelationshipResolver_test.cpp
+            tests/trio/LocalizedPoaRepair_test.cpp
+            tests/trio/GraphRepairEngine_test.cpp
+            tests/trio/Phylogeny_test.cpp
+            tests/trio/AncestralInference_test.cpp
+            tests/trio/AncestralAdjacency_test.cpp)
+    target_include_directories(anchorwave_trio_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_compile_options(anchorwave_trio_tests PRIVATE -Wall -Wextra -pedantic)
+    target_link_libraries(anchorwave_trio_tests PRIVATE anchorwave_trio_core gtest_main)
+    add_test(NAME anchorwave_trio_unit COMMAND anchorwave_trio_tests)
+    add_executable(anchorwave_wfa2_tests
+            tests/wfa/AlignmentAlgorithmSelector_test.cpp
+            tests/wfa/WfaAlignment_test.cpp)
+    target_include_directories(anchorwave_wfa2_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_compile_options(anchorwave_wfa2_tests PRIVATE -Wall -Wextra -pedantic)
+    target_link_libraries(anchorwave_wfa2_tests PRIVATE
+            anchorwave_wfa2_core gtest_main Threads::Threads)
+    add_test(NAME anchorwave_wfa2_unit COMMAND anchorwave_wfa2_tests)
+    add_executable(anchorwave_exact_alignment_tests
+            tests/wfa/ExactAlignmentConsistency_test.cpp
+            src/myImportandFunction/alignSlidingWindow.cpp
+            src/impl/GetReverseComplementary.cpp
+            src/impl/getSubsequence.cpp
+            src/util/myutil.cpp
+            minimap2/kalloc.c
+            minimap2/ksw2_progress.c
+            minimap2/ksw2_extd2_sse.c)
+    target_include_directories(anchorwave_exact_alignment_tests PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_compile_options(anchorwave_exact_alignment_tests PRIVATE
+            -Wall -Wextra -pedantic)
+    target_link_libraries(anchorwave_exact_alignment_tests PRIVATE
+            anchorwave_wfa2_core anchorwave_anchor_scheduler
+            gtest_main Threads::Threads)
+    add_test(NAME anchorwave_exact_alignment_unit
+             COMMAND anchorwave_exact_alignment_tests)
+    add_executable(anchorwave_anchor_scheduler_tests
+            tests/anchor/AnchorTaskExecutor_test.cpp
+            tests/anchor/AlignmentGapPlanner_test.cpp
+            tests/anchor/GeneSyntenicQuota_test.cpp
+            tests/anchor/MinimapRadixSort_test.cpp
+            src/impl/geneSyntenic.cpp
+            src/model/AlignmentMatch.cpp)
+    target_include_directories(anchorwave_anchor_scheduler_tests PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_compile_options(anchorwave_anchor_scheduler_tests PRIVATE
+            -Wall -Wextra -pedantic)
+    target_link_libraries(anchorwave_anchor_scheduler_tests PRIVATE
+            anchorwave_anchor_scheduler gtest_main Threads::Threads)
+    add_test(NAME anchorwave_anchor_scheduler_unit
+             COMMAND anchorwave_anchor_scheduler_tests)
+    add_executable(anchorwave_compressed_input_tests
+            tests/io/CompressedInput_test.cpp
+            src/impl/GetReverseComplementary.cpp
+            src/impl/getSubsequence.cpp
+            src/impl/readFastaFile.cpp
+            src/impl/readGffFile.cpp
+            src/model/GenomeBasicFeature.cpp
+            src/model/STRAND.cpp
+            src/model/Transcript.cpp)
+    target_include_directories(anchorwave_compressed_input_tests PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_compile_options(anchorwave_compressed_input_tests PRIVATE
+            -Wall -Wextra -pedantic)
+    target_link_libraries(anchorwave_compressed_input_tests PRIVATE
+            anchorwave_compressed_input gtest_main ZLIB::ZLIB)
+    add_test(NAME anchorwave_compressed_input_unit
+             COMMAND anchorwave_compressed_input_tests)
+    add_executable(anchorwave_memory_tests
+            tests/memory/AlignmentBlockBuffer_test.cpp
+            tests/memory/AlignmentMatchMemory_test.cpp
+            tests/memory/ReadSamMemory_test.cpp
+            src/impl/AlignmentBlockBuffer.cpp
+            src/model/AlignmentMatch.cpp)
+    target_include_directories(anchorwave_memory_tests PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_compile_options(anchorwave_memory_tests PRIVATE
+            -Wall -Wextra -pedantic)
+    target_link_libraries(anchorwave_memory_tests PRIVATE gtest_main)
+    add_test(NAME anchorwave_memory_unit COMMAND anchorwave_memory_tests)
+    add_test(NAME anchorwave_trio_cli_smoke
+             COMMAND ${CMAKE_COMMAND}
+                     -DANCHORWAVE_EXE=$<TARGET_FILE:anchorwave>
+                     -DFIXTURE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/testdata/trio
+                     -DOUTPUT_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/trio_cli_smoke
+                     -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/trio/cli_smoke.cmake)
+    find_program(ANCHORWAVE_PYTHON3_EXECUTABLE NAMES python3)
+    if(ANCHORWAVE_PYTHON3_EXECUTABLE)
+        add_test(NAME anchorwave_trio_workflow_unit
+                 COMMAND ${ANCHORWAVE_PYTHON3_EXECUTABLE} -m unittest discover
+                         -s ${CMAKE_CURRENT_SOURCE_DIR}/workflow/tests -v)
+        set_tests_properties(anchorwave_trio_workflow_unit PROPERTIES
+                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+    else()
+        message(WARNING "python3 not found: trio workflow tests are disabled")
+    endif()
+    if(ANCHORWAVE_ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(anchorwave_trio_tests PRIVATE
+                -fsanitize=address,undefined -fno-omit-frame-pointer)
+        target_link_libraries(anchorwave_trio_tests PRIVATE -fsanitize=address,undefined)
+        target_compile_options(anchorwave_wfa2_tests PRIVATE
+                -fsanitize=address,undefined -fno-omit-frame-pointer)
+        target_link_libraries(anchorwave_wfa2_tests PRIVATE -fsanitize=address,undefined)
+        target_compile_options(anchorwave_exact_alignment_tests PRIVATE
+                -fsanitize=address,undefined -fno-omit-frame-pointer)
+        target_link_libraries(anchorwave_exact_alignment_tests PRIVATE
+                -fsanitize=address,undefined)
+        target_compile_options(anchorwave_anchor_scheduler_tests PRIVATE
+                -fsanitize=address,undefined -fno-omit-frame-pointer)
+        target_link_libraries(anchorwave_anchor_scheduler_tests PRIVATE
+                -fsanitize=address,undefined)
+        target_compile_options(anchorwave_compressed_input_tests PRIVATE
+                -fsanitize=address,undefined -fno-omit-frame-pointer)
+        target_link_libraries(anchorwave_compressed_input_tests PRIVATE
+                -fsanitize=address,undefined)
+    endif()
+endif()
+
 
 add_executable(anchorwave
         googletest
@@ -54,6 +384,8 @@ add_executable(anchorwave
 
         src/impl/deNovoGenomeVariantCallingMultipleThreads.cpp
         src/impl/deNovoGenomeVariantCalling.h
+        src/impl/AlignmentBlockBuffer.cpp
+        src/impl/AlignmentBlockBuffer.h
         src/impl/geneSyntenic.cpp
         src/impl/geneSyntenic.h
         src/impl/GetReverseComplementary.cpp
@@ -91,93 +423,6 @@ add_executable(anchorwave
         src/util/myutil.h
 
 
-        WFA2-lib/alignment/affine2p_penalties.c
-        WFA2-lib/alignment/affine_penalties.c
-        WFA2-lib/alignment/cigar.c
-        WFA2-lib/alignment/score_matrix.c
-        WFA2-lib/system/mm_allocator.c
-        WFA2-lib/system/mm_stack.c
-        WFA2-lib/system/profiler_counter.c
-        WFA2-lib/system/profiler_timer.c
-        WFA2-lib/utils/bitmap.c
-        WFA2-lib/utils/commons.c
-        WFA2-lib/utils/dna_text.c
-        WFA2-lib/utils/heatmap.c
-        WFA2-lib/utils/sequence_buffer.c
-        WFA2-lib/utils/string_padded.c
-        WFA2-lib/utils/vector.c
-        WFA2-lib/wavefront/wavefront_align.c
-        WFA2-lib/wavefront/wavefront_aligner.c
-        WFA2-lib/wavefront/wavefront_attributes.c
-        WFA2-lib/wavefront/wavefront_backtrace_buffer.c
-        WFA2-lib/wavefront/wavefront_backtrace.c
-        WFA2-lib/wavefront/wavefront_backtrace_offload.c
-        WFA2-lib/wavefront/wavefront_bialign.c
-        WFA2-lib/wavefront/wavefront.c
-        WFA2-lib/wavefront/wavefront_components.c
-        WFA2-lib/wavefront/wavefront_compute_affine2p.c
-        WFA2-lib/wavefront/wavefront_compute_affine.c
-        WFA2-lib/wavefront/wavefront_compute.c
-        WFA2-lib/wavefront/wavefront_compute_edit.c
-        WFA2-lib/wavefront/wavefront_compute_linear.c
-        WFA2-lib/wavefront/wavefront_debug.c
-        WFA2-lib/wavefront/wavefront_display.c
-        WFA2-lib/wavefront/wavefront_extend.c
-        WFA2-lib/wavefront/wavefront_heuristic.c
-        WFA2-lib/wavefront/wavefront_pcigar.c
-        WFA2-lib/wavefront/wavefront_penalties.c
-        WFA2-lib/wavefront/wavefront_plot.c
-        WFA2-lib/wavefront/wavefront_slab.c
-        WFA2-lib/wavefront/wavefront_unialign.c
-        WFA2-lib/wavefront/wavefront_unialign.h
-        WFA2-lib/wavefront/wavefront_bialigner.c
-        WFA2-lib/wavefront/wavefront_bialigner.h
-        WFA2-lib/alignment/affine2p_penalties.h
-        WFA2-lib/alignment/affine_penalties.h
-        WFA2-lib/alignment/cigar.h
-        WFA2-lib/alignment/linear_penalties.h
-        WFA2-lib/alignment/score_matrix.h
-        WFA2-lib/scripts/fasta2seq.sh
-        WFA2-lib/scripts/seq2fasta.sh
-        WFA2-lib/scripts/wfa.alg.cmp.score.sh
-        WFA2-lib/system/mm_allocator.h
-        WFA2-lib/system/mm_stack.h
-        WFA2-lib/system/profiler_counter.h
-        WFA2-lib/system/profiler_timer.h
-        WFA2-lib/utils/bitmap.h
-        WFA2-lib/utils/commons.h
-        WFA2-lib/utils/dna_text.h
-        WFA2-lib/utils/heatmap.h
-        WFA2-lib/utils/sequence_buffer.h
-        WFA2-lib/utils/string_padded.h
-        WFA2-lib/utils/vector.h
-        WFA2-lib/wavefront/wavefront_aligner.h
-        WFA2-lib/wavefront/wavefront_align.h
-        WFA2-lib/wavefront/wavefront_attributes.h
-        WFA2-lib/wavefront/wavefront_backtrace_buffer.h
-        WFA2-lib/wavefront/wavefront_backtrace.h
-        WFA2-lib/wavefront/wavefront_backtrace_offload.h
-        WFA2-lib/wavefront/wavefront_bialign.h
-        WFA2-lib/wavefront/wavefront_components.h
-        WFA2-lib/wavefront/wavefront_compute_affine2p.h
-        WFA2-lib/wavefront/wavefront_compute_affine.h
-        WFA2-lib/wavefront/wavefront_compute_edit.h
-        WFA2-lib/wavefront/wavefront_compute.h
-        WFA2-lib/wavefront/wavefront_compute_linear.h
-        WFA2-lib/wavefront/wavefront_debug.h
-        WFA2-lib/wavefront/wavefront_display.h
-        WFA2-lib/wavefront/wavefront_extend.h
-        WFA2-lib/wavefront/wavefront.h
-        WFA2-lib/wavefront/wavefront_heuristic.h
-        WFA2-lib/wavefront/wavefront_offset.h
-        WFA2-lib/wavefront/wavefront_pcigar.h
-        WFA2-lib/wavefront/wavefront_penalties.h
-        WFA2-lib/wavefront/wavefront_plot.h
-        WFA2-lib/wavefront/wavefront_slab.h
-        WFA2-lib/bindings/cpp/WFAligner.cpp
-        WFA2-lib/bindings/cpp/WFAligner.hpp
-
-
         minimap2/align.c
         minimap2/bseq.c
         minimap2/chain.c
@@ -186,6 +431,7 @@ add_executable(anchorwave
         minimap2/hit.c
         minimap2/index.c
         minimap2/kalloc.c
+        minimap2/ksw2_progress.c
         minimap2/ksw2_dispatch.c
         minimap2/ksw2_extd2_sse.c
         minimap2/ksw2_extd2_avx.c
@@ -221,9 +467,12 @@ target_compile_options(anchorwave PRIVATE
         -Wall
         -O3
         -funroll-loops
-        $<$<BOOL:${ANCHORWAVE_NATIVE_SIMD}>:-march=native>)
+        ${ANCHORWAVE_SIMD_COMPILE_OPTIONS})
 
-target_link_libraries(anchorwave PRIVATE gtest gtest_main ZLIB::ZLIB Threads::Threads ${CMAKE_DL_LIBS})
+target_link_libraries(anchorwave PRIVATE anchorwave_trio_core anchorwave_wfa2_core
+        anchorwave_anchor_scheduler anchorwave_compressed_input
+        gtest gtest_main ZLIB::ZLIB Threads::Threads
+        ${CMAKE_DL_LIBS})
 if(UNIX AND NOT APPLE)
     target_link_libraries(anchorwave PRIVATE rt m)
 elseif(UNIX)

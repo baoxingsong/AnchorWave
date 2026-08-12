@@ -29,7 +29,10 @@
  * DESCRIPTION: Wavefront Alignment Algorithms benchmarking tool
  */
 
+
+#ifdef WFA_PARALLEL
 #include <omp.h>
+#endif
 
 #include "align_benchmark_params.h"
 
@@ -51,6 +54,24 @@
 #include "benchmark/benchmark_gap_affine.h"
 #include "benchmark/benchmark_gap_affine2p.h"
 
+/*
+ * WFA lambda (custom match function)
+ */
+typedef struct {
+  char* pattern;
+  int pattern_length;
+  char* text;
+  int text_length;
+} match_function_params_t;
+match_function_params_t lambda_params;
+// Simplest Extend-matching function (for testing purposes)
+int lambda_function(int v,int h,void* arguments) {
+  // Extract parameters
+  match_function_params_t* const match_arguments = (match_function_params_t*)arguments;
+  // Check match
+  if (v >= match_arguments->pattern_length || h >= match_arguments->text_length) return 0;
+  return (match_arguments->pattern[v] == match_arguments->text[h]);
+}
 /*
  * Algorithms
  */
@@ -116,9 +137,7 @@ void align_pairwise_test() {
       pattern,strlen(pattern),text,strlen(text));
   // CIGAR
   fprintf(stderr,">> WFA2");
-  cigar_print_pretty(stderr,
-      pattern,strlen(pattern),text,strlen(text),
-      wf_aligner->cigar,wf_aligner->mm_allocator);
+  cigar_print_pretty(stderr,wf_aligner->cigar,pattern,strlen(pattern),text,strlen(text));
   fprintf(stderr,"SCORE: %d \n",cigar_score_gap_affine(
       wf_aligner->cigar,&affine_penalties));
   // Plot
@@ -201,17 +220,22 @@ wavefront_aligner_t* align_input_configure_wavefront(
       break;
   }
   // Select alignment form
-  attributes.alignment_form.span = (parameters.endsfree) ? alignment_endsfree : alignment_end2end;
-  // Misc
-  if (parameters.wfa_match_funct_arguments != NULL) {
-    attributes.match_funct = parameters.wfa_match_funct;
-    attributes.match_funct_arguments = parameters.wfa_match_funct_arguments;
+  if (parameters.align_span_extension) {
+    attributes.alignment_form.span = alignment_endsfree;
+    attributes.alignment_form.extension = true;
+  } else if (parameters.align_span_endsfree) {
+    attributes.alignment_form.span = alignment_endsfree;
+    attributes.alignment_form.extension = false;
+  } else { // Global
+    attributes.alignment_form.span = alignment_end2end;
+    attributes.alignment_form.extension = false;
   }
+  // Misc
   attributes.plot.enabled = (parameters.plot != 0);
   attributes.plot.align_level = (parameters.plot < 0) ? -1 : parameters.plot - 1;
   attributes.system.verbose = parameters.verbose;
   attributes.system.max_memory_abort = parameters.wfa_max_memory;
-  attributes.system.max_alignment_score = parameters.wfa_max_score;
+  attributes.system.max_alignment_steps = parameters.wfa_max_steps;
   attributes.system.max_num_threads = parameters.wfa_max_threads;
   // Allocate
   return wavefront_aligner_new(&attributes);
@@ -224,8 +248,6 @@ void align_input_configure_global(
   align_input->linear_penalties = parameters.linear_penalties;
   align_input->affine_penalties = parameters.affine_penalties;
   align_input->affine2p_penalties = parameters.affine2p_penalties;
-  // Alignment form
-  align_input->ends_free = parameters.endsfree;
   // Output
   align_input->output_file = parameters.output_file;
   align_input->output_full = parameters.output_full;
@@ -233,6 +255,10 @@ void align_input_configure_global(
   align_input->mm_allocator = mm_allocator_new(BUFFER_SIZE_1M);
   // WFA
   if (align_benchmark_is_wavefront(parameters.algorithm)) {
+    if (parameters.wfa_lambda) {
+      align_input->wfa_match_funct = lambda_function;
+      align_input->wfa_match_funct_arguments = &lambda_params;
+    }
     align_input->wf_aligner = align_input_configure_wavefront(align_input);
   } else {
     align_input->wf_aligner = NULL;
@@ -255,7 +281,7 @@ void align_input_configure_global(
 void align_input_configure_local(
     align_input_t* const align_input) {
   // Ends-free configuration
-  if (parameters.endsfree) {
+  if (parameters.align_span_endsfree) {
     const int plen = align_input->pattern_length;
     const int tlen = align_input->text_length;
     align_input->pattern_begin_free = nominal_prop_u32(plen,parameters.pattern_begin_free);
@@ -269,11 +295,11 @@ void align_input_configure_local(
     }
   }
   // Custom extend-match function
-  if (parameters.wfa_match_funct != NULL) {
-    match_function_params.pattern = align_input->pattern;
-    match_function_params.pattern_length = align_input->pattern_length;
-    match_function_params.text = align_input->text;
-    match_function_params.text_length = align_input->text_length;
+  if (parameters.wfa_lambda) {
+    lambda_params.pattern = align_input->pattern;
+    lambda_params.pattern_length = align_input->pattern_length;
+    lambda_params.text = align_input->text;
+    lambda_params.text_length = align_input->text_length;
   }
 }
 void align_benchmark_free(
@@ -293,19 +319,21 @@ bool align_benchmark_read_input(
     const int seqs_processed,
     align_input_t* const align_input) {
   // Parameters
-  int line1_length=0, line2_length=0;
+  int line1_length = 0, line2_length = 0;
   // Read queries
-  line1_length = getline(line1,line1_allocated,input_file);
-  if (line1_length==-1) return false;
-  line2_length = getline(line2,line2_allocated,input_file);
-  if (line1_length==-1) return false;
+  line1_length = getline(line1, line1_allocated, input_file);
+  if (line1_length == -1) return false;
+  line2_length = getline(line2, line2_allocated, input_file);
+  if (line2_length == -1) return false;
   // Configure input
   align_input->sequence_id = seqs_processed;
   align_input->pattern = *line1 + 1;
-  align_input->pattern_length = line1_length - 2;
+  align_input->pattern_length  = line1_length - 1;                     // start with removing '>'
+  align_input->pattern_length -= ((*line1)[line1_length - 1] == '\n'); // remove the '\n' character (if needed)
   align_input->pattern[align_input->pattern_length] = '\0';
   align_input->text = *line2 + 1;
-  align_input->text_length = line2_length - 2;
+  align_input->text_length  = line2_length - 1;                        // start with removing '>'
+  align_input->text_length -= ((*line2)[line2_length - 1] == '\n');    // remove the '\n' character (if needed)
   align_input->text[align_input->text_length] = '\0';
   return true;
 }
@@ -424,7 +452,6 @@ void align_benchmark_run_algorithm(
 void align_benchmark_sequential() {
   // PROFILE
   timer_reset(&parameters.timer_global);
-  timer_start(&parameters.timer_global);
   // I/O files
   parameters.input_file = fopen(parameters.input_filename, "r");
   if (parameters.input_file == NULL) {
@@ -447,7 +474,9 @@ void align_benchmark_sequential() {
         seqs_processed,&align_input);
     if (!input_read) break;
     // Execute the selected algorithm
+    timer_start(&parameters.timer_global); // PROFILE
     align_benchmark_run_algorithm(&align_input);
+    timer_stop(&parameters.timer_global); // PROFILE
     // Update progress
     ++seqs_processed;
     if (++progress == parameters.progress) {
@@ -458,12 +487,12 @@ void align_benchmark_sequential() {
     // mm_allocator_print(stderr,align_input.wf_aligner->mm_allocator,false);
     // mm_allocator_print(stderr,align_input.wf_aligner->bialigner->alg_forward->mm_allocator,false);
     // mm_allocator_print(stderr,align_input.wf_aligner->bialigner->alg_reverse->mm_allocator,false);
-    // mm_allocator_print(stderr,align_input.wf_aligner->bialigner->alg_subsidiary->mm_allocator,false);
+    // mm_allocator_print(stderr,align_input.wf_aligner->bialigner->wf_forward_base->mm_allocator,false);
+    // mm_allocator_print(stderr,align_input.wf_aligner->bialigner->wf_reverse_base->mm_allocator,false);
     // Plot
     if (parameters.plot != 0) align_benchmark_plot_wf(&align_input,seqs_processed);
   }
   // Print benchmark results
-  timer_stop(&parameters.timer_global);
   if (parameters.verbose >= 0) align_benchmark_print_results(&align_input,seqs_processed,true);
   // Free
   align_benchmark_free(&align_input);
@@ -473,9 +502,12 @@ void align_benchmark_sequential() {
   free(parameters.line2);
 }
 void align_benchmark_parallel() {
+  #ifndef WFA_PARALLEL
+    fprintf(stderr,"Parallel execution not supported. Compile with BUILD_WFA_PARALLEL=1\n");
+    exit(1);
+  #endif
   // PROFILE
   timer_reset(&parameters.timer_global);
-  timer_start(&parameters.timer_global);
   // Open input file
   parameters.input_file = fopen(parameters.input_filename, "r");
   if (parameters.input_file == NULL) {
@@ -509,9 +541,12 @@ void align_benchmark_parallel() {
     }
     if (seqs_batch == 0) break;
     // Parallel processing of the sequences batch
+    timer_start(&parameters.timer_global); // PROFILE
+#ifdef WFA_PARALLEL
     #pragma omp parallel num_threads(parameters.num_threads)
     {
       int tid = omp_get_thread_num();
+
       #pragma omp for
       for (int seq_idx=0;seq_idx<seqs_batch;++seq_idx) {
         // Configure sequence
@@ -525,6 +560,8 @@ void align_benchmark_parallel() {
         align_benchmark_run_algorithm(align_input+tid);
       }
     }
+#endif
+    timer_stop(&parameters.timer_global); // PROFILE
     // Update progress
     seqs_processed += seqs_batch;
     progress += seqs_batch;
@@ -536,7 +573,6 @@ void align_benchmark_parallel() {
     //mm_allocator_print(stderr,align_input->wf_aligner->mm_allocator,false);
   }
   // Print benchmark results
-  timer_stop(&parameters.timer_global);
   if (parameters.verbose >= 0) align_benchmark_print_results(align_input,seqs_processed,true);
   // Free
   for (int tid=0;tid<parameters.num_threads;++tid) {

@@ -31,6 +31,7 @@
 
 #include "benchmark_check.h"
 #include "alignment/score_matrix.h"
+#include "alignment/cigar_utils.h"
 #include "indel/indel_dp.h"
 #include "edit/edit_dp.h"
 #include "gap_linear/nw.h"
@@ -133,8 +134,7 @@ void benchmark_check_alignment_indel(
       &score_matrix,align_input->pattern_length+1,
       align_input->text_length+1,align_input->mm_allocator);
   cigar_t* const cigar = cigar_new(
-      align_input->pattern_length+align_input->text_length,
-      align_input->mm_allocator);
+      align_input->pattern_length+align_input->text_length);
   indel_dp_compute(&score_matrix,
       align_input->pattern,align_input->pattern_length,
       align_input->text,align_input->text_length,cigar);
@@ -156,8 +156,7 @@ void benchmark_check_alignment_edit(
       &score_matrix,align_input->pattern_length+1,
       align_input->text_length+1,align_input->mm_allocator);
   cigar_t* const cigar = cigar_new(
-      align_input->pattern_length+align_input->text_length,
-      align_input->mm_allocator);
+      align_input->pattern_length+align_input->text_length);
   if (align_input->check_bandwidth <= 0) {
     edit_dp_align(&score_matrix,
         align_input->pattern,align_input->pattern_length,
@@ -187,8 +186,7 @@ void benchmark_check_alignment_gap_linear(
       &score_matrix,align_input->pattern_length+1,
       align_input->text_length+1,align_input->mm_allocator);
   cigar_t* const cigar = cigar_new(
-      align_input->pattern_length+align_input->text_length,
-      align_input->mm_allocator);
+      align_input->pattern_length+align_input->text_length);
   nw_align(&score_matrix,
       align_input->check_linear_penalties,
       align_input->pattern,align_input->pattern_length,
@@ -214,8 +212,7 @@ void benchmark_check_alignment_gap_affine(
       &affine_matrix,align_input->pattern_length+1,
       align_input->text_length+1,align_input->mm_allocator);
   cigar_t* const cigar = cigar_new(
-      align_input->pattern_length+align_input->text_length,
-      align_input->mm_allocator);
+      align_input->pattern_length+align_input->text_length);
   // Compute correct
   if (align_input->check_bandwidth <= 0) {
     swg_align(&affine_matrix,align_input->check_affine_penalties,
@@ -248,8 +245,7 @@ void benchmark_check_alignment_gap_affine2p(
       &affine_matrix,align_input->pattern_length+1,
       align_input->text_length+1,align_input->mm_allocator);
   cigar_t* const cigar = cigar_new(
-      align_input->pattern_length+align_input->text_length,
-      align_input->mm_allocator);
+      align_input->pattern_length+align_input->text_length);
   // Compute correct
   affine2p_dp_align(
       &affine_matrix,align_input->check_affine2p_penalties,

@@ -16,20 +16,80 @@
  */
 
 #include "controlLayer.h"
+#include "myImportandFunction/AlignmentAlgorithmSelector.h"
+#include "myImportandFunction/WfaAlignment.h"
+#include "service/NovelAnchorThreshold.h"
+
+namespace {
+
+bool configureAlignmentTimePolicy(InputParser &inputParser) {
+    if (inputParser.cmdOptionExists("--biwfa-max-minutes")) {
+        std::cerr << "--biwfa-max-minutes was removed; use -bt instead"
+                  << std::endl;
+        return false;
+    }
+    const bool hasShort = inputParser.cmdOptionExists("-bt");
+    try {
+        const double minutes = hasShort
+                               ? std::stod(inputParser.getCmdOption("-bt"))
+                               : 0.0;
+        anchorwave::configureExactAlignmentMaximumEstimatedMinutes(minutes);
+    } catch (const std::exception &error) {
+        std::cerr << "invalid exact-alignment time policy: " << error.what()
+                  << std::endl;
+        return false;
+    }
+    return true;
+}
+
+bool configureAlignmentTrace(InputParser &inputParser) {
+    try {
+        anchorwave::configureAlignmentTraceFile(
+                inputParser.cmdOptionExists("--alignment-trace")
+                ? inputParser.getCmdOption("--alignment-trace")
+                : std::string());
+    } catch (const std::exception &error) {
+        std::cerr << "invalid --alignment-trace: " << error.what()
+                  << std::endl;
+        return false;
+    }
+    return true;
+}
+
+bool configureNovelAnchorMinimumLength(InputParser &inputParser,
+                                       int64_t &minimumLength) {
+    if (!inputParser.cmdOptionExists("-fa3")) {
+        return true;
+    }
+    try {
+        minimumLength = std::stoll(inputParser.getCmdOption("-fa3"));
+        (void)anchorwave::novelAnchorMinimumArea(minimumLength);
+    } catch (const std::exception &error) {
+        std::cerr << "invalid parameter -fa3: " << error.what() << std::endl;
+        return false;
+    }
+    return true;
+}
+
+}  // namespace
 
 int gff2seq(int argc, char **argv) {
     std::stringstream usage;
     usage << "Usage: " << PROGRAMNAME << " gff2seq -i inputGffFile -r inputGenome -o outputSequences " << std::endl <<
           "Options" << std::endl <<
           " -h        produce help message" << std::endl <<
-          " -i FILE   reference genome annotation in GFF/GTF format" << std::endl <<
-          " -r FILE   reference genome sequence in fasta format" << std::endl <<
+          " -i FILE   reference GFF/GTF (plain or gzip/BGZF; auto-detected)" << std::endl <<
+          " -r FILE   reference FASTA (plain or gzip/BGZF; auto-detected)" << std::endl <<
           " -o FILE   output file of the longest CDS/exon for each gene" << std::endl <<
           " -x        use exon records instead of CDS from the GFF file" << std::endl <<
           " -m INT    minimum exon length to output (default: 20)" << std::endl << std::endl;
 
     InputParser inputParser(argc, argv);
-    if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help") || !inputParser.cmdOptionExists("-i") || !inputParser.cmdOptionExists("-r") || !inputParser.cmdOptionExists("-o")) {
+    if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help")) {
+        std::cerr << usage.str();
+        return 0;
+    }
+    if (!inputParser.cmdOptionExists("-i") || !inputParser.cmdOptionExists("-r") || !inputParser.cmdOptionExists("-o")) {
         std::cerr << usage.str();
         return 1;
     } else if (inputParser.cmdOptionExists("-i") && inputParser.cmdOptionExists("-r") && inputParser.cmdOptionExists("-o") ) {
@@ -220,7 +280,7 @@ int genomeAlignment(int argc, char **argv) {
     double MIN_ALIGNMENT_SCORE = 2;
     bool considerInversion = false;
 
-    int32_t wfaSize3 = 100000; // if the inter-anchor length is shorter than this value, stop trying to find new anchors
+    int64_t wfaSize3 = 100000; // novel-anchor search requires ref_len * query_len > wfaSize3^2
     int64_t windowWidth = 100000;
     int expectedCopies = 1;
     double maximumSimilarity = 0.6; // the maximum simalarity between secondary hist the primary hit. If the second hit is too similary with primary hit, that is unwanted duplications
@@ -228,29 +288,37 @@ int genomeAlignment(int argc, char **argv) {
     bool searchForNewAnchors = true;
 
     int threads = 1;
+    uint64_t maxProcessMemoryBytes = 0;
     bool exonModel = false;
 
     usage << "Usage: " << PROGRAMNAME
           << " genoAli -i refGffFile -r refGenome -a cds.sam -as cds.fa -ar ref.sam -s targetGenome -n outputAnchorFile -o output.maf -f output.fragmentation.maf " << std::endl <<
           "Options" << std::endl <<
           " -h           produce help message" << std::endl <<
-          " -i   FILE    reference GFF/GTF file" << std::endl <<
-          " -r   FILE    reference genome sequence file in fasta format" << std::endl <<
+          " -i   FILE    reference GFF/GTF (plain or gzip/BGZF; auto-detected)" << std::endl <<
+          " -r   FILE    reference FASTA (plain or gzip/BGZF; auto-detected)" << std::endl <<
           " -as  FILE    anchor sequence file. (output from the gff2seq command)" << std::endl <<
           " -a   FILE    sam file generated by mapping conserved sequence to query genome" << std::endl <<
-          " -s   FILE    target genome sequence file in fasta format" << std::endl <<
+          " -s   FILE    target FASTA (plain or gzip/BGZF; auto-detected)" << std::endl <<
           "              Those sequences with the same name in the reference genome and query genome file would be aligned" << std::endl <<
           " -n   FILE    output anchors file" << std::endl <<
           " -o   FILE    output file in maf format" << std::endl <<
           " -f   FILE    output sequence alignment for each anchor/inter-anchor region in maf format" << std::endl <<
-          " -b   FILE    output the sequence alignment method used for each anchor/inter-anchor region, in bed format" << std::endl <<
-          " -t   INT     number of threads (default: " << threads << ")" << std::endl <<
+          " -b   FILE    output the actual alignment method for each interval in BED format" << std::endl <<
+          "              all WFA memory modes are reported as WAVEFRONT" << std::endl <<
+          " -t   INT     maximum number of anchor-organization and alignment threads (default: " << threads << ")" << std::endl <<
+          " -M   FLOAT   predictive maximum total AnchorWave memory in GiB" << std::endl <<
+          "              enables dynamic scheduling; must be at least w^2 bytes" << std::endl <<
+          " -bt  FLOAT   exact-DP prediction/runtime ceiling per interval in minutes (default: 0)" << std::endl <<
+          "              0 selects exact-first mode; a positive value selects balanced mode" << std::endl <<
           " -m   INT     minimum exon length to use (default: " << minExon << ", should be identical with the setting of gff2seq function)" << std::endl <<
           " -mi  DOUBLE  minimum full-length CDS anchor hit similarity to use (default:" << minimumSimilarity << ")" << std::endl <<
           " -mi2 DOUBLE  minimum novel anchor hit similarity to use (default:" << minimumSimilarity2 << ")" << std::endl <<
           " -ar  FILE    sam file generated by mapping conserved sequence to reference genome" << std::endl <<
-          " -w   INT     sequence alignment window width (default: " << windowWidth << ")" << std::endl <<
-          " -fa3 INT     if the inter-anchor length is shorter than this value, stop trying to find new anchors (default: " << wfaSize3 << ")" << std::endl <<
+          " -w   INT     alignment window and hard per-thread algorithm budget w^2 bytes" << std::endl <<
+          "              (default: " << windowWidth << ", about 9.3 GiB per thread)" << std::endl <<
+          " -fa3 INT     minimum side length for novel-anchor search: require" << std::endl <<
+          "              reference_length * query_length > fa3^2 (default: " << wfaSize3 << ")" << std::endl <<
           " -B   INT     mismatching penalty (default: " << mismatchingPenalty << ")" << std::endl <<
           " -O1  INT     gap open penalty (default: " << openGapPenalty1 << ")" << std::endl <<
           " -E1  INT     gap extension penalty (default: " << extendGapPenalty1 << ")" << std::endl <<
@@ -271,11 +339,16 @@ int genomeAlignment(int argc, char **argv) {
 
     if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help")) {
         std::cerr << usage.str();
-        return 1;
+        return 0;
     }
     else if (inputParser.cmdOptionExists("-i") && inputParser.cmdOptionExists("-r") &&
                inputParser.cmdOptionExists("-a") && inputParser.cmdOptionExists("-s") && inputParser.cmdOptionExists("-as") &&
                (inputParser.cmdOptionExists("-n") || inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-o") || inputParser.cmdOptionExists("-l"))) {
+
+        if (!configureAlignmentTimePolicy(inputParser) ||
+            !configureAlignmentTrace(inputParser)) {
+            return 1;
+        }
 
         std::string refGffFilePath = inputParser.getCmdOption("-i");
         std::string path_ref_GenomeSequence = inputParser.getCmdOption("-r");
@@ -300,6 +373,10 @@ int genomeAlignment(int argc, char **argv) {
 
         if (inputParser.cmdOptionExists("-t")) {
             threads = std::stoi(inputParser.getCmdOption("-t"));
+            if (threads <= 0) {
+                std::cerr << "parameter -t should be a positive integer" << std::endl;
+                return 1;
+            }
         }
 
         if (inputParser.cmdOptionExists("-m")) {
@@ -317,8 +394,8 @@ int genomeAlignment(int argc, char **argv) {
             referenceSamFilePath = inputParser.getCmdOption("-ar");
         }
 
-        if (inputParser.cmdOptionExists("-fa3")) {
-            wfaSize3 = std::stoi(inputParser.getCmdOption("-fa3"));
+        if (!configureNovelAnchorMinimumLength(inputParser, wfaSize3)) {
+            return 1;
         }
 
         if (inputParser.cmdOptionExists("-B")) {
@@ -388,7 +465,26 @@ int genomeAlignment(int argc, char **argv) {
             maximumSimilarity = std::stod(inputParser.getCmdOption("-y"));
         }
         if (inputParser.cmdOptionExists("-w")) {
-            windowWidth = std::stoi(inputParser.getCmdOption("-w"));
+            windowWidth = std::stoll(inputParser.getCmdOption("-w"));
+            if (windowWidth <= 0) {
+                std::cerr << "parameter -w should be a positive integer" << std::endl;
+                return 1;
+            }
+        }
+        if (inputParser.cmdOptionExists("-M")) {
+            try {
+                maxProcessMemoryBytes = anchorwave::memoryLimitBytesFromGiB(
+                        std::stod(inputParser.getCmdOption("-M")));
+            } catch (const std::exception &error) {
+                std::cerr << "invalid parameter -M: " << error.what() << std::endl;
+                return 1;
+            }
+            if (maxProcessMemoryBytes <
+                    anchorwave::wfaMemoryBudgetBytes(windowWidth)) {
+                std::cerr << "parameter -M must provide at least -w squared bytes"
+                          << std::endl;
+                return 1;
+            }
         }
 
         if (inputParser.cmdOptionExists("-ns")) {
@@ -426,7 +522,8 @@ int genomeAlignment(int argc, char **argv) {
             setupAnchorsWithSpliceAlignmentResult(refGffFilePath, cdsSequenceFile, samFilePath, map_v_am,
                                                   inversion_PENALTY, MIN_ALIGNMENT_SCORE, considerInversion, minExon, windowWidth, minimumSimilarity, minimumSimilarity2,
                                                   map_ref, map_qry,
-                                                  expectedCopies, maximumSimilarity, referenceSamFilePath, wfaSize3, searchForNewAnchors, exonModel);
+                                                  expectedCopies, maximumSimilarity, referenceSamFilePath, wfaSize3, searchForNewAnchors, exonModel,
+                                                  threads);
 
             std::cout << "setupAnchorsWithSpliceAlignmentResult done!" << std::endl;
 
@@ -458,7 +555,7 @@ int genomeAlignment(int argc, char **argv) {
 
                 for (std::map < std::string, std::vector < AlignmentMatch >> ::iterator it = map_v_am.begin(); it != map_v_am.end(); ++it) {
                     ofile << "#block begin" << std::endl;
-                    std::vector < AlignmentMatch > v_am = it->second;
+                    const std::vector<AlignmentMatch> &v_am = it->second;
                     blockIndex++;
                     bool hasInversion = false;
                     for (size_t i = 0; i < v_am.size(); ++i) {
@@ -541,7 +638,7 @@ int genomeAlignment(int argc, char **argv) {
                                              outPutMafFile, outPutFragedFile, outPutBedFile,
                                              matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1,
                                              openGapPenalty2, extendGapPenalty2,
-                                             threads);
+                                             threads, maxProcessMemoryBytes);
 
             std::cout << "AnchorWave done!" << std::endl;
         }
@@ -701,7 +798,7 @@ int proportionalAlignment(int argc, char **argv) {
     double minimumSimilarity = 0;
     double minimumSimilarity2 = 0;
 
-    int32_t wfaSize3 = 100000; // if the inter-anchor length is shorter than this value, stop trying to find new anchors
+    int64_t wfaSize3 = 100000; // novel-anchor search requires ref_len * query_len > wfaSize3^2
     int64_t windowWidth = 100000;
     int expectedCopies = 1;
     double maximumSimilarity = 0.6;
@@ -717,6 +814,7 @@ int proportionalAlignment(int argc, char **argv) {
     int queryMaximumTimes = 2;
 
     int threads = 1;
+    uint64_t maxProcessMemoryBytes = 0;
     bool exonModel = false;
     std::stringstream usage;
 
@@ -724,18 +822,25 @@ int proportionalAlignment(int argc, char **argv) {
           << " proali -i refGffFile -r refGenome -a cds.sam -as cds.fa -ar ref.sam -s targetGenome -n outputAnchorFile -o output.maf -f output.fragmentation.maf -R 1 -Q 1" << std::endl <<
           "Options" << std::endl <<
           " -h           produce help message" << std::endl <<
-          " -i   FILE    reference GFF/GTF file" << std::endl <<
-          " -r   FILE    reference genome sequence" << std::endl <<
+          " -i   FILE    reference GFF/GTF (plain or gzip/BGZF; auto-detected)" << std::endl <<
+          " -r   FILE    reference FASTA (plain or gzip/BGZF; auto-detected)" << std::endl <<
           " -as  FILE    anchor sequence file. (output from the gff2seq command)" << std::endl <<
           " -a   FILE    sam file by mapping conserved sequence to query genome" << std::endl <<
-          " -s   FILE    target genome sequence" << std::endl <<
+          " -s   FILE    target FASTA (plain or gzip/BGZF; auto-detected)" << std::endl <<
           " -n   FILE    output anchors file" << std::endl <<
           " -o   FILE    output file in maf format" << std::endl <<
           " -f   FILE    output sequence alignment for each anchor/inter-anchor region in maf format" << std::endl <<
-          " -b   FILE    output the sequence alignment method used for each anchor/inter-anchor region, in bed format" << std::endl <<
-          " -t   INT     number of threads (default: " << threads << ")" << std::endl <<
-          " -fa3 INT     if the inter-anchor length is shorter than this value, stop trying to find new anchors (default: " << wfaSize3 << ")" << std::endl <<
-          " -w   INT     sequence alignment window width (default: " << windowWidth << ")" << std::endl <<
+          " -b   FILE    output the actual alignment method for each interval in BED format" << std::endl <<
+          "              all WFA memory modes are reported as WAVEFRONT" << std::endl <<
+          " -t   INT     maximum number of anchor-organization and alignment threads (default: " << threads << ")" << std::endl <<
+          " -M   FLOAT   predictive maximum total AnchorWave memory in GiB" << std::endl <<
+          "              enables dynamic scheduling; must be at least w^2 bytes" << std::endl <<
+          " -bt  FLOAT   exact-DP prediction/runtime ceiling per interval in minutes (default: 0)" << std::endl <<
+          "              0 selects exact-first mode; a positive value selects balanced mode" << std::endl <<
+          " -fa3 INT     minimum side length for novel-anchor search: require" << std::endl <<
+          "              reference_length * query_length > fa3^2 (default: " << wfaSize3 << ")" << std::endl <<
+          " -w   INT     alignment window and hard per-thread algorithm budget w^2 bytes" << std::endl <<
+          "              (default: " << windowWidth << ", about 9.3 GiB per thread)" << std::endl <<
           " -R   INT     reference genome maximum alignment coverage " << std::endl <<
           " -Q   INT     query genome maximum alignment coverage " << std::endl <<
           " -B   INT     mismatching penalty (default: " << mismatchingPenalty << ")" << std::endl <<
@@ -764,10 +869,15 @@ int proportionalAlignment(int argc, char **argv) {
     InputParser inputParser(argc, argv);
     if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help")) {
         std::cerr << usage.str();
-        return 1;
+        return 0;
     } else if (inputParser.cmdOptionExists("-i") && inputParser.cmdOptionExists("-r") &&
                inputParser.cmdOptionExists("-a") && inputParser.cmdOptionExists("-s") && inputParser.cmdOptionExists("-as")
                && (inputParser.cmdOptionExists("-n") || inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-o") ) ) {
+
+        if (!configureAlignmentTimePolicy(inputParser) ||
+            !configureAlignmentTrace(inputParser)) {
+            return 1;
+        }
 
         std::string refGffFilePath = inputParser.getCmdOption("-i");
         std::string referenceGenomeSequence = inputParser.getCmdOption("-r");
@@ -792,14 +902,37 @@ int proportionalAlignment(int argc, char **argv) {
 
         if (inputParser.cmdOptionExists("-t")) {
             threads = std::stoi(inputParser.getCmdOption("-t"));
+            if (threads <= 0) {
+                std::cerr << "parameter -t should be a positive integer" << std::endl;
+                return 1;
+            }
         }
 
-        if (inputParser.cmdOptionExists("-fa3")) {
-            wfaSize3 = std::stoi(inputParser.getCmdOption("-fa3"));
+        if (!configureNovelAnchorMinimumLength(inputParser, wfaSize3)) {
+            return 1;
         }
 
         if (inputParser.cmdOptionExists("-w")) {
-            windowWidth = std::stoi(inputParser.getCmdOption("-w"));
+            windowWidth = std::stoll(inputParser.getCmdOption("-w"));
+            if (windowWidth <= 0) {
+                std::cerr << "parameter -w should be a positive integer" << std::endl;
+                return 1;
+            }
+        }
+        if (inputParser.cmdOptionExists("-M")) {
+            try {
+                maxProcessMemoryBytes = anchorwave::memoryLimitBytesFromGiB(
+                        std::stod(inputParser.getCmdOption("-M")));
+            } catch (const std::exception &error) {
+                std::cerr << "invalid parameter -M: " << error.what() << std::endl;
+                return 1;
+            }
+            if (maxProcessMemoryBytes <
+                    anchorwave::wfaMemoryBudgetBytes(windowWidth)) {
+                std::cerr << "parameter -M must provide at least -w squared bytes"
+                          << std::endl;
+                return 1;
+            }
         }
 
         if (inputParser.cmdOptionExists("-R")) {
@@ -936,7 +1069,7 @@ int proportionalAlignment(int argc, char **argv) {
                                                        calculateIndelDistance, minExon, windowWidth, minimumSimilarity, minimumSimilarity2,
                                                        map_ref, map_qry,
                                                        expectedCopies, wfaSize3, maximumSimilarity, referenceSamFilePath,
-                                                       searchForNewAnchors, exonModel);
+                                                       searchForNewAnchors, exonModel, threads);
 
             // generated anchors file.
             if (inputParser.cmdOptionExists("-n")) {
@@ -961,7 +1094,7 @@ int proportionalAlignment(int argc, char **argv) {
 
                 size_t totalAnchors = 0;
                 int blockIndex = 0;
-                for (std::vector <AlignmentMatch> v_am: v_v_am) {
+                for (const std::vector<AlignmentMatch> &v_am : v_v_am) {
                     ofile << "#block begin" << std::endl;
                     blockIndex++;
 
@@ -1026,7 +1159,8 @@ int proportionalAlignment(int argc, char **argv) {
         if (inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-o") || inputParser.cmdOptionExists("-l")) {
             genomeAlignment(v_v_am, referenceGenomeSequence, targetGenomeSequence, windowWidth,
                             outPutMafFile, outPutFragedFile, outPutBedFile, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1,
-                            openGapPenalty2, extendGapPenalty2, threads);
+                            openGapPenalty2, extendGapPenalty2, threads,
+                            maxProcessMemoryBytes);
             std::cout << "AnchorWave done!" << std::endl;
         }
     }
@@ -1056,7 +1190,10 @@ int ali(int argc, char **argv) {
           " -h           produce help message" << std::endl <<
           " -r   FILE    reference sequence (single sequence in FASTA format)" << std::endl <<
           " -s   FILE    target sequence (single sequence in FASTA format)" << std::endl <<
-          " -w   INT     sequence alignment window width (default: " << windowWidth << ")" << std::endl <<
+          " -w   INT     alignment window and hard per-thread algorithm budget w^2 bytes" << std::endl <<
+          "              (default: " << windowWidth << ", about 9.3 GiB)" << std::endl <<
+          " -bt  FLOAT   exact-DP prediction/runtime ceiling per interval in minutes (default: 0)" << std::endl <<
+          "              0 selects exact-first mode; a positive value selects balanced mode" << std::endl <<
           " -B   INT     mismatching penalty (default: " << mismatchingPenalty << ")" << std::endl <<
           " -O1  INT     open gap penalty (default: " << openGapPenalty1 << ")" << std::endl <<
           " -E1  INT     extend gap penalty (default: " << extendGapPenalty1 << ")" << std::endl <<
@@ -1064,8 +1201,16 @@ int ali(int argc, char **argv) {
           " -E2  INT     extend gap penalty 2 (default: " << extendGapPenalty2 << ")" << std::endl << std::endl;
 
     InputParser inputParser(argc, argv);
-    if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help") || !inputParser.cmdOptionExists("-r") || !inputParser.cmdOptionExists("-s")) {
+    if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help")) {
         std::cerr << usage.str();
+        return 0;
+    }
+    if (!inputParser.cmdOptionExists("-r") || !inputParser.cmdOptionExists("-s")) {
+        std::cerr << usage.str();
+        return 1;
+    }
+    if (!configureAlignmentTimePolicy(inputParser) ||
+        !configureAlignmentTrace(inputParser)) {
         return 1;
     }
 
@@ -1073,7 +1218,11 @@ int ali(int argc, char **argv) {
     std::string targetGenomeSequence = inputParser.getCmdOption("-s");
 
     if (inputParser.cmdOptionExists("-w")) {
-        windowWidth = std::stoi(inputParser.getCmdOption("-w"));
+        windowWidth = std::stoll(inputParser.getCmdOption("-w"));
+        if (windowWidth <= 0) {
+            std::cerr << "parameter -w should be a positive integer" << std::endl;
+            return 1;
+        }
     }
 
     if (inputParser.cmdOptionExists("-B")) {
@@ -1159,7 +1308,7 @@ int geno(int argc, char **argv) {
     double MIN_ALIGNMENT_SCORE = 2;
     bool considerInversion = false;
 
-    int32_t wfaSize3 = 100000; // if the inter-anchor length is shorter than this value, stop trying to find new anchors
+    int64_t wfaSize3 = 100000; // novel-anchor search requires ref_len * query_len > wfaSize3^2
     int64_t windowWidth = 100000;
     int expectedCopies = 1;
     double maximumSimilarity = 0.6; // the maximum simalarity between secondary hist the primary hit. If the second hit is too similary with primary hit, that is unwanted duplications
@@ -1174,11 +1323,11 @@ int geno(int argc, char **argv) {
           << " genoAli -i refGffFile -r refGenome -a cds.sam -as cds.fa -ar ref.sam -s targetGenome -n outputAnchorFile -o output.maf -f output.fragmentation.maf " << std::endl <<
           "Options" << std::endl <<
           " -h           produce help message" << std::endl <<
-          " -i   FILE    reference GFF/GTF file" << std::endl <<
-          " -r   FILE    reference genome sequence file in fasta format" << std::endl <<
+          " -i   FILE    reference GFF/GTF (plain or gzip/BGZF; auto-detected)" << std::endl <<
+          " -r   FILE    reference FASTA (plain or gzip/BGZF; auto-detected)" << std::endl <<
           " -as  FILE    anchor sequence file. (output from the gff2seq command)" << std::endl <<
           " -a   FILE    sam file generated by mapping conserved sequence to query genome" << std::endl <<
-          " -s   FILE    target genome sequence file in fasta format" << std::endl <<
+          " -s   FILE    target FASTA (plain or gzip/BGZF; auto-detected)" << std::endl <<
           "              Those sequences with the same name in the reference genome and query genome file would be aligned" << std::endl <<
           " -n   FILE    output anchors file" << std::endl <<
           " -o   FILE    output file in maf format" << std::endl <<
@@ -1188,7 +1337,8 @@ int geno(int argc, char **argv) {
           " -mi  DOUBLE  minimum full-length CDS anchor hit similarity to use (default:" << minimumSimilarity << ")" << std::endl <<
           " -mi2 DOUBLE  minimum novel anchor hit similarity to use (default:" << minimumSimilarity2 << ")" << std::endl <<
           " -ar  FILE    sam file generated by mapping conserved sequence to reference genome" << std::endl <<
-          " -w   INT     sequence alignment window width (default: " << windowWidth << ")" << std::endl <<
+          " -w   INT     alignment window and hard per-thread algorithm budget w^2 bytes" << std::endl <<
+          "              (default: " << windowWidth << ", about 9.3 GiB per thread)" << std::endl <<
           " -IV          whether to call inversions (default: false)" << std::endl <<
           " -IC  DOUBLE  penalty for having a non-linear match in inversion region (default: " << inversion_PENALTY << ")" << std::endl <<
           "              We use IC * alignment_similarity as the penalty in the inversion block" << std::endl <<
@@ -1273,7 +1423,11 @@ int geno(int argc, char **argv) {
             maximumSimilarity = std::stod(inputParser.getCmdOption("-y"));
         }
         if (inputParser.cmdOptionExists("-w")) {
-            windowWidth = std::stoi(inputParser.getCmdOption("-w"));
+            windowWidth = std::stoll(inputParser.getCmdOption("-w"));
+            if (windowWidth <= 0) {
+                std::cerr << "parameter -w should be a positive integer" << std::endl;
+                return 1;
+            }
         }
 
         if (inputParser.cmdOptionExists("-ns")) {
@@ -1398,7 +1552,7 @@ int geno(int argc, char **argv) {
 
                 for (std::map < std::string, std::vector < AlignmentMatch >> ::iterator it = map_v_am.begin(); it != map_v_am.end(); ++it) {
                     ofile << "#block begin" << std::endl;
-                    std::vector < AlignmentMatch > v_am = it->second;
+                    const std::vector<AlignmentMatch> &v_am = it->second;
                     blockIndex++;
                     bool hasInversion = false;
                     for (size_t i = 0; i < v_am.size(); ++i) {
@@ -1836,4 +1990,3 @@ int pro(int argc, char **argv) {
     }
     return 0;
 }
-

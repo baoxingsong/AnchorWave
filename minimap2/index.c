@@ -198,7 +198,7 @@ static void worker_post(void *g, long i, int tid)
 	if (b->a.n == 0) return;
 
 	// sort by minimizer
-	radix_sort_128x(b->a.a, b->a.a + b->a.n);
+	if (b->a.n > 1) radix_sort_128x(b->a.a, b->a.a + b->a.n);
 
 	// count and preallocate
 	for (j = 1, n = 1, n_keys = 0, b->n = 0; j <= b->a.n; ++j) {

@@ -32,13 +32,13 @@
 #ifndef WAVEFRONT_ATTRIBUTES_H_
 #define WAVEFRONT_ATTRIBUTES_H_
 
-#include "../utils/commons.h"
-#include "../alignment/cigar.h"
-#include "../alignment/affine_penalties.h"
-#include "../alignment/affine2p_penalties.h"
-#include "../alignment/linear_penalties.h"
-#include "../system/profiler_timer.h"
-#include "../system/mm_allocator.h"
+#include "utils/commons.h"
+#include "alignment/cigar.h"
+#include "alignment/affine_penalties.h"
+#include "alignment/affine2p_penalties.h"
+#include "alignment/linear_penalties.h"
+#include "system/profiler_timer.h"
+#include "system/mm_allocator.h"
 
 #include "wavefront_penalties.h"
 #include "wavefront_plot.h"
@@ -59,6 +59,8 @@ typedef enum {
 typedef struct {
   // Mode
   alignment_span_t span;   // Alignment form (End-to-end/Ends-free)
+  // Extension
+  bool extension;          // Activate extension-like alignment
   // Ends-free
   int pattern_begin_free;  // Allow free-gap at the beginning of the pattern
   int pattern_end_free;    // Allow free-gap at the end of the pattern
@@ -67,31 +69,25 @@ typedef struct {
 } alignment_form_t;
 
 /*
- * Custom extend-match function, e.g.:
+ * Cooperative memory-growth probe
  *
- *   typedef struct {
- *     char* pattern;
- *     int pattern_length;
- *     char* text;
- *     int text_length;
- *   } match_function_params_t;
- *
- *   int match_function(int v,int h,void* arguments) {
- *     // Extract parameters
- *     match_function_params_t* match_arguments = (match_function_params_t*)arguments;
- *     // Check match
- *     if (v > match_arguments->pattern_length || h > match_arguments->text_length) return 0;
- *     return (match_arguments->pattern[v] == match_arguments->text[h]);
- *   }
+ * The callback is invoked at score-probe boundaries, after WFA has measured
+ * its current working set. Returning false aborts the current exact alignment
+ * with WF_STATUS_OOM. This is deliberately a cooperative probe rather than an
+ * allocator-level hard limit: memory can grow between two score probes.
  */
-typedef int (*alignment_match_funct_t)(int,int,void*);
+typedef bool (*wavefront_memory_probe_funct_t)(
+    void* arguments,
+    const uint64_t memory_used,
+    const uint64_t memory_limit,
+    const int score);
 
 /*
  * Alignment system configuration
  */
 typedef struct {
   // Limits
-  int max_alignment_score;       // Maximum score allowed before quit
+  int max_alignment_steps;       // Maximum WFA-steps allowed before quit
   // Probing intervals
   int probe_interval_global;     // Score-ticks interval to check any limits
   int probe_interval_compact;    // Score-ticks interval to check BT-buffer compacting
@@ -100,6 +96,10 @@ typedef struct {
   uint64_t max_memory_compact;   // Maximum BT-buffer memory allowed before trigger compact
   uint64_t max_memory_resident;  // Maximum memory allowed to be buffered before reap
   uint64_t max_memory_abort;     // Maximum memory allowed to be used before aborting alignment
+  uint64_t biwfa_max_memory_abort; // Optional aggregate limit across all three BiWFA children
+  wavefront_memory_probe_funct_t memory_probe; // Cooperative growth callback (NULL disables)
+  void* memory_probe_arguments;  // Opaque callback argument
+  int biwfa_leaf_score;          // Score <= threshold uses exact high-memory subsidiary WFA
   // Verbose
   //  0 - Quiet
   //  1 - Report each sequence aligned                      (brief)
@@ -142,9 +142,8 @@ typedef struct {
   wavefront_heuristic_t heuristic;         // Wavefront heuristic
   // Memory model
   wavefront_memory_t memory_mode;          // Wavefront memory strategy (modular wavefronts and piggyback)
-  // Custom function to compare sequences
-  alignment_match_funct_t match_funct;     // Custom matching function (match(v,h,args))
-  void* match_funct_arguments;             // Generic arguments passed to matching function (args)
+  // Singletrack
+  bool singletrack;                        // Store only M wavefronts for high-memory affine traceback
   // External MM (instead of allocating one inside)
   mm_allocator_t* mm_allocator;            // MM-Allocator
   // Display

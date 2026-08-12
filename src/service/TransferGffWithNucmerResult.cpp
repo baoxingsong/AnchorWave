@@ -4,11 +4,282 @@
 
 #include "TransferGffWithNucmerResult.h"
 #include "ReadSamUtils.h"
+#include "NovelAnchorThreshold.h"
 
+#include <atomic>
+#include <chrono>
+#include <memory>
 #include <unordered_map>
+#include <utility>
+
+namespace {
+
+using TranscriptIndex =
+        std::unordered_map<std::string, const Transcript *>;
+
+struct NovelAnchorRequest {
+    std::string refChr;
+    std::string queryChr;
+    std::string refSequence;
+    std::string querySequence;
+    uint32_t startRef = 0;
+    uint32_t startQuery = 0;
+    STRAND strand = POSITIVE;
+};
+
+struct NovelAnchorResult {
+    uint32_t blacklistStartRef = 0;
+    bool shouldBlacklist = false;
+    bool found = false;
+    AlignmentMatch anchor;
+};
+
+// The quota pipeline has slightly different blacklist and negative-strand
+// scoring semantics from the non-quota novel-anchor search.  Keep those
+// details in a separate result type so gap searches can run concurrently,
+// while their effects are still committed in the original scan order.
+struct QuotaNovelAnchorResult {
+    uint32_t requestStartRef = 0;
+    uint32_t discoveredStartRef = 0;
+    bool validForwardMapping = false;
+    bool found = false;
+    AlignmentMatch anchor;
+};
+
+uint64_t saturatingAddCost(uint64_t first, uint64_t second) {
+    return second > std::numeric_limits<uint64_t>::max() - first
+           ? std::numeric_limits<uint64_t>::max() : first + second;
+}
+
+uint64_t quotaNovelAnchorBlockEstimatedCost(
+        const std::vector<AlignmentMatch> &matches) {
+    if (matches.size() <= 1) {
+        return 0;
+    }
+    uint64_t cost = 0;
+    for (std::size_t index = 1; index < matches.size(); ++index) {
+        const AlignmentMatch &previous = matches[index - 1];
+        const AlignmentMatch &current = matches[index];
+        if (previous.getStrand() != current.getStrand() ||
+            current.getRefStartPos() <= previous.getRefEndPos()) {
+            continue;
+        }
+        const uint64_t referenceLength =
+                current.getRefStartPos() - previous.getRefEndPos() - 1;
+        uint64_t queryLength = 0;
+        if (current.getStrand() == POSITIVE &&
+            current.getQueryStartPos() > previous.getQueryEndPos()) {
+            queryLength = current.getQueryStartPos() -
+                          previous.getQueryEndPos() - 1;
+        } else if (current.getStrand() == NEGATIVE &&
+                   previous.getQueryStartPos() > current.getQueryEndPos()) {
+            queryLength = previous.getQueryStartPos() -
+                          current.getQueryEndPos() - 1;
+        }
+        if (queryLength != 0) {
+            cost = saturatingAddCost(
+                    cost, anchorwave::anchorGapTaskEstimatedCost(
+                                  referenceLength, queryLength));
+        }
+    }
+    return std::max(cost,
+                    anchorwave::anchorTaskEstimatedCost(matches.size()));
+}
+
+NovelAnchorResult alignNovelAnchorGap(
+        const NovelAnchorRequest &request,
+        int32_t matchingScore, int32_t mismatchingPenalty,
+        int32_t openGapPenalty, int32_t extendGapPenalty,
+        int k, int w, int isHpc, int64_t windowWidth,
+        double minimumSimilarity) {
+    NovelAnchorResult result;
+    result.blacklistStartRef = request.startRef;
+
+    mm_idxopt_t indexOptions;
+    mm_mapopt_t mappingOptions;
+    mm_set_opt(0, &indexOptions, &mappingOptions);
+    mappingOptions.flag |= MM_F_CIGAR;
+    mappingOptions.flag |= MM_F_NO_PRINT_2ND;
+    mappingOptions.bw = windowWidth / 5;
+    mappingOptions.flag |= MM_F_NO_LJOIN;
+    mappingOptions.a = matchingScore;
+    mappingOptions.b = mismatchingPenalty;
+    mappingOptions.q = openGapPenalty;
+    mappingOptions.e = extendGapPenalty;
+    mappingOptions.q2 = openGapPenalty;
+    mappingOptions.e2 = extendGapPenalty;
+    // Preserve the legacy effective setting: the second assignment replaced
+    // windowWidth/5 before mapping began.
+    mappingOptions.bw = k;
+    mappingOptions.mid_occ = 2;
+    mappingOptions.min_cnt = 2;
+
+    // Both minimap2 entry points accept const input and the request owns these
+    // strings for the complete call. Avoid two full gap-sized staging copies.
+    const char *referenceSequences[1] = {request.refSequence.c_str()};
+    const char *sequenceNames[1] = {"temp"};
+    char queryName[] = "temp";
+    mm_idx_t *index = mm_idx_str(
+            w, k, isHpc, 2, 1, referenceSequences, sequenceNames);
+    mm_mapopt_update(&mappingOptions, index);
+    mm_tbuf_t *threadBuffer = mm_tbuf_init();
+    int regionCount = 0;
+    mm_reg1_t *regions = mm_map(
+            index, static_cast<int>(request.querySequence.size()),
+            request.querySequence.c_str(), &regionCount, threadBuffer,
+            &mappingOptions, queryName);
+
+    if (regionCount > 0 && regions[0].rev == 0) {
+        mm_reg1_t *region = &regions[0];
+        const int32_t newAnchorRefEnd = region->re - 1;
+        const int32_t newAnchorQueryEnd = region->qe - 1;
+        const double length = region->re - region->rs + 1.0;
+        double matchingBases = 0.0;
+        for (uint32_t cigarIndex = 0;
+             cigarIndex < region->p->n_cigar; ++cigarIndex) {
+            if ("MIDNSH"[region->p->cigar[cigarIndex] & 0xf] == 'M') {
+                matchingBases += region->p->cigar[cigarIndex] >> 4;
+            }
+        }
+
+        if (matchingBases / length > minimumSimilarity) {
+            const uint32_t refStart = request.startRef + region->rs;
+            const uint32_t refEnd = request.startRef + newAnchorRefEnd;
+            uint32_t queryStart = 0;
+            uint32_t queryEnd = 0;
+            if (request.strand == POSITIVE) {
+                queryStart = request.startQuery + region->qs;
+                queryEnd = request.startQuery + newAnchorQueryEnd;
+            } else {
+                queryStart = request.startQuery - newAnchorQueryEnd;
+                queryEnd = request.startQuery - region->qs;
+            }
+            const std::string alignmentName =
+                    "localAlignment_" + request.refChr + "_" +
+                    std::to_string(refStart) + "_" + std::to_string(refEnd);
+            double score = region->score / 2;
+            score /= ((region->re - region->rs) * matchingScore);
+            result.anchor = AlignmentMatch(
+                    request.refChr, request.queryChr,
+                    refStart, refEnd, queryStart, queryEnd,
+                    score, request.strand, alignmentName, alignmentName);
+            result.found = true;
+        }
+    } else {
+        result.shouldBlacklist = true;
+    }
+
+    for (int regionIndex = 0; regionIndex < regionCount; ++regionIndex) {
+        free(regions[regionIndex].p);
+    }
+    free(regions);
+    mm_tbuf_destroy(threadBuffer);
+    mm_idx_destroy(index);
+    return result;
+}
+
+QuotaNovelAnchorResult alignQuotaNovelAnchorGap(
+        const NovelAnchorRequest &request,
+        int32_t matchingScore, int32_t mismatchingPenalty,
+        int32_t openGapPenalty, int32_t extendGapPenalty,
+        int k, int w, int isHpc, int64_t windowWidth,
+        double minimumSimilarity) {
+    QuotaNovelAnchorResult result;
+    result.requestStartRef = request.startRef;
+
+    mm_idxopt_t indexOptions;
+    mm_mapopt_t mappingOptions;
+    mm_set_opt(0, &indexOptions, &mappingOptions);
+    mappingOptions.flag |= MM_F_CIGAR;
+    mappingOptions.flag |= MM_F_NO_PRINT_2ND;
+    mappingOptions.bw = windowWidth / 5;
+    mappingOptions.flag |= MM_F_NO_LJOIN;
+    mappingOptions.a = matchingScore;
+    mappingOptions.b = mismatchingPenalty;
+    mappingOptions.q = openGapPenalty;
+    mappingOptions.e = extendGapPenalty;
+    mappingOptions.q2 = openGapPenalty;
+    mappingOptions.e2 = extendGapPenalty;
+    // Preserve the legacy effective setting: this assignment replaced the
+    // earlier windowWidth/5 value before minimap2 was invoked.
+    mappingOptions.bw = k;
+    mappingOptions.mid_occ = 2;
+    mappingOptions.min_cnt = 2;
+
+    const char *referenceSequences[1] = {request.refSequence.c_str()};
+    const char *sequenceNames[1] = {"temp"};
+    char queryName[] = "temp";
+    mm_idx_t *index = mm_idx_str(
+            w, k, isHpc, 2, 1, referenceSequences, sequenceNames);
+    mm_mapopt_update(&mappingOptions, index);
+    mm_tbuf_t *threadBuffer = mm_tbuf_init();
+    int regionCount = 0;
+    mm_reg1_t *regions = mm_map(
+            index, static_cast<int>(request.querySequence.size()),
+            request.querySequence.c_str(), &regionCount, threadBuffer,
+            &mappingOptions, queryName);
+
+    if (regionCount > 0 && regions[0].rev == 0) {
+        result.validForwardMapping = true;
+        mm_reg1_t *region = &regions[0];
+        result.discoveredStartRef = request.startRef + region->rs;
+        const int32_t newAnchorRefEnd = region->re - 1;
+        const int32_t newAnchorQueryEnd = region->qe - 1;
+        const double length = region->re - region->rs + 1.0;
+        double matchingBases = 0.0;
+        for (uint32_t cigarIndex = 0;
+             cigarIndex < region->p->n_cigar; ++cigarIndex) {
+            if ("MIDNSH"[region->p->cigar[cigarIndex] & 0xf] == 'M') {
+                matchingBases += region->p->cigar[cigarIndex] >> 4;
+            }
+        }
+
+        if (matchingBases / length > minimumSimilarity) {
+            const uint32_t refStart = result.discoveredStartRef;
+            const uint32_t refEnd = request.startRef + newAnchorRefEnd;
+            uint32_t queryStart = 0;
+            uint32_t queryEnd = 0;
+            double scoreDenominator = 0.0;
+            if (request.strand == POSITIVE) {
+                queryStart = request.startQuery + region->qs;
+                queryEnd = request.startQuery + newAnchorQueryEnd;
+                scoreDenominator =
+                        std::abs(region->re - region->rs) * matchingScore;
+            } else {
+                queryStart = request.startQuery - newAnchorQueryEnd;
+                queryEnd = request.startQuery - region->qs;
+                // Preserve the quota implementation's historical +1 on the
+                // negative strand; changing it alters anchor scores/output.
+                scoreDenominator =
+                        std::abs(region->re - region->rs + 1) * matchingScore;
+            }
+            const std::string alignmentName =
+                    "localAlignment_" + request.refChr + "_" +
+                    std::to_string(refStart) + "_" +
+                    std::to_string(refEnd);
+            double score = region->score / 2;
+            score /= scoreDenominator;
+            result.anchor = AlignmentMatch(
+                    request.refChr, request.queryChr,
+                    refStart, refEnd, queryStart, queryEnd,
+                    score, request.strand, alignmentName, alignmentName);
+            result.found = true;
+        }
+    }
+
+    for (int regionIndex = 0; regionIndex < regionCount; ++regionIndex) {
+        free(regions[regionIndex].p);
+    }
+    free(regions);
+    mm_tbuf_destroy(threadBuffer);
+    mm_idx_destroy(index);
+    return result;
+}
+
+}  // namespace
 
 void readSam(std::vector<AlignmentMatch> &alignmentMatchsMapT, std::ifstream &infile,
-             std::map<std::string, Transcript> &transcriptHashMap, int &expectCopy, const double &minimumSimilarity,
+             const TranscriptIndex &transcriptHashMap, int &expectCopy, const double &minimumSimilarity,
              double &secondarySimilarity, std::set<std::string> &blackGeneList, const std::string &anchorSequenceFile,
              int32_t &matchingScore, int32_t &mismatchingPenalty, int32_t &openGapPenalty1,
              int32_t &extendGapPenalty1, int &k, bool &H, int &w,
@@ -71,10 +342,10 @@ void readSam(std::vector<AlignmentMatch> &alignmentMatchsMapT, std::ifstream &in
                 continue;
             }
 
-            std::map<std::string, Transcript>::iterator transcriptIt = transcriptHashMap.find(fields.queryName);
+            const auto transcriptIt = transcriptHashMap.find(fields.queryName);
             if (fields.referenceName != "*" && transcriptIt != transcriptHashMap.end() &&
                 queryGenome.find(fields.referenceName) != queryGenome.end()) { // ignore non-mapping records
-                Transcript &transcript = transcriptIt->second;
+                const Transcript &transcript = *transcriptIt->second;
                 const std::string &geneName = fields.queryName;
                 const std::string &queryChr = fields.referenceName;
                 const std::string &databaseChr = transcript.getChromeSomeName();
@@ -123,7 +394,9 @@ void readSam(std::vector<AlignmentMatch> &alignmentMatchsMapT, std::ifstream &in
                     alignmentMatchsMapT.emplace_back(
                         databaseChr, queryChr, databaseStart, databaseEnd, queryStart, queryEnd,
                         thisScore, sameOrientation ? POSITIVE : NEGATIVE, geneName, geneName);
-                    geneScores[geneName][queryChr].push_back(thisScore);
+                    anchorwave::read_sam_detail::retainTopCopyScores(
+                            geneScores[geneName][queryChr], thisScore,
+                            expectCopy);
                 }
             }
         }
@@ -133,13 +406,9 @@ void readSam(std::vector<AlignmentMatch> &alignmentMatchsMapT, std::ifstream &in
         for (auto &geneScore : geneScores) {
             for (auto &chromosomeScore : geneScore.second) {
                 std::vector<double> &scores = chromosomeScore.second;
-                if (scores.size() > static_cast<size_t>(expectCopy)) {
-                    const double bestScore = *std::max_element(scores.begin(), scores.end());
-                    std::nth_element(scores.begin(), scores.begin() + expectCopy, scores.end(),
-                                     std::greater<double>());
-                    if (scores[expectCopy] / bestScore > secondarySimilarity) {
-                        blackGeneList.insert(geneScore.first);
-                    }
+                if (anchorwave::read_sam_detail::secondaryCopyExceeds(
+                            scores, expectCopy, secondarySimilarity)) {
+                    blackGeneList.insert(geneScore.first);
                 }
             }
         }
@@ -158,7 +427,7 @@ void readSam(std::vector<AlignmentMatch> &alignmentMatchsMapT, std::ifstream &in
     }
 }
 
-void readSam(std::vector<AlignmentMatch> &alignmentMatchsMapT, std::ifstream &infile, std::map<std::string, Transcript> &transcriptHashMap, int &expectCopy, const double &minimumSimilarity,
+void readSam(std::vector<AlignmentMatch> &alignmentMatchsMapT, std::ifstream &infile, const TranscriptIndex &transcriptHashMap, int &expectCopy, const double &minimumSimilarity,
              double &secondarySimilarity, std::set<std::string> &blackGeneList,
              int32_t &matchingScore, int32_t &mismatchingPenalty, int32_t &openGapPenalty1,
              int32_t &extendGapPenalty1, int &k, bool &H, int &w) {
@@ -216,9 +485,9 @@ void readSam(std::vector<AlignmentMatch> &alignmentMatchsMapT, std::ifstream &in
                 continue;
             }
 
-            std::map<std::string, Transcript>::iterator transcriptIt = transcriptHashMap.find(fields.queryName);
+            const auto transcriptIt = transcriptHashMap.find(fields.queryName);
             if (fields.referenceName != "*" && transcriptIt != transcriptHashMap.end()) { // ignore non-mapping records
-                Transcript &transcript = transcriptIt->second;
+                const Transcript &transcript = *transcriptIt->second;
                 const std::string &geneName = fields.queryName;
                 const std::string &queryChr = fields.referenceName;
                 const std::string &databaseChr = transcript.getChromeSomeName();
@@ -268,7 +537,9 @@ void readSam(std::vector<AlignmentMatch> &alignmentMatchsMapT, std::ifstream &in
                     alignmentMatchsMapT.emplace_back(
                         databaseChr, queryChr, databaseStart, databaseEnd, queryStart, queryEnd,
                         thisScore, sameOrientation ? POSITIVE : NEGATIVE, geneName, geneName);
-                    geneScores[geneName][queryChr].push_back(thisScore);
+                    anchorwave::read_sam_detail::retainTopCopyScores(
+                            geneScores[geneName][queryChr], thisScore,
+                            expectCopy);
                 }
             }
         }
@@ -278,13 +549,9 @@ void readSam(std::vector<AlignmentMatch> &alignmentMatchsMapT, std::ifstream &in
         for (auto &geneScore : geneScores) {
             for (auto &chromosomeScore : geneScore.second) {
                 std::vector<double> &scores = chromosomeScore.second;
-                if (scores.size() > static_cast<size_t>(expectCopy)) {
-                    const double bestScore = *std::max_element(scores.begin(), scores.end());
-                    std::nth_element(scores.begin(), scores.begin() + expectCopy, scores.end(),
-                                     std::greater<double>());
-                    if (scores[expectCopy] / bestScore > secondarySimilarity) {
-                        blackGeneList.insert(geneScore.first);
-                    }
+                if (anchorwave::read_sam_detail::secondaryCopyExceeds(
+                            scores, expectCopy, secondarySimilarity)) {
+                    blackGeneList.insert(geneScore.first);
                 }
             }
         }
@@ -308,7 +575,10 @@ void setupAnchorsWithSpliceAlignmentResult(const std::string &gffFilePath, const
                                            std::map<std::string, std::tuple<std::string, long, long, int> > &map_ref,
                                            std::map<std::string, std::tuple<std::string, long, long, int> > &map_qry,
                                            int &expectedCopies, double &maximumSimilarity,
-                                           const std::string &referenceSamFilePath, const int32_t &wfaSize3, const bool &searchForNewAnchors, const bool &exonModel) {
+                                           const std::string &referenceSamFilePath, const int64_t &wfaSize3, const bool &searchForNewAnchors, const bool &exonModel,
+                                           const int &maxThreads) {
+    const uint64_t minimumNovelAnchorArea =
+            anchorwave::novelAnchorMinimumArea(wfaSize3);
     std::ifstream infile(samFile);
     if (!infile.good()) {
         std::cerr << "error in opening sam file " << samFile << std::endl;
@@ -323,6 +593,11 @@ void setupAnchorsWithSpliceAlignmentResult(const std::string &gffFilePath, const
     int k = 15;
     int w = 0.666 * k;
     bool H = false;
+
+    anchorwave::AnchorTaskExecutor anchorExecutor(maxThreads);
+    std::cerr << "AnchorWave anchor scheduler: requested_threads="
+              << maxThreads << ", worker_count="
+              << anchorExecutor.workerCount() << std::endl;
 
     //read genome and gff file begin
     std::map<std::string, std::vector<Transcript> > map_v_ts;
@@ -383,10 +658,10 @@ void setupAnchorsWithSpliceAlignmentResult(const std::string &gffFilePath, const
         }
     }
 
-    std::map<std::string, Transcript> transcriptHashMap; // key is transcript name, value is a transcript structure
-    for (std::map<std::string, std::vector<Transcript> >::iterator it = map_v_ts.begin(); it != map_v_ts.end(); ++it) {
-        for (Transcript transcript: it->second) {
-            transcriptHashMap[transcript.getName()] = transcript;
+    TranscriptIndex transcriptHashMap;
+    for (auto &chromosomeTranscripts : map_v_ts) {
+        for (Transcript &transcript : chromosomeTranscripts.second) {
+            transcriptHashMap.emplace(transcript.getName(), &transcript);
         }
     }
 
@@ -407,33 +682,61 @@ void setupAnchorsWithSpliceAlignmentResult(const std::string &gffFilePath, const
         std::cout << "reading reference sam done" << std::endl;
         std::map<std::string, std::vector<AlignmentMatch>> alignmentMatchsMapT;
 
-        for (AlignmentMatch orthologPair2: alignmentMatchsMapT0) {
+        for (AlignmentMatch &orthologPair2: alignmentMatchsMapT0) {
             if (alignmentMatchsMapT.find(orthologPair2.getRefChr()) == alignmentMatchsMapT.end()) {
                 alignmentMatchsMapT[orthologPair2.getRefChr()] = std::vector<AlignmentMatch>();
             }
 
             if (orthologPair2.getRefChr() == orthologPair2.getQueryChr() && orthologPair2.getStrand() == POSITIVE) {
-                alignmentMatchsMapT[orthologPair2.getRefChr()].push_back(orthologPair2);
+                alignmentMatchsMapT[orthologPair2.getRefChr()].push_back(
+                        std::move(orthologPair2));
             }
         }
+        std::vector<AlignmentMatch>().swap(alignmentMatchsMapT0);
 
         bool keepTandemDuplication = false;
-        for (std::map<std::string, std::vector<AlignmentMatch>>::iterator it = alignmentMatchsMapT.begin(); it != alignmentMatchsMapT.end(); ++it) {
-            myAlignmentMatchSort(it->second, inversion_PENALTY, MIN_ALIGNMENT_SCORE, keepTandemDuplication, false);
-            std::vector<AlignmentMatch> sortedAlignmentMatchs;
-
-            if (it->second.size() > 1) {
-                longestPath(it->second, sortedAlignmentMatchs, keepTandemDuplication, MIN_ALIGNMENT_SCORE);
-            }
-            else {
-                sortedAlignmentMatchs = it->second;
-            }
-
-            map_v_am[it->first] = std::vector<AlignmentMatch>();
-
-            for (unsigned long i = 0; i < sortedAlignmentMatchs.size(); ++i) {
-                map_v_am[it->first].push_back(sortedAlignmentMatchs[i]);
-            }
+        std::vector<std::pair<std::string, std::vector<AlignmentMatch>>>
+                referenceResults;
+        referenceResults.reserve(alignmentMatchsMapT.size());
+        for (const auto &chromosomeMatches : alignmentMatchsMapT) {
+            referenceResults.emplace_back(
+                    chromosomeMatches.first, std::vector<AlignmentMatch>());
+        }
+        for (std::size_t resultIndex = 0;
+             resultIndex < referenceResults.size(); ++resultIndex) {
+            const auto chromosomeIt = alignmentMatchsMapT.find(
+                    referenceResults[resultIndex].first);
+            const uint64_t estimatedCost = anchorwave::anchorTaskEstimatedCost(
+                    chromosomeIt->second.size());
+            std::vector<AlignmentMatch> taskMatches =
+                    std::move(chromosomeIt->second);
+            anchorExecutor.submit(
+                    estimatedCost,
+                    [&, resultIndex,
+                     matches = std::move(taskMatches)]() mutable {
+                        myAlignmentMatchSort(
+                                matches, inversion_PENALTY,
+                                MIN_ALIGNMENT_SCORE, keepTandemDuplication,
+                                false);
+                        std::vector<AlignmentMatch> sortedAlignmentMatchs;
+                        if (matches.size() > 1) {
+                            double taskScoreThreshold = MIN_ALIGNMENT_SCORE;
+                            longestPath(
+                                    matches, sortedAlignmentMatchs,
+                                    keepTandemDuplication,
+                                    taskScoreThreshold);
+                        } else {
+                            sortedAlignmentMatchs = std::move(matches);
+                        }
+                        referenceResults[resultIndex].second =
+                                std::move(sortedAlignmentMatchs);
+                    });
+        }
+        anchorExecutor.waitForIdle();
+        std::cerr << "AnchorWave anchor scheduler: reference_tasks="
+                  << referenceResults.size() << std::endl;
+        for (auto &result : referenceResults) {
+            map_v_am[result.first] = std::move(result.second);
         }
 
         for (std::map<std::string, std::vector<AlignmentMatch>>::iterator it = map_v_am.begin(); it != map_v_am.end(); ++it) {
@@ -456,7 +759,7 @@ void setupAnchorsWithSpliceAlignmentResult(const std::string &gffFilePath, const
     std::cout << "reading qry sam end" << std::endl;
 
     std::map<std::string, std::vector<AlignmentMatch>> alignmentMatchsMapT;
-    for (AlignmentMatch orthologPair2: alignmentMatchsMapT0) {
+    for (AlignmentMatch &orthologPair2: alignmentMatchsMapT0) {
         if (alignmentMatchsMapT.find(orthologPair2.getRefChr()) == alignmentMatchsMapT.end()) {
             alignmentMatchsMapT[orthologPair2.getRefChr()] = std::vector<AlignmentMatch>();
         }
@@ -466,10 +769,12 @@ void setupAnchorsWithSpliceAlignmentResult(const std::string &gffFilePath, const
             if (!considerInversion && orthologPair2.getStrand() == NEGATIVE) {
 
             } else {
-                alignmentMatchsMapT[orthologPair2.getRefChr()].push_back(orthologPair2);
+                alignmentMatchsMapT[orthologPair2.getRefChr()].push_back(
+                        std::move(orthologPair2));
             }
         }
     }
+    std::vector<AlignmentMatch>().swap(alignmentMatchsMapT0);
 
     bool keepTandemDuplication = false;
     for (std::map<std::string, std::tuple<std::string, long, long, int> >::iterator it = map_ref.begin(); it != map_ref.end(); ++it) {
@@ -477,19 +782,54 @@ void setupAnchorsWithSpliceAlignmentResult(const std::string &gffFilePath, const
             std::cerr << "There is not enough anchors found on " << it->first << std::endl;
         }
     }
-    for (std::map<std::string, std::vector<AlignmentMatch>>::iterator it = alignmentMatchsMapT.begin(); it != alignmentMatchsMapT.end(); ++it) {
-        if (it->second.size() < 3) {
-            std::cerr << "There is not enough anchors found on " << it->first << std::endl;
-            continue;
+    std::vector<std::string> queryTaskChromosomes;
+    for (const auto &chromosomeMatches : alignmentMatchsMapT) {
+        if (chromosomeMatches.second.size() < 3) {
+            std::cerr << "There is not enough anchors found on "
+                      << chromosomeMatches.first << std::endl;
+        } else {
+            queryTaskChromosomes.push_back(chromosomeMatches.first);
         }
+    }
+
+    std::vector<std::pair<std::string, std::vector<AlignmentMatch>>>
+            queryResults;
+    queryResults.reserve(queryTaskChromosomes.size());
+    for (const std::string &chromosome : queryTaskChromosomes) {
+        queryResults.emplace_back(chromosome, std::vector<AlignmentMatch>());
+    }
+
+    // minimap2 exposes this verbosity setting as a process-global variable.
+    // Set it once before worker threads begin instead of writing it inside
+    // concurrent chromosome tasks.
+    mm_verbose = 2;
+    std::atomic<std::size_t> novelGapTaskCount(0);
+    const std::size_t maximumPendingGapsPerChromosome =
+            static_cast<std::size_t>(
+                    std::max(1, std::min(8, anchorExecutor.workerCount())));
+    for (std::size_t taskIndex = 0;
+         taskIndex < queryTaskChromosomes.size(); ++taskIndex) {
+        const auto chromosomeIt = alignmentMatchsMapT.find(
+                queryTaskChromosomes[taskIndex]);
+        const uint64_t estimatedCost = anchorwave::anchorTaskEstimatedCost(
+                chromosomeIt->second.size());
+        std::vector<AlignmentMatch> taskMatches =
+                std::move(chromosomeIt->second);
+        anchorExecutor.submit(
+                estimatedCost,
+                [&, taskIndex, matches = std::move(taskMatches)]() mutable {
 
         std::vector<AlignmentMatch> temp;
 
-        myAlignmentMatchSort(it->second, inversion_PENALTY, MIN_ALIGNMENT_SCORE, keepTandemDuplication, considerInversion);
-        if (it->second.size() > 1) {
-            longestPath(it->second, temp, keepTandemDuplication, MIN_ALIGNMENT_SCORE);
+        myAlignmentMatchSort(matches, inversion_PENALTY,
+                             MIN_ALIGNMENT_SCORE, keepTandemDuplication,
+                             considerInversion);
+        if (matches.size() > 1) {
+            double taskScoreThreshold = MIN_ALIGNMENT_SCORE;
+            longestPath(matches, temp, keepTandemDuplication,
+                        taskScoreThreshold);
         } else {
-            temp = it->second;
+            temp = matches;
         }
 
         int is_hpc = 0; // no, do not use  homopolymer-compressed (HPC) minimizers.
@@ -497,8 +837,6 @@ void setupAnchorsWithSpliceAlignmentResult(const std::string &gffFilePath, const
             is_hpc = 1;
         }
 
-        int bucket_bits = 2;
-        int n = 1;
         bool changed = false;
         if (searchForNewAnchors) {
             changed = true;
@@ -509,12 +847,55 @@ void setupAnchorsWithSpliceAlignmentResult(const std::string &gffFilePath, const
             std::vector<AlignmentMatch> temp2;
             changed = false;
 
+            anchorwave::AnchorTaskGroup gapTaskGroup;
+            std::vector<std::shared_ptr<NovelAnchorResult>> gapResults;
+            gapResults.reserve(temp.size() + 1);
+            auto scheduleNovelAnchor =
+                    [&](std::string refSequence, std::string querySequence,
+                        uint32_t gapStartRef, uint32_t gapStartQuery,
+                        STRAND strand) {
+                NovelAnchorRequest request;
+                request.refChr = matches[0].getRefChr();
+                request.queryChr = request.refChr;
+                request.refSequence = std::move(refSequence);
+                request.querySequence = std::move(querySequence);
+                request.startRef = gapStartRef;
+                request.startQuery = gapStartQuery;
+                request.strand = strand;
+
+                const uint64_t estimatedCost =
+                        anchorwave::anchorGapTaskEstimatedCost(
+                                request.refSequence.size(),
+                                request.querySequence.size());
+                auto output = std::make_shared<NovelAnchorResult>();
+                gapResults.push_back(output);
+                novelGapTaskCount.fetch_add(1, std::memory_order_relaxed);
+                anchorExecutor.submit(
+                        gapTaskGroup, estimatedCost,
+                        [request = std::move(request), output,
+                         matchingScore, mismatchingPenalty,
+                         openGapPenalty1, extendGapPenalty1,
+                         k, w, is_hpc, windowWidth,
+                         minimumSimilarity2]() {
+                            *output = alignNovelAnchorGap(
+                                    request, matchingScore,
+                                    mismatchingPenalty, openGapPenalty1,
+                                    extendGapPenalty1, k, w, is_hpc,
+                                    windowWidth, minimumSimilarity2);
+                        });
+                // Bound queued sequence data per chromosome. The parent helps
+                // execute global work when the small pending window is full,
+                // so nested parallelism does not trade speed for unbounded RSS.
+                anchorExecutor.waitUntilGroupSizeAtMost(
+                        gapTaskGroup, maximumPendingGapsPerChromosome);
+            };
+
             size_t startRef = 1;
             size_t startQuery = 1;
             size_t endRef;
             size_t endQuery;
 
-            std::string refChr = it->second[0].getRefChr();
+            std::string refChr = matches[0].getRefChr();
             std::string queryChr = refChr;
 
             STRAND lastStrand = POSITIVE;
@@ -542,90 +923,18 @@ void setupAnchorsWithSpliceAlignmentResult(const std::string &gffFilePath, const
                         std::string refSeq = getSubsequence2(map_ref, refChr, startRef, endRef);
                         std::string querySeq = getSubsequence2(map_qry, queryChr, startQuery, endQuery);
 
-                        if ((refSeq.size() * querySeq.size() > wfaSize3 * wfaSize3) && (refSeq.size() > k && querySeq.size() > k) && blackList.find(startRef) == blackList.end()) {
-
-                            mm_idxopt_t iopt;
-                            mm_mapopt_t mopt;
-                            mm_verbose = 2; // disable message output to stderr
-                            mm_set_opt(0, &iopt, &mopt);
-                            mopt.flag |= MM_F_CIGAR; // DO NOT perform alignment
-                            mopt.flag |= MM_F_NO_PRINT_2ND;
-                            mopt.bw = windowWidth / 5;
-                            mopt.flag |= MM_F_NO_LJOIN; // together the last one, control the maximum gap length on the local alignment region (novel seed)
-                            mopt.a = matchingScore;
-                            mopt.b = mismatchingPenalty;
-                            mopt.q = openGapPenalty1;
-                            mopt.e = extendGapPenalty1;
-                            mopt.q2 = openGapPenalty1;
-                            mopt.e2 = extendGapPenalty1;
-                            mopt.bw = k;
-                            mopt.mid_occ = 2; // ignore seeds with occurrences above this threshold
-                            mopt.min_cnt = 2;// min number of minimizers on each chain
-                            int32_t referenceSeqLength = refSeq.length();
-                            int32_t querySeqLength = querySeq.length();
-                            char *reference_seq_array = new char[referenceSeqLength + 1];
-                            char *query_seq_array = new char[querySeqLength + 1];
-                            strcpy(reference_seq_array, refSeq.c_str());
-
-                            const char *refseq[1] = {reference_seq_array};
-                            strcpy(query_seq_array, querySeq.c_str());
-
-                            std::string queryName = "temp";
-                            int nameLength = queryName.length();
-                            // declaring character array
-                            char name_array[nameLength + 1];
-                            // copying the contents of the string to char array
-                            strcpy(name_array, queryName.c_str());
-                            const char *name[1] = {"temp"};
-
-                            mm_idx_t *mi = mm_idx_str(w, k, is_hpc, bucket_bits, n, refseq, name);
-                            mm_mapopt_update(&mopt, mi); // this sets the maximum minimizer occurrence; TODO: set a better default in mm_mapopt_init()!
-                            mm_tbuf_t *tbuf = mm_tbuf_init(); // thread buffer; for multi-threading, allocate one tbuf for each thread
-                            int j, n_reg;
-
-                            mm_reg1_t *reg = mm_map(mi, querySeqLength, query_seq_array, &n_reg, tbuf, &mopt, name_array); // get all hits for the query
-
-                            if (n_reg > 0 && (&reg[0])->rev == 0) {
-                                mm_reg1_t *r = &reg[0];
-//                                assert(r->p); // with MM_F_CIGAR, this should not be NULL
-                                int32_t newAnchorRefEnd = r->re - 1;
-//                                int32_t newAnchorRefStart = startRef + r->rs;
-                                int32_t newAnchorQueryEnd = r->qe - 1;
-                                std::string alignmentName = "localAlignment_" + refChr + "_" + std::to_string(startRef + r->rs) + "_" + std::to_string(startRef + newAnchorRefEnd);
-                                double length = r->re - r->rs + 1.0;
-                                double numberofMs = 0.0;
-                                for (uint32_t i = 0; i < r->p->n_cigar; ++i) {
-                                    if ("MIDNSH"[r->p->cigar[i] & 0xf] == 'M') {
-                                        int32_t thisLength = r->p->cigar[i] >> 4;
-                                        numberofMs = numberofMs + thisLength;
-                                    }
-                                }
-
-                                double similarity = numberofMs / length;
-                                if (similarity > minimumSimilarity2) {
-                                    changed = true;
-                                    double thisScore = r->score / 2;
-                                    thisScore = thisScore / ((r->re - r->rs) * matchingScore);
-                                    AlignmentMatch orthologPair(refChr, queryChr,
-                                                                startRef + r->rs, startRef + newAnchorRefEnd, startQuery + r->qs,
-                                                                startQuery + newAnchorQueryEnd, thisScore, POSITIVE, alignmentName,
-                                                                alignmentName);
-                                    temp2.push_back(orthologPair);
-                                }
-                            } else {
-                                blackList.insert(startRef);
-                            }
-
-                            for (j = 0; j < n_reg; ++j) { // traverse hits and print them out
-                                mm_reg1_t *r = &reg[j];
-                                free(r->p);
-                            }
-
-                            free(reg);
-                            mm_tbuf_destroy(tbuf);
-                            mm_idx_destroy(mi);
-                            delete [] reference_seq_array;
-                            delete [] query_seq_array;
+                        if (anchorwave::novelAnchorAreaExceeds(
+                                    static_cast<uint64_t>(refSeq.size()),
+                                    static_cast<uint64_t>(querySeq.size()),
+                                    minimumNovelAnchorArea) &&
+                            refSeq.size() > static_cast<std::size_t>(k) &&
+                            querySeq.size() > static_cast<std::size_t>(k) &&
+                            blackList.find(startRef) == blackList.end()) {
+                            scheduleNovelAnchor(
+                                    std::move(refSeq), std::move(querySeq),
+                                    static_cast<uint32_t>(startRef),
+                                    static_cast<uint32_t>(startQuery),
+                                    POSITIVE);
                         }
                     }
                 } else if (lastStrand == NEGATIVE && alignmentMatch.getStrand() == NEGATIVE
@@ -644,92 +953,18 @@ void setupAnchorsWithSpliceAlignmentResult(const std::string &gffFilePath, const
                         std::string refSeq = getSubsequence2(map_ref, refChr, startRef, endRef);
                         std::string querySeq = getSubsequence2(map_qry, queryChr, startQuery, endQuery, alignmentMatch.getStrand());
 
-                        if ((refSeq.size() * querySeq.size() > wfaSize3 * wfaSize3) && (refSeq.size() > k && querySeq.size() > k) && blackList.find(startRef) == blackList.end()) {
-                            mm_idxopt_t iopt;
-                            mm_mapopt_t mopt;
-
-                            mm_verbose = 2; // disable message output to stderr
-                            mm_set_opt(0, &iopt, &mopt);
-                            //mopt.flag &= ~ MM_F_CIGAR; // DO NOT perform alignment
-                            mopt.flag |= MM_F_CIGAR; // DO NOT perform alignment
-                            mopt.flag |= MM_F_NO_PRINT_2ND;
-                            mopt.bw = windowWidth / 5;
-                            mopt.flag |= MM_F_NO_LJOIN; // together the last one, control the maximum gap length on the local alignment region (novel seed)
-                            mopt.a = matchingScore;
-                            mopt.b = mismatchingPenalty;
-                            mopt.q = openGapPenalty1;
-                            mopt.e = extendGapPenalty1;
-                            mopt.q2 = openGapPenalty1;
-                            mopt.e2 = extendGapPenalty1;
-                            mopt.bw = k;
-                            mopt.mid_occ = 2; // ignore seeds with occurrences above this threshold
-                            mopt.min_cnt = 2;// min number of minimizers on each chain
-                            int32_t referenceSeqLength = refSeq.length();
-                            int32_t querySeqLength = querySeq.length();
-                            char *reference_seq_array = new char[referenceSeqLength + 1];
-                            char *query_seq_array = new char[querySeqLength + 1];
-
-                            strcpy(reference_seq_array, refSeq.c_str());
-                            const char *refseq[1] = {reference_seq_array};
-                            strcpy(query_seq_array, querySeq.c_str());
-
-                            std::string queryName = "temp";
-                            int nameLength = queryName.length();
-                            // declaring character array
-                            char name_array[nameLength + 1];
-                            // copying the contents of the string to char array
-                            strcpy(name_array, queryName.c_str());
-                            const char *name[1] = {"temp"};
-
-                            mm_idx_t *mi = mm_idx_str(w, k, is_hpc, bucket_bits, n, refseq, name);
-
-                            mm_mapopt_update(&mopt, mi); // this sets the maximum minimizer occurrence; TODO: set a better default in mm_mapopt_init()!
-                            mm_tbuf_t *tbuf = mm_tbuf_init(); // thread buffer; for multi-threading, allocate one tbuf for each thread
-                            int j, n_reg;
-
-                            mm_reg1_t *reg = mm_map(mi, querySeqLength, query_seq_array, &n_reg, tbuf, &mopt, name_array); // get all hits for the query
-                            if (n_reg > 0 && (&reg[0])->rev == 0) {
-                                mm_reg1_t *r = &reg[0];
-//                                assert(r->p); // with MM_F_CIGAR, this should not be NULL
-                                int32_t newAnchorRefEnd = r->re - 1;
-//                                int32_t newAnchorRefStart = startRef + r->rs;
-                                double length = r->re - r->rs + 1;
-                                double numberofMs = 0;
-                                for (uint32_t i = 0; i < r->p->n_cigar; ++i) {
-                                    if ("MIDNSH"[r->p->cigar[i] & 0xf] == 'M') {
-                                        int32_t thisLength = r->p->cigar[i] >> 4;
-                                        numberofMs = numberofMs + thisLength;
-                                    }
-                                }
-
-                                double similarity = numberofMs / length;
-                                if (similarity > minimumSimilarity2) {
-                                    changed = true;
-                                    int32_t newAnchorQueryEnd = r->qe - 1;
-                                    std::string alignmentName = "localAlignment_" + refChr + "_" + std::to_string(startRef + r->rs) + "_" + std::to_string(startRef + newAnchorRefEnd);
-                                    double thisScore = r->score / 2;
-                                    thisScore = thisScore / ((r->re - r->rs) * matchingScore);
-                                    AlignmentMatch orthologPair(refChr, queryChr,
-                                                                startRef + r->rs, startRef + newAnchorRefEnd,
-                                                                startQuery - newAnchorQueryEnd, startQuery - r->qs,
-                                                                thisScore, NEGATIVE,
-                                                                alignmentName, alignmentName);
-                                    temp2.push_back(orthologPair);
-                                }
-                            } else {
-                                blackList.insert(startRef);
-                            }
-
-                            for (j = 0; j < n_reg; ++j) { // traverse hits and print them out
-                                mm_reg1_t *r = &reg[j];
-                                free(r->p);
-                            }
-
-                            free(reg);
-                            mm_tbuf_destroy(tbuf);
-                            mm_idx_destroy(mi);
-                            delete [] reference_seq_array;
-                            delete [] query_seq_array;
+                        if (anchorwave::novelAnchorAreaExceeds(
+                                    static_cast<uint64_t>(refSeq.size()),
+                                    static_cast<uint64_t>(querySeq.size()),
+                                    minimumNovelAnchorArea) &&
+                            refSeq.size() > static_cast<std::size_t>(k) &&
+                            querySeq.size() > static_cast<std::size_t>(k) &&
+                            blackList.find(startRef) == blackList.end()) {
+                            scheduleNovelAnchor(
+                                    std::move(refSeq), std::move(querySeq),
+                                    static_cast<uint32_t>(startRef),
+                                    static_cast<uint32_t>(startQuery),
+                                    NEGATIVE);
                         }
                     }
                 }
@@ -743,8 +978,8 @@ void setupAnchorsWithSpliceAlignmentResult(const std::string &gffFilePath, const
             }
 
             if (!hasInversion) {
-                endRef = getSequenceSizeFromPath2(map_ref[refChr]);
-                endQuery = getSequenceSizeFromPath2(map_qry[queryChr]);
+                endRef = getSequenceSizeFromPath2(map_ref.at(refChr));
+                endQuery = getSequenceSizeFromPath2(map_qry.at(queryChr));
 
                 if (startRef > endRef && startQuery <= endQuery) {
 
@@ -756,97 +991,34 @@ void setupAnchorsWithSpliceAlignmentResult(const std::string &gffFilePath, const
                     std::string refSeq = getSubsequence2(map_ref, refChr, startRef, endRef);
                     std::string querySeq = getSubsequence2(map_qry, queryChr, startQuery, endQuery);
 
-                    if ((refSeq.size() * querySeq.size() > wfaSize3 * wfaSize3) &&
-                        (refSeq.size() > k && querySeq.size() > k) && blackList.find(startRef) == blackList.end()) {
-                        mm_idxopt_t iopt;
-                        mm_mapopt_t mopt;
-                        mm_verbose = 2; // disable message output to stderr
-                        mm_set_opt(0, &iopt, &mopt);
-                        //mopt.flag &= ~ MM_F_CIGAR; // DO NOT perform alignment
-                        mopt.flag |= MM_F_CIGAR; // DO NOT perform alignment
-                        mopt.flag |= MM_F_NO_PRINT_2ND;
-                        mopt.bw = windowWidth / 5;
-                        mopt.flag |= MM_F_NO_LJOIN; // together the last one, control the maximum gap length on the local alignment region (novel seed)
-                        mopt.a = matchingScore;
-                        mopt.b = mismatchingPenalty;
-                        mopt.q = openGapPenalty1;
-                        mopt.e = extendGapPenalty1;
-                        mopt.q2 = openGapPenalty1;
-                        mopt.e2 = extendGapPenalty1;
-                        mopt.bw = k;
-                        mopt.mid_occ = 2; // ignore seeds with occurrences above this threshold
-                        mopt.min_cnt = 2;// min number of minimizers on each chain
-                        int referenceSeqLength = refSeq.length();
-                        int querySeqLength = querySeq.length();
-                        char *reference_seq_array = new char[referenceSeqLength + 1];
-                        char *query_seq_array = new char[querySeqLength + 1];
-
-                        strcpy(reference_seq_array, refSeq.c_str());
-                        const char *refseq[1] = {reference_seq_array};
-                        strcpy(query_seq_array, querySeq.c_str());
-
-                        std::string queryName = "temp";
-                        int nameLength = queryName.length();
-                        // declaring character array
-                        char name_array[nameLength + 1];
-                        // copying the contents of the string to char array
-                        strcpy(name_array, queryName.c_str());
-                        const char *name[1] = {"temp"};
-
-                        mm_idx_t *mi = mm_idx_str(w, k, is_hpc, bucket_bits, n, refseq, name);
-
-                        mm_mapopt_update(&mopt, mi); // this sets the maximum minimizer occurrence; TODO: set a better default in mm_mapopt_init()!
-                        mm_tbuf_t *tbuf = mm_tbuf_init(); // thread buffer; for multi-threading, allocate one tbuf for each thread
-                        int j, n_reg;
-                        mm_reg1_t *reg = mm_map(mi, querySeqLength, query_seq_array, &n_reg, tbuf, &mopt, name_array); // get all hits for the query
-
-                        if (n_reg > 0 && (&reg[0])->rev == 0) {
-                            mm_reg1_t *r = &reg[0];
-//                            assert(r->p); // with MM_F_CIGAR, this should not be NULL
-                            int32_t newAnchorRefEnd = r->re - 1;
-//                            int32_t newAnchorRefStart = startRef + r->rs;
-                            double length = r->re - r->rs + 1;
-                            double numberofMs = 0;
-                            for (uint32_t i = 0; i < r->p->n_cigar; ++i) {
-                                if ("MIDNSH"[r->p->cigar[i] & 0xf] == 'M') {
-                                    int32_t thisLength = r->p->cigar[i] >> 4;
-                                    numberofMs = numberofMs + thisLength;
-                                }
-                            }
-
-                            double similarity = numberofMs / length;
-                            if (similarity > minimumSimilarity2) {
-                                changed = true;
-                                int32_t newAnchorQueryEnd = r->qe - 1;
-                                std::string alignmentName = "localAlignment_" + refChr + "_" + std::to_string(startRef + r->rs) + "_" + std::to_string(startRef + newAnchorRefEnd);
-                                double thisScore = r->score / 2;
-                                thisScore = thisScore / ((r->re - r->rs) * matchingScore);
-                                AlignmentMatch orthologPair(refChr, queryChr, startRef + r->rs,
-                                                            startRef + newAnchorRefEnd, startQuery + r->qs,
-                                                            startQuery + newAnchorQueryEnd, thisScore, POSITIVE,
-                                                            alignmentName, alignmentName);
-                                temp2.push_back(orthologPair);
-                            }
-                        } else {
-                            blackList.insert(startRef);
-                        }
-
-                        for (j = 0; j < n_reg; ++j) { // traverse hits and print them out
-                            mm_reg1_t *r = &reg[j];
-                            free(r->p);
-                        }
-
-                        free(reg);
-                        mm_tbuf_destroy(tbuf);
-                        mm_idx_destroy(mi);
-                        delete [] reference_seq_array;
-                        delete [] query_seq_array;
+                    if (anchorwave::novelAnchorAreaExceeds(
+                                static_cast<uint64_t>(refSeq.size()),
+                                static_cast<uint64_t>(querySeq.size()),
+                                minimumNovelAnchorArea) &&
+                        refSeq.size() > static_cast<std::size_t>(k) &&
+                        querySeq.size() > static_cast<std::size_t>(k) &&
+                        blackList.find(startRef) == blackList.end()) {
+                        scheduleNovelAnchor(
+                                std::move(refSeq), std::move(querySeq),
+                                static_cast<uint32_t>(startRef),
+                                static_cast<uint32_t>(startQuery), POSITIVE);
                     }
                 }
             }
 
-            for (AlignmentMatch alignmentMatch: temp2) {
-                temp.push_back(alignmentMatch);
+            anchorExecutor.waitForGroup(gapTaskGroup);
+            for (const auto &gapResult : gapResults) {
+                if (gapResult->shouldBlacklist) {
+                    blackList.insert(gapResult->blacklistStartRef);
+                }
+                if (gapResult->found) {
+                    changed = true;
+                    temp2.push_back(gapResult->anchor);
+                }
+            }
+
+            for (AlignmentMatch &alignmentMatch : temp2) {
+                temp.push_back(std::move(alignmentMatch));
             }
         }
 
@@ -856,14 +1028,28 @@ void setupAnchorsWithSpliceAlignmentResult(const std::string &gffFilePath, const
             std::vector<AlignmentMatch> sortedAlignmentMatchs;
 
             if (temp.size() > 1) {
-                longestPath(temp, sortedAlignmentMatchs, keepTandemDuplication, MIN_ALIGNMENT_SCORE);
+                double taskScoreThreshold = MIN_ALIGNMENT_SCORE;
+                longestPath(temp, sortedAlignmentMatchs,
+                            keepTandemDuplication, taskScoreThreshold);
             } else {
-                sortedAlignmentMatchs = temp;
+                sortedAlignmentMatchs = std::move(temp);
             }
+            queryResults[taskIndex].second = std::move(sortedAlignmentMatchs);
+        }
+                });
+    }
 
-            for (unsigned long i = 0; i < sortedAlignmentMatchs.size(); ++i) {
-                map_v_am[it->first].push_back(sortedAlignmentMatchs[i]);
-            }
+    anchorExecutor.waitForIdle();
+    std::cerr << "AnchorWave anchor scheduler: query_tasks="
+              << queryResults.size() << ", peak_active_tasks="
+              << anchorExecutor.peakActiveTasks()
+              << ", novel_gap_tasks=" << novelGapTaskCount.load()
+              << ", max_pending_gaps_per_chromosome="
+              << maximumPendingGapsPerChromosome
+              << std::endl;
+    for (auto &result : queryResults) {
+        if (!result.second.empty()) {
+            map_v_am[result.first] = std::move(result.second);
         }
     }
 
@@ -876,8 +1062,11 @@ void setupAnchorsWithSpliceAlignmentResultQuota(const std::string &gffFilePath, 
                                                 const double &minimumSimilarity2,
                                                 std::map<std::string, std::tuple<std::string, long, long, int> > &map_ref,
                                                 std::map<std::string, std::tuple<std::string, long, long, int> > &map_qry,
-                                                int &expectedCopies, const int32_t &wfaSize3,
-                                                double &maximumSimilarity, const std::string &referenceSamFilePath, bool &searchForNewAnchors, const bool &exonModel) {
+                                                int &expectedCopies, const int64_t &wfaSize3,
+                                                double &maximumSimilarity, const std::string &referenceSamFilePath, bool &searchForNewAnchors, const bool &exonModel,
+                                                const int &maxThreads) {
+    const uint64_t minimumNovelAnchorArea =
+            anchorwave::novelAnchorMinimumArea(wfaSize3);
 
     // they are default parameter from minimap2
     int32_t matchingScore = 2;
@@ -935,11 +1124,10 @@ void setupAnchorsWithSpliceAlignmentResultQuota(const std::string &gffFilePath, 
         }
     }
 
-    std::map<std::string, Transcript> transcriptHashMap; // key is transcript name, value is a transcript structure
-    for (std::map<std::string, std::vector<Transcript> >::iterator it = transcriptHashSet.begin();
-         it != transcriptHashSet.end(); ++it) {
-        for (Transcript transcript: it->second) {
-            transcriptHashMap[transcript.getName()] = transcript;
+    TranscriptIndex transcriptHashMap;
+    for (auto &chromosomeTranscripts : transcriptHashSet) {
+        for (Transcript &transcript : chromosomeTranscripts.second) {
+            transcriptHashMap.emplace(transcript.getName(), &transcript);
         }
     }
 
@@ -956,14 +1144,16 @@ void setupAnchorsWithSpliceAlignmentResultQuota(const std::string &gffFilePath, 
         readSam(alignmentMatchsMapT0, infileReferencSam, transcriptHashMap, expectedCopies, minimumSimilarity, maximumSimilarity, blackGeneList, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, k, H, w);
         std::map<std::string, std::vector<AlignmentMatch>> alignmentMatchsMapT;
 
-        for (AlignmentMatch orthologPair2: alignmentMatchsMapT0) {
+        for (AlignmentMatch &orthologPair2: alignmentMatchsMapT0) {
             if (alignmentMatchsMapT.find(orthologPair2.getRefChr()) == alignmentMatchsMapT.end()) {
                 alignmentMatchsMapT[orthologPair2.getRefChr()] = std::vector<AlignmentMatch>();
             }
             if (orthologPair2.getRefChr() == orthologPair2.getQueryChr() && orthologPair2.getStrand() == POSITIVE) {
-                alignmentMatchsMapT[orthologPair2.getRefChr()].push_back(orthologPair2);
+                alignmentMatchsMapT[orthologPair2.getRefChr()].push_back(
+                        std::move(orthologPair2));
             }
         }
+        std::vector<AlignmentMatch>().swap(alignmentMatchsMapT0);
 
         bool keepTandemDuplication = false;
         double inversion_PENALTY = -1;
@@ -973,13 +1163,11 @@ void setupAnchorsWithSpliceAlignmentResultQuota(const std::string &gffFilePath, 
             if (it->second.size() > 1) {
                 longestPath(it->second, sortedAlignmentMatchs, keepTandemDuplication, MIN_ALIGNMENT_SCORE);
             } else {
-                sortedAlignmentMatchs = it->second;
+                sortedAlignmentMatchs = std::move(it->second);
             }
 
-            alignmentMatchsMap000[it->first] = std::vector<AlignmentMatch>();
-            for (unsigned long i = 0; i < sortedAlignmentMatchs.size(); ++i) {
-                alignmentMatchsMap000[it->first].push_back(sortedAlignmentMatchs[i]);
-            }
+            alignmentMatchsMap000[it->first] =
+                    std::move(sortedAlignmentMatchs);
         }
 
         for (std::map<std::string, std::vector<AlignmentMatch>>::iterator it = alignmentMatchsMap000.begin(); it != alignmentMatchsMap000.end(); ++it) {
@@ -1036,7 +1224,7 @@ void setupAnchorsWithSpliceAlignmentResultQuota(const std::string &gffFilePath, 
         // index setting end
 //        std::cout << "reference id setting done" << std::endl;
         orthologPairSortRefForAccelerate(alignmentMatchsMapT);
-        longestPathQuotav2(alignmentMatchsMapT, alignmentMatchsMap, refIndexMap, queryIndexMap, INDEL_SCORE, GAP_OPEN_PENALTY, MIN_ALIGNMENT_SCORE, MAX_DIST_BETWEEN_MATCHES, refMaximumTimes, queryMaximumTimes, calculateIndelDistance, false);
+        longestPathQuotav2(alignmentMatchsMapT, alignmentMatchsMap, refIndexMap, queryIndexMap, INDEL_SCORE, GAP_OPEN_PENALTY, MIN_ALIGNMENT_SCORE, MAX_DIST_BETWEEN_MATCHES, refMaximumTimes, queryMaximumTimes, calculateIndelDistance, false, maxThreads);
         for (size_t i = 0; i < alignmentMatchsMap.size(); ++i) {
             std::vector<size_t> keepIndexs;
             std::set<size_t> keepIndexset;
@@ -1089,249 +1277,156 @@ void setupAnchorsWithSpliceAlignmentResultQuota(const std::string &gffFilePath, 
         is_hpc = 1;
     }
 
-    int bucket_bits = 2;
-    int n = 1;
-    bool changed = false;
+    mm_verbose = 2; // minimap2 verbosity is process-global; set before workers.
     if (searchForNewAnchors) {
+        const auto novelStageStart = std::chrono::steady_clock::now();
+        anchorwave::AnchorTaskExecutor novelAnchorExecutor(maxThreads);
+        std::size_t novelAnchorBlockTasks = 0;
+        std::atomic<std::size_t> novelAnchorGapTasks{0};
+        std::vector<double> novelBlockSeconds(alignmentMatchsMap.size(), 0.0);
         for (size_t i = 0; i < alignmentMatchsMap.size(); ++i) {
+            if (alignmentMatchsMap[i].size() <= 1) {
+                continue;
+            }
+            ++novelAnchorBlockTasks;
+            const uint64_t estimatedCost =
+                    quotaNovelAnchorBlockEstimatedCost(alignmentMatchsMap[i]);
+            novelAnchorExecutor.submit(estimatedCost, [&, i]() {
+            const auto blockStart = std::chrono::steady_clock::now();
             std::set<int32_t> blackList;
-            changed = true;
+            bool changed = true;
             while (alignmentMatchsMap[i].size() > 1 && changed) {
                 changed = false;
-                size_t startRef = alignmentMatchsMap[i][0].getRefStartPos(); // to skip the first one
-                size_t startQuery;
-                STRAND strand = alignmentMatchsMap[i][0].getStrand();
-                size_t endRef;
-                size_t endQuery;
+                const STRAND strand = alignmentMatchsMap[i][0].getStrand();
+                const std::string refChr = alignmentMatchsMap[i][0].getRefChr();
+                const std::string queryChr = alignmentMatchsMap[i][0].getQueryChr();
+                const int32_t snapshotSize =
+                        static_cast<int32_t>(alignmentMatchsMap[i].size());
+                size_t startRef = alignmentMatchsMap[i][0].getRefStartPos();
+                size_t queryCursor = strand == POSITIVE
+                                     ? alignmentMatchsMap[i][0].getQueryStartPos()
+                                     : alignmentMatchsMap[i][0].getQueryEndPos();
 
-                std::string refChr = alignmentMatchsMap[i][0].getRefChr();
-                std::string queryChr = alignmentMatchsMap[i][0].getQueryChr();
+                anchorwave::AnchorTaskGroup gapGroup;
+                std::vector<std::shared_ptr<QuotaNovelAnchorResult>> results;
+                results.reserve(static_cast<std::size_t>(snapshotSize));
+                const std::size_t maximumPendingGaps = std::max<std::size_t>(
+                        1, std::min<std::size_t>(8,
+                                novelAnchorExecutor.workerCount()));
 
-                if (POSITIVE == strand) {
-                    startQuery = alignmentMatchsMap[i][0].getQueryStartPos(); // to skip the first one
-                    int32_t alignmentMatchsMap_i_size = alignmentMatchsMap[i].size();
-                    for (int32_t alignmentMatchsMap_i_index = 0;
-                         alignmentMatchsMap_i_index < alignmentMatchsMap_i_size; alignmentMatchsMap_i_index++) {
-                        AlignmentMatch orthologPair = alignmentMatchsMap[i][alignmentMatchsMap_i_index];
-                        if (orthologPair.getRefStartPos() == startRef && orthologPair.getQueryStartPos() != startQuery) {
-                            endQuery = orthologPair.getQueryStartPos() - 1;
-                        } else if (orthologPair.getRefStartPos() != startRef && orthologPair.getQueryStartPos() == startQuery) {
+                for (int32_t matchIndex = 0;
+                     matchIndex < snapshotSize; ++matchIndex) {
+                    const AlignmentMatch orthologPair =
+                            alignmentMatchsMap[i][matchIndex];
+                    size_t endRef = 0;
+                    size_t queryStart = 0;
+                    size_t queryEnd = 0;
+                    bool hasGap = false;
+
+                    if (strand == POSITIVE) {
+                        if (orthologPair.getRefStartPos() == startRef &&
+                            orthologPair.getQueryStartPos() != queryCursor) {
+                            queryCursor = orthologPair.getQueryStartPos() - 1;
+                        } else if (orthologPair.getRefStartPos() != startRef &&
+                                   orthologPair.getQueryStartPos() == queryCursor) {
                             endRef = orthologPair.getRefStartPos() - 1;
-                        } else if (orthologPair.getRefStartPos() == startRef && orthologPair.getQueryStartPos() == startQuery) {
-
-                        } else {
+                        } else if (orthologPair.getRefStartPos() != startRef ||
+                                   orthologPair.getQueryStartPos() != queryCursor) {
                             endRef = orthologPair.getRefStartPos() - 1;
-                            endQuery = orthologPair.getQueryStartPos() - 1;
-
-                            std::string refSeq = getSubsequence2(map_ref, refChr, startRef, endRef);
-                            std::string querySeq = getSubsequence2(map_qry, queryChr, startQuery, endQuery);
-
-                            if ((refSeq.size() * querySeq.size() > wfaSize3 * wfaSize3) && (refSeq.size() > k && querySeq.size() > k) && blackList.find(startRef) == blackList.end()) {
-                                mm_idxopt_t iopt;
-                                mm_mapopt_t mopt;
-                                mm_verbose = 2; // disable message output to stderr
-                                mm_set_opt(0, &iopt, &mopt);
-                                mopt.flag |= MM_F_CIGAR; // DO NOT perform alignment
-                                mopt.flag |= MM_F_NO_PRINT_2ND;
-                                mopt.bw = windowWidth / 5;
-                                mopt.flag |= MM_F_NO_LJOIN; // together the last one, control the maximum gap length on the local alignment region (novel seed)
-                                mopt.a = matchingScore;
-                                mopt.b = mismatchingPenalty;
-                                mopt.q = openGapPenalty1;
-                                mopt.e = extendGapPenalty1;
-                                mopt.q2 = openGapPenalty1;
-                                mopt.e2 = extendGapPenalty1;
-                                mopt.bw = k;
-                                mopt.mid_occ = 2; // ignore seeds with occurrences above this threshold
-                                mopt.min_cnt = 2;// min number of minimizers on each chain
-                                int32_t referenceSeqLength = refSeq.length();
-                                int32_t querySeqLength = querySeq.length();
-                                char *reference_seq_array = new char[referenceSeqLength + 1];
-                                char *query_seq_array = new char[querySeqLength + 1];
-
-                                strcpy(reference_seq_array, refSeq.c_str());
-                                const char *refseq[1] = {reference_seq_array};
-                                strcpy(query_seq_array, querySeq.c_str());
-
-                                std::string queryName = "temp";
-                                int nameLength = queryName.length();
-                                // declaring character array
-                                char name_array[nameLength + 1];
-                                // copying the contents of the string to char array
-                                strcpy(name_array, queryName.c_str());
-                                const char *name[1] = {"temp"};
-
-                                mm_idx_t *mi = mm_idx_str(w, k, is_hpc, bucket_bits, n, refseq, name);
-                                mm_mapopt_update(&mopt, mi); // this sets the maximum minimizer occurrence; TODO: set a better default in mm_mapopt_init()!
-                                mm_tbuf_t *tbuf = mm_tbuf_init(); // thread buffer; for multi-threading, allocate one tbuf for each thread
-                                int j, n_reg;
-                                mm_reg1_t *reg = mm_map(mi, querySeqLength, query_seq_array, &n_reg, tbuf, &mopt, name_array); // get all hits for the query
-
-                                if (n_reg > 0 && (&reg[0])->rev == 0) {
-                                    mm_reg1_t *r = &reg[0];
-                                    int32_t newAnchorRefEnd = r->re - 1;
-                                    int32_t newAnchorRefStart = startRef + r->rs;
-                                    if (blackList.find(newAnchorRefStart) == blackList.end()) {
-                                        int32_t newAnchorQueryEnd = r->qe - 1;
-                                        std::string alignmentName = "localAlignment_" + refChr + "_" + std::to_string(startRef + r->rs) + "_" + std::to_string(startRef + newAnchorRefEnd);
-                                        double length = r->re - r->rs + 1;
-                                        double numberofMs = 0;
-                                        for (uint32_t i = 0; i < r->p->n_cigar; ++i) {
-                                            if ("MIDNSH"[r->p->cigar[i] & 0xf] == 'M') {
-                                                int32_t thisLength = r->p->cigar[i] >> 4;
-                                                numberofMs = numberofMs + thisLength;
-                                            }
-                                        }
-                                        double similarity = numberofMs / length;
-                                        if (similarity > minimumSimilarity2) {
-                                            double thisScore = r->score / 2;
-                                            thisScore = thisScore / (abs(r->re - r->rs) * matchingScore);
-
-                                            AlignmentMatch orthologPair(refChr, queryChr,
-                                                                        startRef + r->rs, startRef + newAnchorRefEnd,
-                                                                        startQuery + r->qs,
-                                                                        startQuery + newAnchorQueryEnd, thisScore,
-                                                                        POSITIVE,
-                                                                        alignmentName, alignmentName);
-
-                                            alignmentMatchsMap[i].push_back(orthologPair);
-                                            changed = true;
-                                        }
-                                        blackList.insert(newAnchorRefStart);
-                                    }
-                                } else {
-                                    blackList.insert(startRef);
-                                }
-
-                                for (j = 0; j < n_reg; ++j) { // traverse hits and print them out
-                                    mm_reg1_t *r = &reg[j];
-                                    free(r->p);
-                                }
-
-                                free(reg);
-                                mm_tbuf_destroy(tbuf);
-                                mm_idx_destroy(mi);
-                                delete [] reference_seq_array;
-                                delete [] query_seq_array;
-                            } else {
-                                blackList.insert(startRef);
-                            }
+                            queryStart = queryCursor;
+                            queryEnd = orthologPair.getQueryStartPos() - 1;
+                            hasGap = true;
                         }
-                        startRef = orthologPair.getRefEndPos() + 1;
-                        startQuery = orthologPair.getQueryEndPos() + 1;
+                    } else {
+                        if (orthologPair.getRefStartPos() == startRef &&
+                            orthologPair.getQueryEndPos() != queryCursor) {
+                            queryStart = orthologPair.getQueryEndPos() + 1;
+                        } else if (orthologPair.getRefStartPos() != startRef &&
+                                   orthologPair.getQueryEndPos() == queryCursor) {
+                            endRef = orthologPair.getRefStartPos() - 1;
+                        } else if (orthologPair.getRefStartPos() != startRef ||
+                                   orthologPair.getQueryEndPos() != queryCursor) {
+                            endRef = orthologPair.getRefStartPos() - 1;
+                            queryStart = orthologPair.getQueryEndPos() + 1;
+                            queryEnd = queryCursor;
+                            hasGap = true;
+                        }
                     }
-                } else {
-                    endQuery = alignmentMatchsMap[i][0].getQueryEndPos(); // skip the first one
-                    int32_t size_i = alignmentMatchsMap[i].size();
-                    for (int32_t i_index = 0; i_index < size_i; i_index++) {
-                        AlignmentMatch orthologPair = alignmentMatchsMap[i][i_index];
 
-                        if (orthologPair.getRefStartPos() == startRef && orthologPair.getQueryEndPos() != endQuery) {
-                            startQuery = orthologPair.getQueryEndPos() + 1;
-                        } else if (orthologPair.getRefStartPos() != startRef && orthologPair.getQueryEndPos() == endQuery) {
-                            endRef = orthologPair.getRefStartPos() - 1;
-                        } else if (orthologPair.getRefStartPos() == startRef && orthologPair.getQueryEndPos() == endQuery) {
-
-                        } else {
-                            endRef = orthologPair.getRefStartPos() - 1;
-                            startQuery = orthologPair.getQueryEndPos() + 1;
-
-                            std::string refSeq = getSubsequence2(map_ref, refChr, startRef, endRef);
-                            std::string querySeq = getSubsequence2(map_qry, queryChr, startQuery, endQuery, strand);
-
-                            if ((refSeq.size() * querySeq.size() > wfaSize3 * wfaSize3) && (refSeq.size() > k && querySeq.size() > k) && blackList.find(startRef) == blackList.end()) {
-                                mm_idxopt_t iopt;
-                                mm_mapopt_t mopt;
-
-                                mm_verbose = 2; // disable message output to stderr
-                                mm_set_opt(0, &iopt, &mopt);
-                                //mopt.flag &= ~ MM_F_CIGAR; // DO NOT perform alignment
-                                mopt.flag |= MM_F_CIGAR; // DO NOT perform alignment
-                                mopt.flag |= MM_F_NO_PRINT_2ND;
-                                mopt.bw = windowWidth / 5;
-                                mopt.flag |= MM_F_NO_LJOIN; // together the last one, control the maximum gap length on the local alignment region (novel seed)
-                                mopt.a = matchingScore;
-                                mopt.b = mismatchingPenalty;
-                                mopt.q = openGapPenalty1;
-                                mopt.e = extendGapPenalty1;
-                                mopt.q2 = openGapPenalty1;
-                                mopt.e2 = extendGapPenalty1;
-                                mopt.bw = k;
-                                mopt.mid_occ = 2; // ignore seeds with occurrences above this threshold
-                                mopt.min_cnt = 2;// min number of minimizers on each chain
-                                int32_t referenceSeqLength = refSeq.length();
-                                int32_t querySeqLength = querySeq.length();
-                                char *reference_seq_array = new char[referenceSeqLength + 1];
-                                char *query_seq_array = new char[querySeqLength + 1];
-
-                                strcpy(reference_seq_array, refSeq.c_str());
-                                const char *refseq[1] = {reference_seq_array};
-
-                                strcpy(query_seq_array, querySeq.c_str());
-
-                                std::string queryName = "temp";
-                                int nameLength = queryName.length();
-                                // declaring character array
-                                char name_array[nameLength + 1];
-                                // copying the contents of the string to char array
-                                strcpy(name_array, queryName.c_str());
-                                const char *name[1] = {"temp"};
-
-                                mm_idx_t *mi = mm_idx_str(w, k, is_hpc, bucket_bits, n, refseq, name);
-                                mm_mapopt_update(&mopt, mi); // this sets the maximum minimizer occurrence; TODO: set a better default in mm_mapopt_init()!
-                                mm_tbuf_t *tbuf = mm_tbuf_init(); // thread buffer; for multi-threading, allocate one tbuf for each thread
-                                mm_reg1_t *reg;
-                                int j, n_reg;
-                                reg = mm_map(mi, querySeqLength, query_seq_array, &n_reg, tbuf, &mopt, name_array); // get all hits for the query
-                                if (n_reg > 0 && (&reg[0])->rev == 0) {
-                                    mm_reg1_t *r = &reg[0];
-                                    int32_t newAnchorRefEnd = r->re - 1;
-                                    int32_t newAnchorRefStart = startRef + r->rs;
-                                    if (blackList.find(newAnchorRefStart) == blackList.end()) {
-                                        double length = r->re - r->rs + 1;
-                                        double numberofMs = 0;
-                                        for (uint32_t i = 0; i < r->p->n_cigar; ++i) {
-                                            if ("MIDNSH"[r->p->cigar[i] & 0xf] == 'M') {
-                                                int32_t thisLength = r->p->cigar[i] >> 4;
-                                                numberofMs = numberofMs + thisLength;
-                                            }
-                                        }
-
-                                        double similarity = numberofMs / length;
-                                        if (similarity > minimumSimilarity2) {
-                                            int32_t newAnchorQueryEnd = r->qe - 1;
-                                            std::string alignmentName = "localAlignment_" + refChr + "_" + std::to_string(startRef + r->rs) + "_" + std::to_string(startRef + newAnchorRefEnd);
-                                            double thisScore = r->score / 2;
-                                            thisScore = thisScore / (abs(r->re - r->rs + 1) * matchingScore);
-                                            AlignmentMatch orthologPair(refChr, queryChr,
-                                                                        startRef + r->rs, startRef + newAnchorRefEnd,
-                                                                        endQuery - newAnchorQueryEnd, endQuery - r->qs,
-                                                                        thisScore, NEGATIVE, alignmentName, alignmentName);
-                                            alignmentMatchsMap[i].push_back(orthologPair);
-                                            changed = true;
-                                        }
-                                        blackList.insert(newAnchorRefStart);
-                                    }
-                                } else {
-                                    blackList.insert(startRef);
-                                }
-
-                                for (j = 0; j < n_reg; ++j) { // traverse hits and print them out
-                                    mm_reg1_t *r = &reg[j];
-                                    free(r->p);
-                                }
-
-                                free(reg);
-                                mm_tbuf_destroy(tbuf);
-                                mm_idx_destroy(mi);
-                                delete [] reference_seq_array;
-                                delete [] query_seq_array;
-                            } else {
-                                blackList.insert(startRef);
-                            }
+                    if (hasGap) {
+                        std::string refSequence = getSubsequence2(
+                                map_ref, refChr, startRef, endRef);
+                        std::string querySequence = strand == POSITIVE
+                                ? getSubsequence2(map_qry, queryChr,
+                                                  queryStart, queryEnd)
+                                : getSubsequence2(map_qry, queryChr,
+                                                  queryStart, queryEnd, strand);
+                        auto result =
+                                std::make_shared<QuotaNovelAnchorResult>();
+                        result->requestStartRef =
+                                static_cast<uint32_t>(startRef);
+                        if (anchorwave::novelAnchorAreaExceeds(
+                                    static_cast<uint64_t>(refSequence.size()),
+                                    static_cast<uint64_t>(querySequence.size()),
+                                    minimumNovelAnchorArea) &&
+                            refSequence.size() > static_cast<std::size_t>(k) &&
+                            querySequence.size() > static_cast<std::size_t>(k) &&
+                            blackList.find(startRef) == blackList.end()) {
+                            NovelAnchorRequest request;
+                            request.refChr = refChr;
+                            request.queryChr = queryChr;
+                            request.refSequence = std::move(refSequence);
+                            request.querySequence = std::move(querySequence);
+                            request.startRef = static_cast<uint32_t>(startRef);
+                            request.startQuery = static_cast<uint32_t>(
+                                    strand == POSITIVE ? queryStart : queryEnd);
+                            request.strand = strand;
+                            const uint64_t gapCost =
+                                    anchorwave::anchorGapTaskEstimatedCost(
+                                            request.refSequence.size(),
+                                            request.querySequence.size());
+                            novelAnchorExecutor.submit(
+                                    gapGroup, gapCost,
+                                    [&, request = std::move(request), result]() {
+                                *result = alignQuotaNovelAnchorGap(
+                                        request, matchingScore,
+                                        mismatchingPenalty, openGapPenalty1,
+                                        extendGapPenalty1, k, w, is_hpc,
+                                        windowWidth, minimumSimilarity2);
+                                novelAnchorGapTasks.fetch_add(
+                                        1, std::memory_order_relaxed);
+                            });
+                            novelAnchorExecutor.waitUntilGroupSizeAtMost(
+                                    gapGroup, maximumPendingGaps - 1);
                         }
-                        startRef = orthologPair.getRefEndPos() + 1;
-                        endQuery = orthologPair.getQueryStartPos() - 1;
+                        // Even gaps that do not launch minimap2 participate in
+                        // ordered commit: the serial code blacklisted them at
+                        // this exact point in the scan.  Applying that effect
+                        // early can suppress an earlier concurrent result.
+                        results.push_back(std::move(result));
+                    }
+
+                    startRef = orthologPair.getRefEndPos() + 1;
+                    queryCursor = strand == POSITIVE
+                                  ? orthologPair.getQueryEndPos() + 1
+                                  : orthologPair.getQueryStartPos() - 1;
+                }
+
+                novelAnchorExecutor.waitForGroup(gapGroup);
+                for (const auto &result : results) {
+                    if (blackList.find(result->requestStartRef) !=
+                        blackList.end()) {
+                        continue;
+                    }
+                    if (!result->validForwardMapping) {
+                        blackList.insert(result->requestStartRef);
+                    } else if (blackList.find(result->discoveredStartRef) ==
+                               blackList.end()) {
+                        if (result->found) {
+                            alignmentMatchsMap[i].push_back(result->anchor);
+                            changed = true;
+                        }
+                        blackList.insert(result->discoveredStartRef);
                     }
                 }
                 bool keepTandemDuplication = false;
@@ -1339,7 +1434,30 @@ void setupAnchorsWithSpliceAlignmentResultQuota(const std::string &gffFilePath, 
                 bool considerInversion = false;
                 myAlignmentMatchSort(alignmentMatchsMap[i], inversion_PENALTY, MIN_ALIGNMENT_SCORE, keepTandemDuplication, considerInversion);
             }
+            novelBlockSeconds[i] = std::chrono::duration<double>(
+                    std::chrono::steady_clock::now() - blockStart).count();
+            });
         }
+        novelAnchorExecutor.waitForIdle();
+        const double novelWallSeconds = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - novelStageStart).count();
+        double novelTaskSeconds = 0.0;
+        double criticalBlockSeconds = 0.0;
+        for (double seconds : novelBlockSeconds) {
+            novelTaskSeconds += seconds;
+            criticalBlockSeconds = std::max(criticalBlockSeconds, seconds);
+        }
+        std::cerr << "AnchorWave quota novel-anchor scheduler: worker_count="
+                  << novelAnchorExecutor.workerCount()
+                  << ", peak_active_tasks="
+                  << novelAnchorExecutor.peakActiveTasks()
+                  << ", block_tasks=" << novelAnchorBlockTasks
+                  << ", gap_tasks="
+                  << novelAnchorGapTasks.load(std::memory_order_relaxed)
+                  << ", wall_seconds=" << novelWallSeconds
+                  << ", task_seconds=" << novelTaskSeconds
+                  << ", critical_block_seconds=" << criticalBlockSeconds
+                  << std::endl;
     }
 
     {

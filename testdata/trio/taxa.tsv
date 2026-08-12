@@ -1,0 +1,4 @@
+taxon_id	role	fasta	gff	anchor_sam	anchor_fasta	callability_bed	quality_weight
+I1	ingroup_reference	I1.fa	.	.	.	.	1.0
+I2	ingroup	I2.fa	.	.	.	.	1.0
+O1	primary_outgroup	O1.fa	.	.	.	.	1.0

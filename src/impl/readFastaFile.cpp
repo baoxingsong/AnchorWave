@@ -3,9 +3,18 @@
 //
 
 #include "readFastaFile.h"
+#include "../io/CompressedInput.h"
 
 void readFastaFile(const std::string &filePath, std::map<std::string, std::tuple<std::string, long, long, int> > &map) {
-    std::ifstream infile(filePath);
+    std::string readablePath;
+    try {
+        readablePath = anchorwave::io::materializeInputFile(filePath);
+    } catch (const std::exception &error) {
+        std::cerr << error.what() << std::endl;
+        exit(1);
+    }
+
+    std::ifstream infile(readablePath);
     if (!infile.good()) {
         std::cerr << "error in opening fasta file " << filePath << std::endl;
         exit(1);
@@ -20,10 +29,13 @@ void readFastaFile(const std::string &filePath, std::map<std::string, std::tuple
     size_t line_last = 0;
 
     while (std::getline(infile, line)) {
-
+        if (line.empty()) {
+            ++offset;
+            continue;
+        }
         if (line[0] == '>') {
             if (name.size() > 0) {
-                map[name] = std::make_tuple(filePath, size, offset, line_bases);
+                map[name] = std::make_tuple(readablePath, size, offset, line_bases);
 
                 if(line_last == line_bases) {
                     offset += size + size/line_bases;
@@ -55,7 +67,7 @@ void readFastaFile(const std::string &filePath, std::map<std::string, std::tuple
     }
 
     if (name.size() > 0) {
-        map[name] = std::make_tuple(filePath, size, offset, line_bases);
+        map[name] = std::make_tuple(readablePath, size, offset, line_bases);
     }
 
     infile.close();

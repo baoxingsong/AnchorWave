@@ -12,7 +12,7 @@ UNAME=$(shell uname)
 CC:=$(CC)
 CPP:=$(CXX)
 
-CC_FLAGS=-Wall -g
+CC_FLAGS=-Wall -g -fPIE
 
 AR=ar
 AR_FLAGS=-rsc
@@ -24,7 +24,7 @@ ifndef BUILD_TOOLS
 BUILD_TOOLS=1
 endif
 ifndef BUILD_WFA_PARALLEL
-BUILD_WFA_PARALLEL=1
+BUILD_WFA_PARALLEL=0
 endif
 
 ###############################################################################

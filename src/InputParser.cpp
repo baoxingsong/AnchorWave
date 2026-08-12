@@ -49,6 +49,7 @@ bool InputParser::cmdOptionExists(const char *o) {
 void usage() {
     std::cout << "Program " << PROGRAMNAME << " v" << VERSION << std::endl <<
               "Usage: " << PROGRAMNAME << " <command> [options]" << std::endl <<
+              "       " << PROGRAMNAME << " --version" << std::endl <<
               "Commands:" << std::endl <<
               "    gff2seq     get the longest full-length CDS for each gene" << std::endl <<
               "    genoAli     whole chromosome global alignment and variant calling" << std::endl <<

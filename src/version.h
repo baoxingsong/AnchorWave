@@ -4,5 +4,5 @@
 
 #pragma once
 
-#define VERSION "1.2.6"
+#define VERSION "1.3.0"
 #define PROGRAMNAME "anchorwave"

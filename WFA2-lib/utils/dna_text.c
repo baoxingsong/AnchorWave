@@ -39,7 +39,8 @@
 /*
  * Include
  */
-#include "../utils/dna_text.h"
+#include "utils/commons.h"
+#include "utils/dna_text.h"
 
 /*
  * Tables/Conversions Implementation
@@ -58,4 +59,3 @@ const char dna_decode_table[DNA_EXTENDED_RANGE] =
   [ENC_DNA_CHAR_T] = DNA_CHAR_T,
   [ENC_DNA_CHAR_N] = DNA_CHAR_N,
 };
-

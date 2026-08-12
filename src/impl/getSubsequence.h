@@ -10,25 +10,27 @@
 #include <algorithm>
 #include <fcntl.h>
 #include <iostream>
+#include <map>
 #include <set>
+#include <stdexcept>
 #include <tuple>
 #include <unistd.h>
 
-std::string getSubsequence2(std::map<std::string, std::tuple<std::string, long, long, int> > &map, const std::string &seqName, const int &_start, const int &_end);
+std::string getSubsequence2(const std::map<std::string, std::tuple<std::string, long, long, int> > &map, const std::string &seqName, const int &_start, const int &_end);
 
-std::string getSubsequence3(std::map<std::string, std::tuple<std::string, long, long, int> > &map, int &fd, const std::string &seqName, const int &_start, const int &_end);
+std::string getSubsequence3(const std::map<std::string, std::tuple<std::string, long, long, int> > &map, int &fd, const std::string &seqName, const int &_start, const int &_end);
 
-char getCharByPos(std::map<std::string, std::tuple<std::string, long, long, int> > &map, const std::string &seqName, const int &_pos);
+char getCharByPos(const std::map<std::string, std::tuple<std::string, long, long, int> > &map, const std::string &seqName, const int &_pos);
 
-std::string getSubsequence2(std::map<std::string, std::tuple<std::string, long, long, int> > &map, const std::string &seqName);
+std::string getSubsequence2(const std::map<std::string, std::tuple<std::string, long, long, int> > &map, const std::string &seqName);
 
-std::string getSubsequence3(std::map<std::string, std::tuple<std::string, long, long, int> > &map, int &fd, const std::string &seqName);
+std::string getSubsequence3(const std::map<std::string, std::tuple<std::string, long, long, int> > &map, int &fd, const std::string &seqName);
 
-std::string getSubsequence3(std::map<std::string, std::tuple<std::string, long, long, int> > &map, int &fd, const std::string &seqName, const int &_start, const int &_end, const STRAND &strand);
+std::string getSubsequence3(const std::map<std::string, std::tuple<std::string, long, long, int> > &map, int &fd, const std::string &seqName, const int &_start, const int &_end, const STRAND &strand);
 
-std::string getSubsequence2(std::map<std::string, std::tuple<std::string, long, long, int> > &map, const std::string &seqName, const int &_start, const int &_end, const STRAND &strand);
+std::string getSubsequence2(const std::map<std::string, std::tuple<std::string, long, long, int> > &map, const std::string &seqName, const int &_start, const int &_end, const STRAND &strand);
 
-size_t getSequenceSizeFromPath2(std::tuple<std::string, long, long, int> &t);
+size_t getSequenceSizeFromPath2(const std::tuple<std::string, long, long, int> &t);
 
 std::string getSubsequence(const std::string &sequence, const int &_start, const int &_end);
 

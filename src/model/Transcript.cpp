@@ -37,16 +37,12 @@ void Transcript::setName(const std::string &name) {
     this->_name = name;
 }
 
-std::set<GenomeBasicFeature> &Transcript::getCdsHashSet() {
-    return _cdsHashSet;
-}
-
 std::vector<GenomeBasicFeature> &Transcript::getCdsVector() {
     return _cdsVector;
 }
 
-std::set<GenomeBasicFeature> &Transcript::getExonHashSet() {
-    return this->_exonHashSet;
+const std::vector<GenomeBasicFeature> &Transcript::getCdsVector() const {
+    return _cdsVector;
 }
 
 std::vector<GenomeBasicFeature> &Transcript::getExonVector() {
@@ -80,12 +76,10 @@ const std::string &Transcript::getChromeSomeName() const {
 }
 
 void Transcript::addCds(const GenomeBasicFeature &cds) {
-    this->_cdsHashSet.insert(cds);
     this->_cdsVector.push_back(cds);
 }
 
 void Transcript::addExon(const GenomeBasicFeature &exon) {
-    this->_exonHashSet.insert(exon);
     this->_exonVector.push_back(exon);
 }
 
@@ -122,7 +116,7 @@ void Transcript::setPEnd(const int &pEnd) {
 }
 
 void Transcript::updateInforCds() {
-    std::sort(this->_cdsVector.begin(), this->_cdsVector.end(), [](GenomeBasicFeature a, GenomeBasicFeature b) {
+    std::sort(this->_cdsVector.begin(), this->_cdsVector.end(), [](const GenomeBasicFeature &a, const GenomeBasicFeature &b) {
         return a < b;
     });
     this->_pStart = this->_cdsVector[0].getStart();

@@ -29,8 +29,9 @@
  * DESCRIPTION: Basic bitmap datastructure (static)
  */
 
-#include "../utils/bitmap.h"
-#include "../system/mm_allocator.h"
+#include "utils/commons.h"
+#include "utils/bitmap.h"
+#include "system/mm_allocator.h"
 
 /*
  * Setup
@@ -122,6 +123,3 @@ uint64_t bitmap_erank(
   const uint64_t bitmap_count = POPCOUNT_64(bitmap_masked);
   return bitmap_block->counter + bitmap_count;
 }
-
-
-

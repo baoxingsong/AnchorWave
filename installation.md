@@ -6,13 +6,40 @@ their supported instruction set (SSE2, SSE4.1, AVX2, or AVX-512). ARM builds are
 detected from compiler architecture macros and use NEON through SSE2NEON. During
 cross-compilation, the CMake toolchain remains responsible for target CPU flags.
 
+Requirements are CMake 3.10 or newer, a C++14 compiler, pthreads, and zlib.
+
 ## Build
 
 ```
 git clone https://github.com/baoxingsong/anchorwave.git
 cd anchorwave
-cmake ./
-make
+mkdir build && cd build
+cmake -DCMAKE_BUILD_TYPE=Release ..
+cmake --build . -- -j4
+```
+
+The executable is `build/anchorwave`. The default
+`-DANCHORWAVE_SIMD_TARGET=native` enables the best instruction set supported by
+the build machine. Such a binary may not run on an older CPU. Portable or
+explicit builds use one of `avx2`, `sse4`, `sse2`, or `toolchain`, for example:
+
+```bash
+mkdir build-sse2 && cd build-sse2
+cmake -DCMAKE_BUILD_TYPE=Release -DANCHORWAVE_SIMD_TARGET=sse2 ..
+cmake --build . -- -j4
+```
+
+WFA2 internal OpenMP support is enabled when OpenMP is available. It can be
+disabled explicitly with `-DANCHORWAVE_ENABLE_WFA_PARALLEL=OFF`; ordinary gap
+parallelism remains available through `-t`.
+
+To compile and run the release tests:
+
+```bash
+mkdir build-test && cd build-test
+cmake -DCMAKE_BUILD_TYPE=Release -DANCHORWAVE_BUILD_TESTS=ON ..
+cmake --build . -- -j4
+ctest --output-on-failure
 ```
 
 # Time cost comparison using different installation ways

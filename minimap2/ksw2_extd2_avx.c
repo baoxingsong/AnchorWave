@@ -27,6 +27,13 @@ Modified Copyright (C) 2021 Intel Corporation
 	Vasimuddin Md <vasimuddin.md@intel.com>; Sanchit Misra <sanchit.misra@intel.com>; 
 	Chirag Jain <chirag@iisc.ac.in>; Heng Li <hli@jimmy.harvard.edu>
 */
+// AnchorWave passes a short-lived kalloc arena when a sliding alignment runs
+// several consecutive KSW2 matrices.  Reusing the arena keeps already-faulted
+// traceback pages available to the next window without changing the matrix,
+// score, traceback, or peak live allocation.
+#ifndef HAVE_KALLOC
+#define HAVE_KALLOC 1
+#endif
 #include "ksw2.h"
 
 #ifdef __AVX512BW__ 
@@ -155,6 +162,15 @@ void ksw_extd2_avx512(void *km, int qlen, const uint8_t *query, int tlen, const 
         ++long_thres;
     long_diff = long_thres * (e - e2) - (q2 - q) - e2;
 
+    // Allocate the dominant traceback rectangle first. With an AnchorWave
+    // scratch arena this guarantees that a following window reuses the intact
+    // large block before small work arrays can split it.
+    if (with_cigar) {
+        mem2 = (uint8_t*)kmalloc(km, ((size_t)(qlen + tlen - 1) * n_col_ + 1) * 64);
+        p = (__m512i*)(((size_t)mem2 + 63) >> 6 << 6);
+        off = (int*)kmalloc(km, (qlen + tlen - 1) * sizeof(int) * 2);
+        off_end = off + qlen + tlen - 1;
+    }
     mem = (uint8_t*)kcalloc(km, tlen_ * 8 + qlen_ + 1 + 63, 64); 
     u = (__m512i*)(((size_t)mem + 63) >> 6 << 6); // 16-byte aligned 
     v = u + tlen_, x = v + tlen_, y = x + tlen_, x2 = y + tlen_, y2 = x2 + tlen_;
@@ -169,18 +185,16 @@ void ksw_extd2_avx512(void *km, int qlen, const uint8_t *query, int tlen, const 
         H = (int32_t*)kmalloc(km, tlen_ * 64 * 4);
         for (t = 0; t < tlen_ * 64; ++t) H[t] = KSW_NEG_INF;
     }
-    if (with_cigar) {
-        mem2 = (uint8_t*)kmalloc(km, ((size_t)(qlen + tlen - 1) * n_col_ + 1) * 64);
-        p = (__m512i*)(((size_t)mem2 + 63) >> 6 << 6);
-        off = (int*)kmalloc(km, (qlen + tlen - 1) * sizeof(int) * 2);
-        off_end = off + qlen + tlen - 1;
-    }
 
     for (t = 0; t < qlen; ++t) qr[t] = query[qlen - 1 - t];
     memcpy(sf, target, tlen);
 
     
     for (r = 0, last_st = last_en = -1; r < qlen + tlen - 1; ++r) {
+        if (!ksw_progress_continue(r, qlen + tlen - 1)) {
+            ez->stopped = 1;
+            break;
+        }
         int st = 0, en = tlen - 1, st0, en0, st_, en_;
         int8_t x1, x21, v1;
         uint8_t *qrr = qr + (qlen - 1 - r);
@@ -645,7 +659,16 @@ void ksw_extd2_avx512(void *km, int qlen, const uint8_t *query, int tlen, const 
     if (!approx_max) kfree(km, H);
     if (with_cigar) { // backtrack
         int rev_cigar = !!(flag & KSW_EZ_REV_CIGAR);
-        if (!ez->zdropped && !(flag&KSW_EZ_EXTZ_ONLY)) {
+        if (!ez->stopped && !ez->zdropped &&
+                (flag & KSW_EZ_SEMIGLOBAL_END)) {
+            if (ez->mqe > ez->mte) {
+                ez->score = ez->mqe;
+                ksw_backtrack(km, 1, rev_cigar, 0, (uint8_t*)p, off, off_end, n_col_*64, ez->mqe_t, qlen-1, &ez->m_cigar, &ez->n_cigar, &ez->cigar);
+            } else {
+                ez->score = ez->mte;
+                ksw_backtrack(km, 1, rev_cigar, 0, (uint8_t*)p, off, off_end, n_col_*64, tlen-1, ez->mte_q, &ez->m_cigar, &ez->n_cigar, &ez->cigar);
+            }
+        } else if (!ez->stopped && !ez->zdropped && !(flag&KSW_EZ_EXTZ_ONLY)) {
             ksw_backtrack(km, 1, rev_cigar, 0, (uint8_t*)p, off, off_end, n_col_*64, tlen-1, qlen-1, &ez->m_cigar, &ez->n_cigar, &ez->cigar);
         } else if (!ez->zdropped && (flag&KSW_EZ_EXTZ_ONLY) && ez->mqe + end_bonus > (int)ez->max) {
             ez->reach_end = 1;
@@ -816,6 +839,12 @@ void ksw_extd2_avx2(void *km, int qlen, const uint8_t *query, int tlen, const ui
         ++long_thres;
     long_diff = long_thres * (e - e2) - (q2 - q) - e2;
 
+    if (with_cigar) {
+        mem2 = (uint8_t*)kmalloc(km, ((size_t)(qlen + tlen - 1) * n_col_ + 1) * 32);
+        p = (__m256i*)(((size_t)mem2 + 31) >> 5 << 5);
+        off = (int*)kmalloc(km, (qlen + tlen - 1) * sizeof(int) * 2);
+        off_end = off + qlen + tlen - 1;
+    }
     mem = (uint8_t*)kcalloc(km, tlen_ * 8 + qlen_ + 1 + 63, 64);
     u = (__m256i*)(((size_t)mem + 31) >> 5 << 5); // 16-byte aligned
     v = u + tlen_, x = v + tlen_, y = x + tlen_, x2 = y + tlen_, y2 = x2 + tlen_;
@@ -830,18 +859,16 @@ void ksw_extd2_avx2(void *km, int qlen, const uint8_t *query, int tlen, const ui
         H = (int32_t*)kmalloc(km, tlen_ * 32 * 4);
         for (t = 0; t < tlen_ * 32; ++t) H[t] = KSW_NEG_INF;
     }
-    if (with_cigar) {
-        mem2 = (uint8_t*)kmalloc(km, ((size_t)(qlen + tlen - 1) * n_col_ + 1) * 32);
-        p = (__m256i*)(((size_t)mem2 + 31) >> 5 << 5);
-        off = (int*)kmalloc(km, (qlen + tlen - 1) * sizeof(int) * 2);
-        off_end = off + qlen + tlen - 1;
-    }
 
     for (t = 0; t < qlen; ++t) qr[t] = query[qlen - 1 - t];
     memcpy(sf, target, tlen);
 
 
     for (r = 0, last_st = last_en = -1; r < qlen + tlen - 1; ++r) {
+        if (!ksw_progress_continue(r, qlen + tlen - 1)) {
+            ez->stopped = 1;
+            break;
+        }
         int st = 0, en = tlen - 1, st0, en0, st_, en_;
         int8_t x1, x21, v1;
         uint8_t *qrr = qr + (qlen - 1 - r);
@@ -1322,7 +1349,16 @@ void ksw_extd2_avx2(void *km, int qlen, const uint8_t *query, int tlen, const ui
     if (!approx_max) kfree(km, H);
     if (with_cigar) { // backtrack
         int rev_cigar = !!(flag & KSW_EZ_REV_CIGAR);
-        if (!ez->zdropped && !(flag&KSW_EZ_EXTZ_ONLY)) {
+        if (!ez->stopped && !ez->zdropped &&
+                (flag & KSW_EZ_SEMIGLOBAL_END)) {
+            if (ez->mqe > ez->mte) {
+                ez->score = ez->mqe;
+                ksw_backtrack(km, 1, rev_cigar, 0, (uint8_t*)p, off, off_end, n_col_*32, ez->mqe_t, qlen-1, &ez->m_cigar, &ez->n_cigar, &ez->cigar);
+            } else {
+                ez->score = ez->mte;
+                ksw_backtrack(km, 1, rev_cigar, 0, (uint8_t*)p, off, off_end, n_col_*32, tlen-1, ez->mte_q, &ez->m_cigar, &ez->n_cigar, &ez->cigar);
+            }
+        } else if (!ez->stopped && !ez->zdropped && !(flag&KSW_EZ_EXTZ_ONLY)) {
             ksw_backtrack(km, 1, rev_cigar, 0, (uint8_t*)p, off, off_end, n_col_*32, tlen-1, qlen-1, &ez->m_cigar, &ez->n_cigar, &ez->cigar);
         } else if (!ez->zdropped && (flag&KSW_EZ_EXTZ_ONLY) && ez->mqe + end_bonus > (int)ez->max) {
             ez->reach_end = 1;
@@ -1337,4 +1373,3 @@ void ksw_extd2_avx2(void *km, int qlen, const uint8_t *query, int tlen, const ui
 }
 
 #endif
-

@@ -32,6 +32,7 @@
  *   and dispatching memory segments in order.
  */
 
+#include "utils/commons.h"
 #include "mm_allocator.h"
 
 /*
@@ -396,11 +397,12 @@ void mm_allocator_free_allocator_request(
   uint64_t num_requests = mm_allocator_segment_get_num_requests(segment);
   if (mm_reference->request_idx == num_requests-1) { // Is the last request?
     --num_requests;
-    mm_allocator_request_t* request =
-        vector_get_mem(segment->requests,mm_allocator_request_t) + (num_requests-1);
-    while (num_requests>0 && MM_ALLOCATOR_REQUEST_IS_FREE(request)) {
+    mm_allocator_request_t* request = NULL;
+    while (num_requests > 0) {
+      request = vector_get_mem(segment->requests,mm_allocator_request_t) +
+          (num_requests-1);
+      if (!MM_ALLOCATOR_REQUEST_IS_FREE(request)) break;
       --num_requests; // Free request
-      --request;
     }
     // Update segment used
     if (num_requests > 0) {
@@ -611,6 +613,5 @@ void mm_allocator_print(
     mm_allocator_print_allocator_requests(stream,mm_allocator,false);
   }
 }
-
 
 

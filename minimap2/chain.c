@@ -106,7 +106,7 @@ mm128_t *mm_chain_dp(int max_dist_x, int max_dist_y, int bw, int max_skip, int m
 			u[n_u++] = (uint64_t)f[j] << 32 | j;
 		}
 	}
-	radix_sort_64(u, u + n_u);
+	if (n_u > 1) radix_sort_64(u, u + n_u);
 	for (i = 0; i < n_u>>1; ++i) { // reverse, s.t. the highest scoring chain is the first
 		uint64_t t = u[i];
 		u[i] = u[n_u - i - 1], u[n_u - i - 1] = t;
@@ -149,7 +149,7 @@ mm128_t *mm_chain_dp(int max_dist_x, int max_dist_y, int bw, int max_skip, int m
 		w[i].x = b[k].x, w[i].y = (uint64_t)k<<32|i;
 		k += (int32_t)u[i];
 	}
-	radix_sort_128x(w, w + n_u);
+	if (n_u > 1) radix_sort_128x(w, w + n_u);
 	u2 = (uint64_t*)kmalloc(km, n_u * 8);
 	for (i = k = 0; i < n_u; ++i) {
 		int32_t j = (int32_t)w[i].y, n = (int32_t)u[j];

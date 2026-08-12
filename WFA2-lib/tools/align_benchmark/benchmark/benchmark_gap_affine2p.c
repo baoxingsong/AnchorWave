@@ -31,6 +31,7 @@
 
 #include "benchmark/benchmark_gap_affine2p.h"
 #include "benchmark/benchmark_check.h"
+#include "alignment/cigar_utils.h"
 #include "gap_affine2p/affine2p_matrix.h"
 #include "gap_affine2p/affine2p_dp.h"
 #include "wavefront/wavefront_align.h"
@@ -47,8 +48,7 @@ void benchmark_gap_affine2p_dp(
       &matrix,align_input->pattern_length+1,
       align_input->text_length+1,align_input->mm_allocator);
   cigar_t* const cigar = cigar_new(
-      align_input->pattern_length+align_input->text_length,
-      align_input->mm_allocator);
+      align_input->pattern_length+align_input->text_length);
   // Align
   timer_start(&align_input->timer);
   affine2p_dp_align(&matrix,penalties,
@@ -74,9 +74,15 @@ void benchmark_gap_affine2p_wavefront(
   wavefront_aligner_t* const wf_aligner = align_input->wf_aligner;
   // Align
   timer_start(&align_input->timer);
-  wavefront_align(wf_aligner,
-      align_input->pattern,align_input->pattern_length,
-      align_input->text,align_input->text_length);
+  if (align_input->wfa_match_funct == NULL) {
+    wavefront_align(wf_aligner,
+        align_input->pattern,align_input->pattern_length,
+        align_input->text,align_input->text_length);
+  } else {
+    wavefront_align_lambda(wf_aligner,
+        align_input->wfa_match_funct,align_input->wfa_match_funct_arguments,
+        align_input->pattern_length,align_input->text_length);
+  }
   timer_stop(&align_input->timer);
   // DEBUG
   if (align_input->debug_flags) {
@@ -85,6 +91,16 @@ void benchmark_gap_affine2p_wavefront(
   // Output
   if (align_input->output_file) {
     const int score_only = (wf_aligner->alignment_scope == compute_score);
+
+    // Testing local-extraction
+    // Testing local-extraction
+    // Testing local-extraction
+//    cigar_maxlocal_gap_affine2p(wf_aligner->cigar,penalties,
+//        align_input->pattern_length,align_input->text_length);
+    // Testing local-extraction
+    // Testing local-extraction
+    // Testing local-extraction
+
     benchmark_print_output(align_input,gap_affine_2p,score_only,wf_aligner->cigar);
   }
 }
