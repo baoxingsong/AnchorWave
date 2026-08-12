@@ -86,8 +86,3 @@ currently P50 and P90, as well as its cumulative runtime on that interval.
 
   For each command, the one-thread and 34-thread bodies are byte-identical;
   only the provenance command line in the first row differs.
-
-Detailed models and validation are in
-[`docs/ALIGNMENT_ALGORITHM_SELECTOR.md`](docs/ALIGNMENT_ALGORITHM_SELECTOR.md),
-[`docs/GENOALI_ANCHOR_PARALLELISM.md`](docs/GENOALI_ANCHOR_PARALLELISM.md), and
-[`docs/SEQUENCE_ALIGNMENT_PARALLELISM.md`](docs/SEQUENCE_ALIGNMENT_PARALLELISM.md).

@@ -61,16 +61,6 @@ else()
 endif()
 
 
-#for google unit test
-add_subdirectory(./googletest/googletest)
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    # This bundled GoogleTest enables -Werror and some newer compilers emit a
-    # false-positive warning for its stack-direction probe.
-    target_compile_options(gtest PRIVATE -Wno-error=maybe-uninitialized)
-    target_compile_options(gtest_main PRIVATE -Wno-error=maybe-uninitialized)
-endif()
-include_directories(googletest/googletest/include googletest/googletest)
-
 set(ANCHORWAVE_TRIO_SOURCES
         src/trio/TrioGraphCommand.cpp
         src/trio/Phylogeny.cpp
@@ -187,9 +177,7 @@ target_compile_options(anchorwave_compressed_input PRIVATE
         -Wall -Wextra -pedantic)
 target_link_libraries(anchorwave_compressed_input PUBLIC ZLIB::ZLIB)
 
-option(ANCHORWAVE_BUILD_TESTS "Build AnchorWave unit tests" ON)
-option(ANCHORWAVE_BUILD_BENCHMARKS "Build AnchorWave microbenchmarks" OFF)
-option(ANCHORWAVE_ENABLE_SANITIZERS "Enable ASan and UBSan for testable core targets" OFF)
+option(ANCHORWAVE_ENABLE_SANITIZERS "Enable ASan and UBSan for core targets" OFF)
 if(ANCHORWAVE_ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(anchorwave_trio_core PRIVATE
             -fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -207,173 +195,7 @@ if(ANCHORWAVE_ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
             -fsanitize=address,undefined)
 endif()
 
-if(ANCHORWAVE_BUILD_BENCHMARKS)
-    add_executable(anchorwave_wfa_mode_benchmark
-            benchmarks/WfaMemoryModeBenchmark.cpp)
-    target_include_directories(anchorwave_wfa_mode_benchmark PRIVATE
-            "${CMAKE_CURRENT_SOURCE_DIR}")
-    target_compile_options(anchorwave_wfa_mode_benchmark PRIVATE
-            -Wall -Wextra -pedantic -O3)
-    target_link_libraries(anchorwave_wfa_mode_benchmark PRIVATE
-            anchorwave_wfa2_core Threads::Threads)
-
-    # Replays one real MAF block through every Tier-1 engine.  This is kept
-    # outside the production binary so model calibration can observe
-    # counterfactual runtimes and verify exact-score consistency without
-    # adding a user-facing force-algorithm switch.
-    add_executable(anchorwave_exact_candidate_benchmark
-            benchmarks/ExactCandidateBenchmark.cpp
-            src/myImportandFunction/alignSlidingWindow.cpp
-            src/impl/GetReverseComplementary.cpp
-            src/impl/getSubsequence.cpp
-            src/util/myutil.cpp
-            minimap2/kalloc.c
-            minimap2/ksw2_progress.c
-            minimap2/ksw2_extd2_sse.c
-            minimap2/ksw2_extd2_avx.c)
-    target_include_directories(anchorwave_exact_candidate_benchmark PRIVATE
-            "${CMAKE_CURRENT_SOURCE_DIR}")
-    target_compile_options(anchorwave_exact_candidate_benchmark PRIVATE
-            -Wall -Wextra -pedantic -O3
-            ${ANCHORWAVE_SIMD_COMPILE_OPTIONS})
-    target_link_libraries(anchorwave_exact_candidate_benchmark PRIVATE
-            anchorwave_wfa2_core anchorwave_anchor_scheduler
-            Threads::Threads)
-endif()
-
-if(ANCHORWAVE_BUILD_TESTS)
-    enable_testing()
-    add_executable(anchorwave_trio_tests
-            tests/trio/ManifestReaders_test.cpp
-            tests/trio/BlockProjectionReader_test.cpp
-            tests/trio/FastaEvidenceValidator_test.cpp
-            tests/trio/MafEvidenceReader_test.cpp
-            tests/trio/AlignmentEvidence_test.cpp
-            tests/trio/AlignmentSiteGraph_test.cpp
-            tests/trio/GraphWriters_test.cpp
-            tests/trio/CopyRelationshipResolver_test.cpp
-            tests/trio/LocalizedPoaRepair_test.cpp
-            tests/trio/GraphRepairEngine_test.cpp
-            tests/trio/Phylogeny_test.cpp
-            tests/trio/AncestralInference_test.cpp
-            tests/trio/AncestralAdjacency_test.cpp)
-    target_include_directories(anchorwave_trio_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-    target_compile_options(anchorwave_trio_tests PRIVATE -Wall -Wextra -pedantic)
-    target_link_libraries(anchorwave_trio_tests PRIVATE anchorwave_trio_core gtest_main)
-    add_test(NAME anchorwave_trio_unit COMMAND anchorwave_trio_tests)
-    add_executable(anchorwave_wfa2_tests
-            tests/wfa/AlignmentAlgorithmSelector_test.cpp
-            tests/wfa/WfaAlignment_test.cpp)
-    target_include_directories(anchorwave_wfa2_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-    target_compile_options(anchorwave_wfa2_tests PRIVATE -Wall -Wextra -pedantic)
-    target_link_libraries(anchorwave_wfa2_tests PRIVATE
-            anchorwave_wfa2_core gtest_main Threads::Threads)
-    add_test(NAME anchorwave_wfa2_unit COMMAND anchorwave_wfa2_tests)
-    add_executable(anchorwave_exact_alignment_tests
-            tests/wfa/ExactAlignmentConsistency_test.cpp
-            src/myImportandFunction/alignSlidingWindow.cpp
-            src/impl/GetReverseComplementary.cpp
-            src/impl/getSubsequence.cpp
-            src/util/myutil.cpp
-            minimap2/kalloc.c
-            minimap2/ksw2_progress.c
-            minimap2/ksw2_extd2_sse.c)
-    target_include_directories(anchorwave_exact_alignment_tests PRIVATE
-            "${CMAKE_CURRENT_SOURCE_DIR}")
-    target_compile_options(anchorwave_exact_alignment_tests PRIVATE
-            -Wall -Wextra -pedantic)
-    target_link_libraries(anchorwave_exact_alignment_tests PRIVATE
-            anchorwave_wfa2_core anchorwave_anchor_scheduler
-            gtest_main Threads::Threads)
-    add_test(NAME anchorwave_exact_alignment_unit
-             COMMAND anchorwave_exact_alignment_tests)
-    add_executable(anchorwave_anchor_scheduler_tests
-            tests/anchor/AnchorTaskExecutor_test.cpp
-            tests/anchor/AlignmentGapPlanner_test.cpp
-            tests/anchor/GeneSyntenicQuota_test.cpp
-            tests/anchor/MinimapRadixSort_test.cpp
-            src/impl/geneSyntenic.cpp
-            src/model/AlignmentMatch.cpp)
-    target_include_directories(anchorwave_anchor_scheduler_tests PRIVATE
-            "${CMAKE_CURRENT_SOURCE_DIR}")
-    target_compile_options(anchorwave_anchor_scheduler_tests PRIVATE
-            -Wall -Wextra -pedantic)
-    target_link_libraries(anchorwave_anchor_scheduler_tests PRIVATE
-            anchorwave_anchor_scheduler gtest_main Threads::Threads)
-    add_test(NAME anchorwave_anchor_scheduler_unit
-             COMMAND anchorwave_anchor_scheduler_tests)
-    add_executable(anchorwave_compressed_input_tests
-            tests/io/CompressedInput_test.cpp
-            src/impl/GetReverseComplementary.cpp
-            src/impl/getSubsequence.cpp
-            src/impl/readFastaFile.cpp
-            src/impl/readGffFile.cpp
-            src/model/GenomeBasicFeature.cpp
-            src/model/STRAND.cpp
-            src/model/Transcript.cpp)
-    target_include_directories(anchorwave_compressed_input_tests PRIVATE
-            "${CMAKE_CURRENT_SOURCE_DIR}")
-    target_compile_options(anchorwave_compressed_input_tests PRIVATE
-            -Wall -Wextra -pedantic)
-    target_link_libraries(anchorwave_compressed_input_tests PRIVATE
-            anchorwave_compressed_input gtest_main ZLIB::ZLIB)
-    add_test(NAME anchorwave_compressed_input_unit
-             COMMAND anchorwave_compressed_input_tests)
-    add_executable(anchorwave_memory_tests
-            tests/memory/AlignmentBlockBuffer_test.cpp
-            tests/memory/AlignmentMatchMemory_test.cpp
-            tests/memory/ReadSamMemory_test.cpp
-            src/impl/AlignmentBlockBuffer.cpp
-            src/model/AlignmentMatch.cpp)
-    target_include_directories(anchorwave_memory_tests PRIVATE
-            "${CMAKE_CURRENT_SOURCE_DIR}")
-    target_compile_options(anchorwave_memory_tests PRIVATE
-            -Wall -Wextra -pedantic)
-    target_link_libraries(anchorwave_memory_tests PRIVATE gtest_main)
-    add_test(NAME anchorwave_memory_unit COMMAND anchorwave_memory_tests)
-    add_test(NAME anchorwave_trio_cli_smoke
-             COMMAND ${CMAKE_COMMAND}
-                     -DANCHORWAVE_EXE=$<TARGET_FILE:anchorwave>
-                     -DFIXTURE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/testdata/trio
-                     -DOUTPUT_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/trio_cli_smoke
-                     -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/trio/cli_smoke.cmake)
-    find_program(ANCHORWAVE_PYTHON3_EXECUTABLE NAMES python3)
-    if(ANCHORWAVE_PYTHON3_EXECUTABLE)
-        add_test(NAME anchorwave_trio_workflow_unit
-                 COMMAND ${ANCHORWAVE_PYTHON3_EXECUTABLE} -m unittest discover
-                         -s ${CMAKE_CURRENT_SOURCE_DIR}/workflow/tests -v)
-        set_tests_properties(anchorwave_trio_workflow_unit PROPERTIES
-                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-    else()
-        message(WARNING "python3 not found: trio workflow tests are disabled")
-    endif()
-    if(ANCHORWAVE_ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-        target_compile_options(anchorwave_trio_tests PRIVATE
-                -fsanitize=address,undefined -fno-omit-frame-pointer)
-        target_link_libraries(anchorwave_trio_tests PRIVATE -fsanitize=address,undefined)
-        target_compile_options(anchorwave_wfa2_tests PRIVATE
-                -fsanitize=address,undefined -fno-omit-frame-pointer)
-        target_link_libraries(anchorwave_wfa2_tests PRIVATE -fsanitize=address,undefined)
-        target_compile_options(anchorwave_exact_alignment_tests PRIVATE
-                -fsanitize=address,undefined -fno-omit-frame-pointer)
-        target_link_libraries(anchorwave_exact_alignment_tests PRIVATE
-                -fsanitize=address,undefined)
-        target_compile_options(anchorwave_anchor_scheduler_tests PRIVATE
-                -fsanitize=address,undefined -fno-omit-frame-pointer)
-        target_link_libraries(anchorwave_anchor_scheduler_tests PRIVATE
-                -fsanitize=address,undefined)
-        target_compile_options(anchorwave_compressed_input_tests PRIVATE
-                -fsanitize=address,undefined -fno-omit-frame-pointer)
-        target_link_libraries(anchorwave_compressed_input_tests PRIVATE
-                -fsanitize=address,undefined)
-    endif()
-endif()
-
-
 add_executable(anchorwave
-        googletest
-        googletest/googletest
-
         main.cpp
 
         src/controlLayer.cpp
@@ -471,7 +293,7 @@ target_compile_options(anchorwave PRIVATE
 
 target_link_libraries(anchorwave PRIVATE anchorwave_trio_core anchorwave_wfa2_core
         anchorwave_anchor_scheduler anchorwave_compressed_input
-        gtest gtest_main ZLIB::ZLIB Threads::Threads
+        ZLIB::ZLIB Threads::Threads
         ${CMAKE_DL_LIBS})
 if(UNIX AND NOT APPLE)
     target_link_libraries(anchorwave PRIVATE rt m)

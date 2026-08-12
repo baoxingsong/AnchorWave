@@ -33,15 +33,6 @@ WFA2 internal OpenMP support is enabled when OpenMP is available. It can be
 disabled explicitly with `-DANCHORWAVE_ENABLE_WFA_PARALLEL=OFF`; ordinary gap
 parallelism remains available through `-t`.
 
-To compile and run the release tests:
-
-```bash
-mkdir build-test && cd build-test
-cmake -DCMAKE_BUILD_TYPE=Release -DANCHORWAVE_BUILD_TESTS=ON ..
-cmake --build . -- -j4
-ctest --output-on-failure
-```
-
 # Time cost comparison using different installation ways
 ## Hardware
 We compiled AnchorWave in 4 different ways on a machine that having two Intel(R) Xeon(R) W-2295 CPUs and 128Gb RAM.

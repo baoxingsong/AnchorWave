@@ -18,14 +18,8 @@
 #include "src/cpu_arch.h"
 #include "src/controlLayer.h"
 #include "src/trio/TrioGraphCommand.h"
-#include "./googletest/googletest/include/gtest/gtest.h"
 
 int main(int argc, char **argv) {
-
-//    testing::InitGoogleTest(&argc, argv);
-//    RUN_ALL_TESTS();
-//    return 0;
-
     if (argc <= 1) {
         usage();
         return 1;

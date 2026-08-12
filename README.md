@@ -19,8 +19,6 @@ compression option is required. Compressed FASTA files are materialized once in
 and removed on normal exit. Ensure that `$TMPDIR` has enough free space for the
 decompressed genomes.
 
-See [Compressed genome and annotation inputs](docs/COMPRESSED_INPUTS.md) for
-temporary-file behavior, supported formats, and validation details.
 Using a splice aware alignment program (minimap2 and GMAP have been tested) to lift over the start and end position of reference full-length CDS to the query genome (step 1). 
 AnchorWave then identifies collinear anchors using one of three user-specified algorithm options (step 2) and uses the [WFA](https://github.com/smarco/WFA2-lib) and [minimap2](https://github.com/lh3/minimap2) algorithm to perform alignment for each anchor and inter anchor interval (step 4). Some anchor/inter-anchor regions cannot be aligned using our standard approach due to high memory and computational time costs. For these, AnchorWave either identifies novel anchors within long inter-anchor regions (step 3), or for those that cannot be split by novel anchors, aligns using the ksw_extd2 function implemented in minimap2 or a reimplemented sliding window approach (step 4). AnchorWave concatenates base pair sequence alignment for each anchor and inter-anchor region and outputs the alignment in MAF format (step 5).
 
@@ -42,18 +40,14 @@ completion time while reserving memory inside `-M`. Banded KSW2 and the
 sliding-window method share the fallback tier. Banded KSW2 is admitted
 only when its band is at least the longer input and that complete matrix fits
 the per-task budget; narrow-band speed shortcuts are not used. See the
-[selector and resource model](docs/ALIGNMENT_ALGORITHM_SELECTOR.md), the
-[WFA2 integration history](docs/WFA2_BIWFA_UPGRADE.md), and the
 [v1.3.0 release notes](RELEASE_NOTES.md).
 
 `genoAli` also uses `-t` during global anchor organization. Reference and query
 chromosomes are scheduled through one cost-prioritized worker pool and merged
-deterministically; see the
-[parallel anchor-organization design and B73/Mo17 benchmark](docs/GENOALI_ANCHOR_PARALLELISM.md).
+deterministically.
 
 The sequence-alignment stage also supports bounded fine-grained inter-anchor
-tasks; see the
-[sequence-alignment parallelism design and B73/Mo17 validation](docs/SEQUENCE_ALIGNMENT_PARALLELISM.md).
+tasks.
 
 
 Table of Contents

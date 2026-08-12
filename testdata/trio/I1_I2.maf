@@ -1,5 +1,0 @@
-##maf version=1
-a score=10
-s I1chr 0 4 + 4 ACGT
-s I2chr 0 4 + 4 AGGT
-

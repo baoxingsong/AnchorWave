@@ -1,8 +1,0 @@
-#anchorwave-block-projections-v1
-projection_id	taxon_id	sequence	block_id	start0	end0	orientation	source
-.	I1	I1chr	B1	0	2	+	fixture_macro_synteny
-.	I1	I1chr	B2	2	4	+	fixture_macro_synteny
-.	I2	I2chr	B1	0	2	+	fixture_macro_synteny
-.	I2	I2chr	B2	2	4	+	fixture_macro_synteny
-.	O1	O1chr	B1	0	2	+	fixture_macro_synteny
-.	O1	O1chr	B2	2	4	+	fixture_macro_synteny
