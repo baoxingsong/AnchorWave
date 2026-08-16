@@ -191,6 +191,9 @@ size_t getSequenceSizeFromPath2(const FastaEntry &entry) {
 std::string getSubsequence(const std::string &sequence,
                            const int &requestedStart,
                            const int &requestedEnd) {
+    if (sequence.empty()) {
+        return std::string();
+    }
     int start = requestedStart;
     int end = requestedEnd;
     if (start > end) {

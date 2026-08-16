@@ -94,6 +94,9 @@ double parseDoubleValue(const std::string &text, const std::string &option) {
 }
 
 std::size_t parseSizeValue(const std::string &text, const std::string &option) {
+    if (text.empty() || text[0] == '-') {
+        throw std::invalid_argument(option + " requires a non-negative integer");
+    }
     std::size_t consumed = 0;
     unsigned long long value = 0;
     try { value = std::stoull(text, &consumed); }
@@ -313,11 +316,13 @@ void writeRepairAudit(const std::vector<GraphRepairAudit> &audits,
                << (audit.immutableLeftSite.empty() ? "." : audit.immutableLeftSite) << '\t'
                << (audit.immutableRightSite.empty() ? "." : audit.immutableRightSite) << '\t';
         for (std::size_t i = 0; i < audit.oldCoreSites.size(); ++i) {
-            if (i) output << ','; output << audit.oldCoreSites[i];
+            if (i) output << ',';
+            output << audit.oldCoreSites[i];
         }
         output << '\t';
         for (std::size_t i = 0; i < audit.newCoreSites.size(); ++i) {
-            if (i) output << ','; output << audit.newCoreSites[i];
+            if (i) output << ',';
+            output << audit.newCoreSites[i];
         }
         output << '\t' << (audit.outsideHashBefore.empty() ? "." : audit.outsideHashBefore)
                << '\t' << (audit.outsideHashAfter.empty() ? "." : audit.outsideHashAfter)

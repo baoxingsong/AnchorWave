@@ -3,6 +3,7 @@
 #include "WfaAlignment.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <climits>
@@ -25,9 +26,11 @@ namespace anchorwave {
 namespace {
 
 constexpr uint64_t kKmerLength = 15;
+constexpr std::array<uint64_t, 3> kSketchKmerLengths{{9, 15, 21}};
+constexpr std::array<uint64_t, 3> kTargetSketchSizes{{1024, 4096, 1024}};
+constexpr std::size_t kPrimarySketchIndex = 1;
+constexpr uint64_t kEntropyBlockSize = 64;
 constexpr uint64_t kCertificationAnchorSpacing = 16384;
-constexpr uint64_t kTargetSketchSize = 4096;
-constexpr uint64_t kMaximumSketchSize = 8192;
 constexpr uint64_t kMaximumOccurrencesPerHash = 4;
 constexpr uint64_t kSingletrackWfaBaseBytes = 32ULL * 1024ULL * 1024ULL;
 constexpr uint64_t kStandardWfaBaseBytes = 16ULL * 1024ULL * 1024ULL;
@@ -74,10 +77,29 @@ constexpr long double kWfaScoreSquaredPerSecond = 460000000.0L;
 // each sliding chunk use the same kernel; assigning sliding a synthetic 5.2e9
 // rate hid long low-memory work from LPT and was a major source of tail delay.
 constexpr long double kKsw2CellsPerSecond = 1200000000.0L;
+// KSW2-Singletrack shares the native 64/32/16-byte KSW2 score recurrence and
+// changes only traceback storage. Keep cold-start rates conservative until
+// sufficient production telemetry refines each SIMD target.
+#if defined(__AVX512BW__)
+// Eight paired B73/Mo17 matrices near the -w^2 boundary measured 0.87e9
+// cells/s (94.2 s total versus 68.5 s for KSW2-full). Use a slightly
+// conservative rate so the dynamic selector does not rank the two-track
+// traceback ahead of the faster, lower-memory ordinary KSW2 kernel.
+constexpr long double kKsw2SingletrackCellsPerSecond = 850000000.0L;
+#elif defined(__AVX2__)
+constexpr long double kKsw2SingletrackCellsPerSecond = 950000000.0L;
+#elif defined(__SSE4_1__)
+constexpr long double kKsw2SingletrackCellsPerSecond = 500000000.0L;
+#else
+constexpr long double kKsw2SingletrackCellsPerSecond = 430000000.0L;
+#endif
 constexpr long double kSlidingCellsPerSecond = 1200000000.0L;
 constexpr double kWfaSetupSeconds = 0.00025;
 constexpr double kKsw2SetupSeconds = 0.00015;
 constexpr double kSlidingSetupSeconds = 0.00040;
+constexpr double kMinimumRuntimeCalibrationPredictionSeconds = 0.10;
+constexpr uint64_t kRuntimeCalibrationPriorObservations = 16;
+constexpr std::size_t kRuntimeCalibrationLoadBucketCount = 2;
 // In the first complete 100-Mb B73/Mo17 trace, 8/31 rescue intervals were
 // certified by the sparse exact-anchor chain before monolithic traceback.
 // Among the remaining intervals the smallest planned band never uniquely
@@ -117,6 +139,8 @@ std::atomic<uint64_t> mediumWfaTimeRejects(0);
 std::atomic<uint64_t> lowWfaMemoryRejects(0);
 std::atomic<uint64_t> lowWfaWorkWarnings(0);
 std::atomic<uint64_t> lowWfaTimeRejects(0);
+std::atomic<uint64_t> ksw2SingletrackMemoryRejects(0);
+std::atomic<uint64_t> ksw2SingletrackTimeRejects(0);
 std::atomic<uint64_t> scoreCertifiedKsw2MemoryRejects(0);
 std::atomic<uint64_t> scoreCertifiedKsw2TimeRejects(0);
 std::atomic<uint64_t> fullKsw2MemoryRejects(0);
@@ -132,14 +156,37 @@ std::ofstream traceStream;
 std::atomic<bool> traceEnabled(false);
 uint64_t traceLinesSinceFlush = 0;
 
+struct RuntimeCalibrationAccumulator {
+    double logResidualSum = 0.0;
+    uint64_t observations = kRuntimeCalibrationPriorObservations;
+};
+
+std::array<
+        std::array<RuntimeCalibrationAccumulator,
+                   kRuntimeCalibrationLoadBucketCount>,
+        kAlignmentCandidateCount> runtimeCalibration{};
+std::mutex runtimeCalibrationMutex;
+
+std::size_t runtimeCalibrationLoadBucket(int activeTasks,
+                                         int workerCount) {
+    if (workerCount <= 1) {
+        return 1;
+    }
+    return activeTasks > 0 &&
+                   static_cast<int64_t>(activeTasks) * 2 >= workerCount
+            ? 1 : 0;
+}
+
 struct SketchEntry {
     uint64_t hash = 0;
     uint32_t position = 0;
 };
 
 struct SequenceSummary {
-    std::vector<SketchEntry> sketch;
+    std::array<std::vector<SketchEntry>, kSketchKmerLengths.size()> sketches;
+    uint64_t fingerprint = 0;
     double ambiguousFraction = 0.0;
+    double normalizedEntropy = 0.0;
     double lowComplexityFraction = 0.0;
 };
 
@@ -192,7 +239,8 @@ int64_t floorDivideByTwo(int64_t value) {
 uint64_t ksw2TouchedTracePages(uint64_t queryLength,
                                uint64_t referenceLength,
                                uint64_t bandWidth,
-                               uint64_t pageSize) {
+                               uint64_t pageSize,
+                               uint64_t simdBytes = kKsw2SimdBytes) {
     if (queryLength == 0 || referenceLength == 0) {
         return 0;
     }
@@ -203,8 +251,8 @@ uint64_t ksw2TouchedTracePages(uint64_t queryLength,
     const uint64_t retainedBases = std::min(
             shorterLength, saturatingAdd(effectiveBand, 1));
     const uint64_t rowStrideBytes = saturatingMultiply(
-            saturatingAdd(divideRoundUp(retainedBases, kKsw2SimdBytes), 1),
-            kKsw2SimdBytes);
+            saturatingAdd(divideRoundUp(retainedBases, simdBytes), 1),
+            simdBytes);
     uint64_t pageCount = 0;
     uint64_t lastPage = 0;
     bool havePage = false;
@@ -226,11 +274,11 @@ uint64_t ksw2TouchedTracePages(uint64_t queryLength,
             continue;
         }
         const uint64_t firstVector = static_cast<uint64_t>(start) /
-                                     kKsw2SimdBytes;
+                                     simdBytes;
         const uint64_t lastVector = static_cast<uint64_t>(end) /
-                                    kKsw2SimdBytes;
+                                    simdBytes;
         const uint64_t touchedBytes = saturatingMultiply(
-                lastVector - firstVector + 1, kKsw2SimdBytes);
+                lastVector - firstVector + 1, simdBytes);
         const uint64_t rowOffset = saturatingMultiply(
                 diagonal, rowStrideBytes);
         if (rowOffset == std::numeric_limits<uint64_t>::max() ||
@@ -300,6 +348,63 @@ uint64_t ksw2TracebackMemoryBytes(uint64_t queryLength,
                                   pageSize),
             pageSize);
     uint64_t resident = touchedTrace;
+    for (const uint64_t allocation : {primaryAllocation, hAllocation,
+                                      offsetsAllocation, cigarAllocation,
+                                      encodedInputs}) {
+        resident = saturatingAdd(
+                resident, pageRoundedBytes(allocation, pageSize));
+    }
+    return resident;
+}
+
+uint64_t ksw2SingletrackMemoryBytes(uint64_t queryLength,
+                                    uint64_t referenceLength,
+                                    uint64_t bandWidth) {
+    constexpr uint64_t kSingletrackSimdBytes = kKsw2SimdBytes;
+    if (queryLength == 0 || referenceLength == 0) return 0;
+    if (queryLength > static_cast<uint64_t>(INT_MAX) ||
+        referenceLength > static_cast<uint64_t>(INT_MAX) ||
+        queryLength + referenceLength - 1 >
+                static_cast<uint64_t>(INT_MAX) ||
+        queryLength > std::numeric_limits<uint64_t>::max() -
+                              referenceLength + 1) {
+        return std::numeric_limits<uint64_t>::max();
+    }
+    const uint64_t pageSize = hostPageSizeBytes();
+    const uint64_t targetBlocks = divideRoundUp(
+            referenceLength, kSingletrackSimdBytes);
+    const uint64_t queryBlocks = divideRoundUp(
+            queryLength, kSingletrackSimdBytes);
+    const uint64_t diagonalCount = queryLength + referenceLength - 1;
+#if defined(__AVX512BW__) || defined(__AVX2__)
+    const uint64_t primaryAllocation = saturatingMultiply(
+            saturatingAdd(
+                    saturatingAdd(saturatingMultiply(targetBlocks, 8),
+                                  queryBlocks),
+                    64),
+            64);
+#else
+    const uint64_t primaryAllocation = saturatingMultiply(
+            saturatingAdd(
+                    saturatingAdd(saturatingMultiply(targetBlocks, 8),
+                                  queryBlocks),
+                    1),
+            kSingletrackSimdBytes);
+#endif
+    const uint64_t hAllocation = saturatingMultiply(
+            saturatingMultiply(targetBlocks, kSingletrackSimdBytes), 4);
+    const uint64_t offsetsAllocation = saturatingMultiply(diagonalCount, 8);
+    const uint64_t cigarAllocation = saturatingMultiply(diagonalCount, 4);
+    const uint64_t encodedInputs = saturatingAdd(queryLength,
+                                                 referenceLength);
+    const uint64_t oneTrack = saturatingMultiply(
+            ksw2TouchedTracePages(
+                    queryLength, referenceLength, bandWidth, pageSize,
+                    kSingletrackSimdBytes),
+            pageSize);
+    // The horizontal and vertical difference tracks are written over the
+    // same live antidiagonal ranges in two adjacent allocations.
+    uint64_t resident = saturatingMultiply(oneTrack, 2);
     for (const uint64_t allocation : {primaryAllocation, hAllocation,
                                       offsetsAllocation, cigarAllocation,
                                       encodedInputs}) {
@@ -483,93 +588,172 @@ int encodedBase(char base) {
     }
 }
 
-SequenceSummary summarizeComposition(const std::string &sequence) {
-    SequenceSummary summary;
-    if (sequence.empty()) {
-        return summary;
+class SequenceProfileAccumulator {
+public:
+    explicit SequenceProfileAccumulator(
+            const std::array<uint64_t, kSketchKmerLengths.size()> &modulos)
+        : samplingModulos_(modulos) {
+        for (std::size_t scale = 0; scale < kSketchKmerLengths.size();
+             ++scale) {
+            occurrences_[scale].reserve(
+                    static_cast<std::size_t>(kTargetSketchSizes[scale] * 2));
+            summary_.sketches[scale].reserve(
+                    static_cast<std::size_t>(kTargetSketchSizes[scale]));
+        }
     }
 
-    uint64_t ambiguous = 0;
-    uint64_t lowComplexity = 0;
-    char previous = '\0';
-    uint64_t runLength = 0;
-    for (char base : sequence) {
+    void consume(char base, uint64_t position) {
+        const unsigned char raw = static_cast<unsigned char>(base);
+        fingerprint_ ^= static_cast<uint64_t>(raw);
+        fingerprint_ *= 1099511628211ULL;
+
         const int code = encodedBase(base);
         if (code < 0) {
-            ++ambiguous;
-            previous = '\0';
-            runLength = 0;
-            continue;
-        }
-        const char normalized = static_cast<char>(std::toupper(
-                static_cast<unsigned char>(base)));
-        if (normalized == previous) {
-            ++runLength;
+            ++ambiguous_;
+            previousBase_ = -1;
+            runLength_ = 0;
+            entropyCounts_[4] += 1;
+            for (std::size_t scale = 0;
+                 scale < kSketchKmerLengths.size(); ++scale) {
+                rolling_[scale] = 0;
+                valid_[scale] = 0;
+            }
         } else {
-            previous = normalized;
-            runLength = 1;
+            if (code == previousBase_) {
+                ++runLength_;
+            } else {
+                previousBase_ = code;
+                runLength_ = 1;
+            }
+            if (runLength_ >= 4) {
+                ++homopolymerTailBases_;
+            }
+            entropyCounts_[static_cast<std::size_t>(code)] += 1;
+
+            for (std::size_t scale = 0;
+                 scale < kSketchKmerLengths.size(); ++scale) {
+                const uint64_t kmerLength = kSketchKmerLengths[scale];
+                const uint64_t mask = (1ULL << (2 * kmerLength)) - 1;
+                rolling_[scale] = ((rolling_[scale] << 2) |
+                        static_cast<uint64_t>(code)) & mask;
+                ++valid_[scale];
+                if (valid_[scale] < kmerLength) {
+                    continue;
+                }
+                // Gap sequences are already oriented by the anchor chain.
+                // Keep sketches strand-aware; canonical k-mers would make
+                // A^n and T^n appear identical through reverse complementation.
+                const uint64_t hash = mixHash(rolling_[scale]);
+                if (hash % samplingModulos_[scale] != 0) {
+                    continue;
+                }
+                uint8_t &occurrences = occurrences_[scale][hash];
+                if (occurrences >= kMaximumOccurrencesPerHash) {
+                    continue;
+                }
+                ++occurrences;
+                const uint64_t start = position + 1 - kmerLength;
+                if (start <= std::numeric_limits<uint32_t>::max()) {
+                    summary_.sketches[scale].push_back(
+                            SketchEntry{hash,
+                                        static_cast<uint32_t>(start)});
+                }
+            }
         }
-        if (runLength >= 4) {
-            ++lowComplexity;
+
+        ++entropyBlockBases_;
+        if (entropyBlockBases_ == kEntropyBlockSize) {
+            finishEntropyBlock();
         }
     }
-    summary.ambiguousFraction = static_cast<double>(ambiguous) /
-                                static_cast<double>(sequence.size());
-    summary.lowComplexityFraction = static_cast<double>(lowComplexity) /
-                                    static_cast<double>(sequence.size());
-    return summary;
-}
 
-SequenceSummary summarizeSequence(const std::string &sequence,
-                                  uint64_t samplingModulo) {
-    SequenceSummary summary = summarizeComposition(sequence);
-
-    if (sequence.size() < kKmerLength) {
-        return summary;
+    SequenceSummary finish(uint64_t length) {
+        finishEntropyBlock();
+        summary_.fingerprint = mixHash(
+                fingerprint_ ^ mixHash(length));
+        if (length != 0) {
+            summary_.ambiguousFraction = static_cast<double>(ambiguous_) /
+                                         static_cast<double>(length);
+            summary_.lowComplexityFraction =
+                    static_cast<double>(homopolymerTailBases_) /
+                    static_cast<double>(length);
+            summary_.normalizedEntropy = static_cast<double>(
+                    entropyWeightedBases_ /
+                    static_cast<long double>(length));
+        }
+        return std::move(summary_);
     }
 
-    const uint64_t mask = (1ULL << (2 * kKmerLength)) - 1;
-    uint64_t forward = 0;
-    uint64_t valid = 0;
-    std::unordered_map<uint64_t, uint8_t> retainedOccurrences;
-    retainedOccurrences.reserve(kTargetSketchSize * 2);
-    summary.sketch.reserve(kTargetSketchSize);
+private:
+    void finishEntropyBlock() {
+        if (entropyBlockBases_ == 0) {
+            return;
+        }
+        const uint64_t validBases = entropyBlockBases_ - entropyCounts_[4];
+        long double entropy = 0.0L;
+        if (validBases != 0) {
+            for (std::size_t base = 0; base < 4; ++base) {
+                if (entropyCounts_[base] == 0) {
+                    continue;
+                }
+                const long double probability =
+                        static_cast<long double>(entropyCounts_[base]) /
+                        static_cast<long double>(validBases);
+                entropy -= probability * std::log2(probability);
+            }
+            entropy = entropy / 2.0L *
+                    static_cast<long double>(validBases) /
+                    static_cast<long double>(entropyBlockBases_);
+        }
+        entropyWeightedBases_ += entropy *
+                static_cast<long double>(entropyBlockBases_);
+        entropyCounts_.fill(0);
+        entropyBlockBases_ = 0;
+    }
 
-    for (uint64_t position = 0; position < sequence.size(); ++position) {
-        const int code = encodedBase(sequence[static_cast<std::size_t>(position)]);
-        if (code < 0) {
-            forward = 0;
-            valid = 0;
-            continue;
+    SequenceSummary summary_;
+    std::array<uint64_t, kSketchKmerLengths.size()> samplingModulos_{};
+    std::array<uint64_t, kSketchKmerLengths.size()> rolling_{};
+    std::array<uint64_t, kSketchKmerLengths.size()> valid_{};
+    std::array<std::unordered_map<uint64_t, uint8_t>,
+               kSketchKmerLengths.size()> occurrences_;
+    std::array<uint64_t, 5> entropyCounts_{};
+    uint64_t fingerprint_ = 1469598103934665603ULL;
+    uint64_t ambiguous_ = 0;
+    uint64_t homopolymerTailBases_ = 0;
+    uint64_t runLength_ = 0;
+    uint64_t entropyBlockBases_ = 0;
+    long double entropyWeightedBases_ = 0.0L;
+    int previousBase_ = -1;
+};
+
+std::pair<SequenceSummary, SequenceSummary> summarizeSequencePair(
+        const std::string &query,
+        const std::string &reference,
+        const std::array<uint64_t, kSketchKmerLengths.size()> &modulos,
+        bool &identical) {
+    SequenceProfileAccumulator queryAccumulator(modulos);
+    SequenceProfileAccumulator referenceAccumulator(modulos);
+    identical = query.size() == reference.size();
+    const uint64_t maximumLength = std::max(query.size(), reference.size());
+    for (uint64_t position = 0; position < maximumLength; ++position) {
+        if (position < query.size()) {
+            queryAccumulator.consume(
+                    query[static_cast<std::size_t>(position)], position);
         }
-        forward = ((forward << 2) | static_cast<uint64_t>(code)) & mask;
-        ++valid;
-        if (valid < kKmerLength) {
-            continue;
+        if (position < reference.size()) {
+            referenceAccumulator.consume(
+                    reference[static_cast<std::size_t>(position)], position);
         }
-        // Gap sequences have already been oriented to the same strand by the
-        // anchor chain. Keep the sketch strand-aware; canonical k-mers would
-        // otherwise make, for example, A^n and T^n look identical merely
-        // because they are reverse complements.
-        const uint64_t hash = mixHash(forward);
-        if (hash % samplingModulo != 0) {
-            continue;
-        }
-        uint8_t &occurrences = retainedOccurrences[hash];
-        if (occurrences >= kMaximumOccurrencesPerHash) {
-            continue;
-        }
-        ++occurrences;
-        const uint64_t start = position + 1 - kKmerLength;
-        if (start <= std::numeric_limits<uint32_t>::max()) {
-            summary.sketch.push_back(
-                    SketchEntry{hash, static_cast<uint32_t>(start)});
-        }
-        if (summary.sketch.size() >= kMaximumSketchSize) {
-            break;
+        if (identical &&
+            query[static_cast<std::size_t>(position)] !=
+                    reference[static_cast<std::size_t>(position)]) {
+            identical = false;
         }
     }
-    return summary;
+    return std::make_pair(
+            queryAccumulator.finish(query.size()),
+            referenceAccumulator.finish(reference.size()));
 }
 
 using PositionMap = std::unordered_map<uint64_t, std::vector<uint32_t>>;
@@ -581,6 +765,61 @@ PositionMap indexSketch(const std::vector<SketchEntry> &sketch) {
         index[entry.hash].push_back(entry.position);
     }
     return index;
+}
+
+double sketchJaccard(const PositionMap &queryIndex,
+                     const PositionMap &referenceIndex,
+                     bool identical) {
+    uint64_t shared = 0;
+    for (const auto &item : queryIndex) {
+        if (referenceIndex.find(item.first) != referenceIndex.end()) {
+            ++shared;
+        }
+    }
+    const uint64_t unionSize = queryIndex.size() + referenceIndex.size() -
+                               shared;
+    return unionSize == 0
+           ? (identical ? 1.0 : 0.0)
+           : static_cast<double>(shared) /
+             static_cast<double>(unionSize);
+}
+
+double chainedCoverage(const std::vector<Anchor> &chain,
+                       bool queryCoordinate,
+                       uint64_t sequenceLength) {
+    if (chain.empty() || sequenceLength == 0) {
+        return 0.0;
+    }
+    uint64_t covered = 0;
+    uint64_t intervalStart = queryCoordinate ? chain.front().query
+                                             : chain.front().reference;
+    uint64_t intervalEnd = saturatingAdd(intervalStart, kKmerLength);
+    for (std::size_t index = 1; index < chain.size(); ++index) {
+        const uint64_t start = queryCoordinate ? chain[index].query
+                                               : chain[index].reference;
+        const uint64_t end = saturatingAdd(start, kKmerLength);
+        if (start > intervalEnd) {
+            covered = saturatingAdd(covered, intervalEnd - intervalStart);
+            intervalStart = start;
+            intervalEnd = end;
+        } else {
+            intervalEnd = std::max(intervalEnd, end);
+        }
+    }
+    covered = saturatingAdd(covered, intervalEnd - intervalStart);
+    return std::min(1.0, static_cast<double>(covered) /
+                         static_cast<double>(sequenceLength));
+}
+
+double mashMismatchRate(double jaccard, uint64_t kmerLength) {
+    if (!(jaccard > 0.0) || kmerLength == 0) {
+        return 1.0;
+    }
+    const double sharedKmerProbability = 2.0 * jaccard / (1.0 + jaccard);
+    return std::max(0.0, std::min(
+            1.0, 1.0 - std::pow(
+                    sharedKmerProbability,
+                    1.0 / static_cast<double>(kmerLength))));
 }
 
 double median(std::vector<double> values) {
@@ -776,12 +1015,220 @@ double p90Inflation(const AlignmentProfile &profile,
     if (candidate == AlignmentCandidate::MediumWfa ||
                candidate == AlignmentCandidate::LowWfa) {
         inflation += 0.08;
-    } else if (candidate == AlignmentCandidate::Ksw2ScoreCertified ||
+    } else if (candidate == AlignmentCandidate::Ksw2Singletrack ||
+               candidate == AlignmentCandidate::Ksw2ScoreCertified ||
                candidate == AlignmentCandidate::Ksw2Full ||
                candidate == AlignmentCandidate::Ksw2Banded) {
         inflation = 1.08 + 0.20 * profile.uncertainty;
     }
     return inflation;
+}
+
+constexpr uint32_t kApproximateQualityModelVersion = 1;
+constexpr double kApproximateQualityCrossFittedResidualMargin =
+        0.06476045275949399;
+constexpr double kApproximateQualityIntercept = -0.28504034582621496;
+constexpr std::size_t kApproximateQualityFeatureCount = 26;
+
+// AlignmentProfile-v2 / B73-Mo17 model. The coefficient vector was selected
+// by chromosome-grouped nested cross-validation and is paired with a one-sided
+// 90% cross-fitted residual margin. Values are standardized in the order
+// constructed by approximateQualityFeatures() below. Updating any feature definition requires
+// a new profile/model version and a new paired calibration, never an in-place
+// coefficient edit. Reproducibility identifiers for version 1 are:
+// paired TSV sha256 336aa418f9a5df9af8596c4e04a90f1ee1a55fc254dc94cba3229f7de031f3e6
+// model JSON sha256 38c21260141b2babf4a6196121a75b6fd834ac06ade77c873423cc8384eb7b10
+constexpr std::array<double, kApproximateQualityFeatureCount>
+kApproximateQualityFeatureMean{{
+    0.9457828680570106, 0.16726296336304924, 0.04741590817656943,
+    0.09099606782580325, 0.022945905384331795, 0.6920264506703088,
+    0.925642519040247, 0.944443189983324, 0.25249212874911786,
+    0.25147530924474115, 0.893526861248376, 0.11271518355625851,
+    0.0313947337625889, 0.03079228295765084, 0.00368240842205041,
+    0.0744518655420481, 0.2526284265376583, 0.31441092451754066,
+    0.3131084369479386, 0.14062282187078395, 0.627444275292187,
+    0.3220789612887255, 0.6455956214181152, 0.33735874154180107,
+    1.1672131147540983, 0.7086085342195246
+}};
+
+constexpr std::array<double, kApproximateQualityFeatureCount>
+kApproximateQualityFeatureScale{{
+    0.13777988465572927, 0.13241259459554142, 0.13054237634214172,
+    0.12464157534471508, 0.0032220198083089627, 0.1028473506359705,
+    0.04954012690905027, 0.04132342116940081, 0.08173295804961649,
+    0.20466153947243065, 0.0831498042154634, 0.25888897959121177,
+    0.022581112228964167, 0.021543517266084628, 0.010974829488112785,
+    0.06681997142564523, 0.15062912544280327, 0.15858473877856216,
+    0.15727674903400127, 0.1327514593062184, 0.09024859349644572,
+    0.16795812597109155, 0.39405414918602866, 0.2510533606847767,
+    0.4147767764162219, 0.35280528502328473
+}};
+
+constexpr std::array<double, kApproximateQualityFeatureCount>
+kApproximateQualityFeatureMinimum{{
+    0.6740713890546238, 2.0785482999996496e-05, 0.0,
+    0.03345344365400005, 0.00872514389451, 0.43644716692200003,
+    0.729684210526, 0.761904761905, 0.0, 0.0,
+    0.11475409836100003, 3.352082600005524e-05, 0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0, 0.0, 0.0613669697859, 0.378803375399,
+    0.03864553641422829, 0.0, 0.0, 1.0, 0.0
+}};
+
+constexpr std::array<double, kApproximateQualityFeatureCount>
+kApproximateQualityFeatureMaximum{{
+    1.5282256878088074, 0.6861116614930001, 0.588271717868,
+    0.606010104908, 0.0303157698057, 1.0, 1.0, 1.0,
+    0.492686331817, 1.0, 1.0, 1.0, 0.136020109884,
+    0.135748760184, 0.12443959075755834, 0.3071949543708819,
+    0.7978335451080051, 0.8658865114363664, 0.8000063532401525,
+    0.75, 0.990492749103, 1.0, 2.002496611129223,
+    1.1360610168328213, 3.0, 2.1527844202843367
+}};
+
+constexpr std::array<double, kApproximateQualityFeatureCount>
+kApproximateQualityCoefficient{{
+    -0.07742095615444564, 0.08893272839105569, -0.31906119672479627,
+    0.2918278333577364, 0.002520307918774435, 0.17194210067819937,
+    0.04254172074285198, -0.1191990109136546, 0.16926425385976332,
+    -0.01286963376449563, 0.01214238047496819,
+    -0.00018357025228541256, -0.03195456218366117,
+    0.05262600430205499, 0.007507018435775013,
+    -0.0002947350074150215, 0.009372283111966277,
+    -0.0936214333557272, -0.03867005822752747,
+    0.013211304343636637, 0.00349676455072904,
+    0.07469461923118426, 0.1652436871301093,
+    -0.03991268703249798, 0.03825879189126091,
+    -0.02589392587117156
+}};
+
+std::array<double, kApproximateQualityFeatureCount>
+approximateQualityFeatures(const AlignmentProfile &profile,
+                           uint64_t bandWidth,
+                           uint64_t slidingWidth,
+                           uint64_t requestedWindowWidth) {
+    const double maximumLength = static_cast<double>(std::max<uint64_t>(
+            1, std::max(profile.queryLength, profile.referenceLength)));
+    const double boundaries = slidingWidth == 0 ? 0.0 : std::max(
+            0.0, std::ceil(maximumLength /
+                           static_cast<double>(slidingWidth)) - 1.0);
+    const double diagonalSignal = profile.diagonalP99 +
+                                  profile.maximumDiagonalJump;
+    return {{
+        std::log1p(maximumLength /
+                   static_cast<double>(std::max<uint64_t>(
+                           1, requestedWindowWidth))),
+        1.0 - profile.lengthRatio,
+        profile.ambiguousBaseFraction,
+        1.0 - profile.sequenceEntropy,
+        profile.lowComplexityFraction,
+        1.0 - profile.sketchJaccardK9,
+        1.0 - profile.sketchJaccard,
+        1.0 - profile.sketchJaccardK21,
+        profile.sketchJaccardDispersion,
+        1.0 - profile.uniqueAnchorFraction,
+        1.0 - profile.chainedAnchorFraction,
+        1.0 - profile.chainSpanCoverage,
+        profile.chainQueryCoverage,
+        profile.chainReferenceCoverage,
+        profile.chainGapP90 / maximumLength,
+        profile.diagonalMad / maximumLength,
+        profile.diagonalP90 / maximumLength,
+        profile.diagonalP99 / maximumLength,
+        profile.maximumDiagonalJump / maximumLength,
+        profile.estimatedMismatchRate,
+        profile.uncertainty,
+        static_cast<double>(bandWidth) / maximumLength,
+        std::max(0.0, static_cast<double>(profile.estimatedBandWidth) -
+                      static_cast<double>(bandWidth)) / maximumLength,
+        std::max(0.0, diagonalSignal - static_cast<double>(bandWidth)) /
+                maximumLength,
+        boundaries,
+        boundaries * diagonalSignal / maximumLength
+    }};
+}
+
+ApproximateQualityDecision calibratedApproximateQualityDecision(
+        const AlignmentProfile &profile,
+        uint64_t bandWidth,
+        uint64_t slidingWidth,
+        uint64_t requestedWindowWidth,
+        uint64_t mismatch,
+        uint64_t gapOpen1,
+        uint64_t gapExtend1,
+        uint64_t gapOpen2,
+        uint64_t gapExtend2) {
+    ApproximateQualityDecision decision;
+    decision.selected = AlignmentCandidate::SlidingWindow;
+    // Version 1 was calibrated only for the published default scoring profile
+    // and -w 100000. Other settings retain the deterministic analytic policy
+    // and are explicitly marked uncalibrated rather than silently
+    // extrapolating a B73/Mo17 fit.
+    if (profile.version != 2 || bandWidth == 0 || slidingWidth == 0 ||
+        requestedWindowWidth != 100000 || mismatch != 6 ||
+        gapOpen1 != 8 || gapExtend1 != 2 ||
+        gapOpen2 != 75 || gapExtend2 != 1) {
+        return decision;
+    }
+    const auto values = approximateQualityFeatures(
+            profile, bandWidth, slidingWidth, requestedWindowWidth);
+    decision.modelVersion = kApproximateQualityModelVersion;
+    double normalizedAdvantage = kApproximateQualityIntercept;
+    bool insideApplicabilityDomain = true;
+    for (std::size_t feature = 0;
+         feature < kApproximateQualityFeatureCount; ++feature) {
+        const double standardized =
+                (values[feature] - kApproximateQualityFeatureMean[feature]) /
+                kApproximateQualityFeatureScale[feature];
+        if (!std::isfinite(standardized)) {
+            decision.applicabilityMaximumAbsoluteZ =
+                    std::numeric_limits<double>::infinity();
+            return decision;
+        }
+        decision.applicabilityMaximumAbsoluteZ = std::max(
+                decision.applicabilityMaximumAbsoluteZ,
+                std::fabs(standardized));
+        // Selective prediction is safer than silently extrapolating. Permit a
+        // small numerical/generalization margin beyond the observed feature
+        // range, but abstain outside it. The standardized distance is retained
+        // as telemetry rather than used as a second cutoff: a few legitimate
+        // training observations lie more than eight standard deviations from
+        // the mean because these biological features are strongly skewed.
+        const double observedRange =
+                kApproximateQualityFeatureMaximum[feature] -
+                kApproximateQualityFeatureMinimum[feature];
+        const double supportMargin = std::max(
+                0.05 * observedRange,
+                0.25 * kApproximateQualityFeatureScale[feature]);
+        if (values[feature] <
+                    kApproximateQualityFeatureMinimum[feature] - supportMargin ||
+            values[feature] >
+                    kApproximateQualityFeatureMaximum[feature] + supportMargin) {
+            insideApplicabilityDomain = false;
+        }
+        normalizedAdvantage +=
+                kApproximateQualityCoefficient[feature] * standardized;
+    }
+    if (!insideApplicabilityDomain) {
+        return decision;
+    }
+    const double scoreScale = static_cast<double>(mismatch) *
+            static_cast<double>(std::max(
+                    profile.queryLength, profile.referenceLength));
+    decision.predictedBandedMinusSlidingScore =
+            normalizedAdvantage * scoreScale;
+    decision.residualAdjustedBandedMinusSlidingScore =
+            (normalizedAdvantage -
+             kApproximateQualityCrossFittedResidualMargin) *
+            scoreScale;
+    // Quality is lexicographically first. Runtime never overrides this
+    // one-sided score decision; it is used only when the quality model is
+    // exactly tied or unavailable.
+    if (normalizedAdvantage -
+            kApproximateQualityCrossFittedResidualMargin > 0.0) {
+        decision.selected = AlignmentCandidate::Ksw2Banded;
+    }
+    decision.calibrated = true;
+    return decision;
 }
 
 }  // namespace
@@ -794,6 +1241,14 @@ uint64_t ksw2TracebackResidentMemoryBytes(
             queryLength, referenceLength, bandWidth);
 }
 
+uint64_t ksw2SingletrackResidentMemoryBytes(
+        uint64_t queryLength,
+        uint64_t referenceLength,
+        uint64_t bandWidth) {
+    return ksw2SingletrackMemoryBytes(
+            queryLength, referenceLength, bandWidth);
+}
+
 const char *alignmentCandidateName(AlignmentCandidate candidate) {
     switch (candidate) {
         case AlignmentCandidate::SingletrackWfa:
@@ -801,6 +1256,8 @@ const char *alignmentCandidateName(AlignmentCandidate candidate) {
         case AlignmentCandidate::StandardWfa: return "WAVEFRONT";
         case AlignmentCandidate::MediumWfa: return "WAVEFRONT_MEDIUM";
         case AlignmentCandidate::LowWfa: return "WAVEFRONT_LOW";
+        case AlignmentCandidate::Ksw2Singletrack:
+            return "KSW2_SINGLETRACK";
         case AlignmentCandidate::Ksw2ScoreCertified:
             return "KSW2_SCORE_CERTIFIED";
         case AlignmentCandidate::Ksw2Full: return "MINIMAP2";
@@ -817,8 +1274,13 @@ std::string alignmentMethodBedLabel(const std::string &internalMethod) {
         internalMethod == "WAVEFRONT_LOW") {
         return "WAVEFRONT";
     }
-    if (internalMethod == "KSW2_SCORE_CERTIFIED") {
-        return "MINIMAP2";
+    if (internalMethod == "KSW2_SINGLETRACK" ||
+        internalMethod == "MINIMAP2" ||
+        internalMethod == "KSW2_SCORE_CERTIFIED") {
+        return "KSW2";
+    }
+    if (internalMethod == "BANDED_MINIMAP2") {
+        return "BANDED_KSW2";
     }
     return internalMethod;
 }
@@ -827,9 +1289,199 @@ double alignmentRiskAdjustedMinutes(
         const AlgorithmCostEstimate &estimate) {
     const double p50 = std::max(0.0, estimate.estimatedMinutes);
     const double p90 = std::max(p50, estimate.estimatedMinutesP90);
-    return p50 + 0.35 * (p90 - p50) +
-           (1.0 - std::max(0.0, std::min(
-                          1.0, estimate.successProbability))) * p90;
+    return p50 + 0.35 * (p90 - p50);
+}
+
+double alignmentExpectedCompletionMinutes(
+        const AlgorithmCostEstimate &estimate,
+        double fallbackExactMinutes) {
+    const double successProbability = std::max(
+            0.0, std::min(1.0, estimate.successProbability));
+    return alignmentRiskAdjustedMinutes(estimate) +
+           (1.0 - successProbability) *
+                   std::max(0.0, fallbackExactMinutes);
+}
+
+namespace {
+
+std::vector<double> exactSystemBellmanValues(
+        const std::vector<ExactAttemptSystemCost> &attempts) {
+    if (attempts.empty()) {
+        return std::vector<double>(1, 0.0);
+    }
+    if (attempts.size() >= sizeof(std::size_t) * 8) {
+        throw std::invalid_argument("too many exact-alignment candidates");
+    }
+    for (const ExactAttemptSystemCost &attempt : attempts) {
+        if (!std::isfinite(attempt.attemptMinutes) ||
+            attempt.attemptMinutes < 0.0 ||
+            !std::isfinite(attempt.successProbability) ||
+            attempt.successProbability < 0.0 ||
+            attempt.successProbability > 1.0) {
+            throw std::invalid_argument(
+                    "invalid exact-alignment system-cost estimate");
+        }
+    }
+    const std::size_t stateCount = std::size_t{1} << attempts.size();
+    std::vector<double> best(stateCount,
+                             std::numeric_limits<double>::infinity());
+    best[0] = 0.0;
+    for (std::size_t mask = 1; mask < stateCount; ++mask) {
+        for (std::size_t i = 0; i < attempts.size(); ++i) {
+            const std::size_t bit = std::size_t{1} << i;
+            if ((mask & bit) == 0) {
+                continue;
+            }
+            const double failureProbability =
+                    1.0 - attempts[i].successProbability;
+            best[mask] = std::min(
+                    best[mask],
+                    attempts[i].attemptMinutes +
+                            failureProbability * best[mask ^ bit]);
+        }
+    }
+    return best;
+}
+
+}  // namespace
+
+double exactAttemptExpectedSystemMinutes(
+        const std::vector<ExactAttemptSystemCost> &attempts,
+        std::size_t firstAttempt) {
+    if (firstAttempt >= attempts.size()) {
+        throw std::out_of_range("exact-alignment first attempt is invalid");
+    }
+    const std::vector<double> best = exactSystemBellmanValues(attempts);
+    const std::size_t all = best.size() - 1;
+    const std::size_t remaining = all ^ (std::size_t{1} << firstAttempt);
+    return attempts[firstAttempt].attemptMinutes +
+           (1.0 - attempts[firstAttempt].successProbability) *
+                   best[remaining];
+}
+
+double bestExactExpectedSystemMinutes(
+        const std::vector<ExactAttemptSystemCost> &attempts) {
+    if (attempts.empty()) {
+        return 0.0;
+    }
+    const std::vector<double> best = exactSystemBellmanValues(attempts);
+    return best.back();
+}
+
+bool exactCandidateEpsilonDominates(
+        const AlgorithmCostEstimate &preferred,
+        const AlgorithmCostEstimate &other,
+        double successProbabilityTolerance) {
+    if (!std::isfinite(successProbabilityTolerance) ||
+        successProbabilityTolerance < 0.0) {
+        return false;
+    }
+    const double preferredP50 = std::max(
+            0.0, preferred.estimatedMinutes);
+    const double preferredP90 = std::max(
+            preferredP50, preferred.estimatedMinutesP90);
+    const double otherP50 = std::max(
+            0.0, other.estimatedMinutes);
+    const double otherP90 = std::max(
+            otherP50, other.estimatedMinutesP90);
+    if (!std::isfinite(preferredP50) ||
+        !std::isfinite(preferredP90) ||
+        !std::isfinite(otherP50) ||
+        !std::isfinite(otherP90)) {
+        return false;
+    }
+    const double preferredSuccess = std::max(
+            0.0, std::min(1.0, preferred.successProbability));
+    const double otherSuccess = std::max(
+            0.0, std::min(1.0, other.successProbability));
+    return preferred.memoryBytes <= other.memoryBytes &&
+           preferredP50 <= otherP50 &&
+           preferredP90 <= otherP90 &&
+           preferredSuccess + successProbabilityTolerance >= otherSuccess;
+}
+
+double bestExactExpectedCompletionMinutes(
+        const std::vector<AlgorithmCostEstimate> &estimates) {
+    std::vector<ExactAttemptSystemCost> attempts;
+    attempts.reserve(estimates.size());
+    for (const AlgorithmCostEstimate &estimate : estimates) {
+        attempts.push_back(ExactAttemptSystemCost{
+                estimate.candidate,
+                alignmentRiskAdjustedMinutes(estimate),
+                std::max(0.0, std::min(
+                        1.0, estimate.successProbability))});
+    }
+    return bestExactExpectedSystemMinutes(attempts);
+}
+
+AlgorithmCostEstimate calibratedAlignmentCostEstimate(
+        const AlgorithmCostEstimate &estimate,
+        int activeTasks,
+        int workerCount) {
+    RuntimeCalibrationAccumulator calibration;
+    {
+        std::lock_guard<std::mutex> lock(runtimeCalibrationMutex);
+        calibration = runtimeCalibration[
+                static_cast<std::size_t>(estimate.candidate)][
+                runtimeCalibrationLoadBucket(activeTasks, workerCount)];
+    }
+    // A neutral prior plus all completed observations form a bounded
+    // geometric mean.  This adapts promptly to the current CPU while the
+    // prior prevents a few early tasks from dominating live ranking.
+    const double multiplier = std::max(
+            0.5, std::min(
+                    2.0, std::exp(
+                            calibration.logResidualSum /
+                            static_cast<double>(calibration.observations))));
+    AlgorithmCostEstimate calibrated = estimate;
+    calibrated.estimatedMinutes *= multiplier;
+    calibrated.estimatedMinutesP90 = std::max(
+            calibrated.estimatedMinutes,
+            calibrated.estimatedMinutesP90 * multiplier);
+    return calibrated;
+}
+
+void recordAlignmentRuntimeObservation(
+        AlignmentCandidate candidate,
+        double predictedMinutesP50,
+        double actualSeconds) {
+    recordAlignmentRuntimeObservation(
+            candidate, predictedMinutesP50, predictedMinutesP50,
+            actualSeconds, 1, 1);
+}
+
+void recordAlignmentRuntimeObservation(
+        AlignmentCandidate candidate,
+        double predictedMinutesP50,
+        double predictedMinutesP90,
+        double actualSeconds,
+        int activeTasks,
+        int workerCount) {
+    (void)predictedMinutesP90;
+    if (!(predictedMinutesP50 * 60.0 >=
+                  kMinimumRuntimeCalibrationPredictionSeconds) ||
+        !(actualSeconds > 0.0) ||
+        !std::isfinite(predictedMinutesP50) ||
+        !std::isfinite(actualSeconds)) {
+        return;
+    }
+    const double ratio = std::max(
+            0.125, std::min(
+                    8.0,
+                    actualSeconds / 60.0 / predictedMinutesP50));
+    std::lock_guard<std::mutex> lock(runtimeCalibrationMutex);
+    RuntimeCalibrationAccumulator &calibration = runtimeCalibration[
+            static_cast<std::size_t>(candidate)][
+            runtimeCalibrationLoadBucket(activeTasks, workerCount)];
+    calibration.logResidualSum += std::log(ratio);
+    ++calibration.observations;
+}
+
+void resetAlignmentRuntimeCalibration() {
+    std::lock_guard<std::mutex> lock(runtimeCalibrationMutex);
+    for (auto &candidateCalibration : runtimeCalibration) {
+        candidateCalibration.fill(RuntimeCalibrationAccumulator{});
+    }
 }
 
 double alignmentSelectionPriorityMinutes(
@@ -844,7 +1496,8 @@ double alignmentSelectionPriorityMinutes(
     } else {
         tier = &plan.lastResortCandidates;
     }
-    double priority = std::numeric_limits<double>::infinity();
+    std::vector<AlgorithmCostEstimate> tierEstimates;
+    tierEstimates.reserve(tier->size());
     for (const AlignmentCandidate candidate : *tier) {
         const auto found = std::find_if(
                 plan.estimates.begin(), plan.estimates.end(),
@@ -852,9 +1505,16 @@ double alignmentSelectionPriorityMinutes(
                     return estimate.candidate == candidate;
                 });
         if (found != plan.estimates.end()) {
-            priority = std::min(
-                    priority, alignmentRiskAdjustedMinutes(*found));
+            tierEstimates.push_back(*found);
         }
+    }
+    if (!plan.exactCandidates.empty()) {
+        return bestExactExpectedCompletionMinutes(tierEstimates);
+    }
+    double priority = std::numeric_limits<double>::infinity();
+    for (const AlgorithmCostEstimate &estimate : tierEstimates) {
+        priority = std::min(priority,
+                            alignmentRiskAdjustedMinutes(estimate));
     }
     return std::isfinite(priority) ? std::max(0.0, priority) : 0.0;
 }
@@ -871,7 +1531,8 @@ uint64_t alignmentSelectionPriorityMemoryBytes(
     } else {
         tier = &plan.lastResortCandidates;
     }
-    const AlgorithmCostEstimate *best = nullptr;
+    std::vector<const AlgorithmCostEstimate *> tierEstimates;
+    tierEstimates.reserve(tier->size());
     for (const AlignmentCandidate candidate : *tier) {
         const auto found = std::find_if(
                 plan.estimates.begin(), plan.estimates.end(),
@@ -881,13 +1542,78 @@ uint64_t alignmentSelectionPriorityMemoryBytes(
         if (found == plan.estimates.end()) {
             continue;
         }
-        if (best == nullptr ||
-            alignmentRiskAdjustedMinutes(*found) <
-                    alignmentRiskAdjustedMinutes(*best)) {
-            best = &*found;
+        tierEstimates.push_back(&*found);
+    }
+    const AlgorithmCostEstimate *best = nullptr;
+    double bestMinutes = std::numeric_limits<double>::infinity();
+    for (std::size_t i = 0; i < tierEstimates.size(); ++i) {
+        double minutes = alignmentRiskAdjustedMinutes(*tierEstimates[i]);
+        if (!plan.exactCandidates.empty()) {
+            std::vector<AlgorithmCostEstimate> fallback;
+            fallback.reserve(tierEstimates.size() - 1);
+            for (std::size_t j = 0; j < tierEstimates.size(); ++j) {
+                if (i != j) {
+                    fallback.push_back(*tierEstimates[j]);
+                }
+            }
+            minutes = alignmentExpectedCompletionMinutes(
+                    *tierEstimates[i],
+                    bestExactExpectedCompletionMinutes(fallback));
+        }
+        if (minutes < bestMinutes) {
+            best = tierEstimates[i];
+            bestMinutes = minutes;
         }
     }
     return best != nullptr ? best->memoryBytes : 0;
+}
+
+uint64_t expandedSingletrackRetryBudgetBytes(
+        uint64_t attemptedBudgetBytes,
+        uint64_t observedPeakBytes,
+        uint64_t workerBudgetBytes,
+        bool expandedRetryAlreadyUsed) {
+    if (expandedRetryAlreadyUsed || workerBudgetBytes == 0 ||
+        attemptedBudgetBytes >= workerBudgetBytes ||
+        observedPeakBytes >= workerBudgetBytes) {
+        return 0;
+    }
+    return workerBudgetBytes;
+}
+
+bool sharesSingletrackMemoryUnderpredictionRisk(
+        AlignmentCandidate candidate) {
+    return candidate == AlignmentCandidate::StandardWfa ||
+           candidate == AlignmentCandidate::MediumWfa ||
+           candidate == AlignmentCandidate::LowWfa;
+}
+
+bool isIndependentExactAfterSingletrackMemoryFailure(
+        AlignmentCandidate candidate) {
+    return candidate == AlignmentCandidate::Ksw2Singletrack ||
+           candidate == AlignmentCandidate::Ksw2ScoreCertified ||
+           candidate == AlignmentCandidate::Ksw2Full;
+}
+
+bool deferScoreCertifiedKsw2BehindFullKsw2(
+        bool singletrackMemoryModelInvalidated,
+        bool fullKsw2RuntimeAvailable) {
+    return fullKsw2RuntimeAvailable &&
+           !singletrackMemoryModelInvalidated;
+}
+
+bool preferIndependentKsw2ForAmbiguousWfaProfile(
+        const AlignmentProfile &profile) {
+    if (profile.ambiguousBaseFraction < 0.05) {
+        return false;
+    }
+    const bool weakSketchEvidence = profile.sketchJaccard < 0.70;
+    const bool scoreQuantilesDisagree = profile.estimatedScore == 0
+            ? profile.conservativeScore > 0
+            : static_cast<long double>(profile.conservativeScore) >=
+                      2.5L * static_cast<long double>(
+                                     profile.estimatedScore);
+    return weakSketchEvidence || scoreQuantilesDisagree;
 }
 
 bool exactCandidateWithinTimeLimit(
@@ -908,54 +1634,47 @@ bool exactCandidateWithinTimeLimit(
            p90 <= maximumEstimatedMinutes;
 }
 
-bool highWfaFastLaneEligible(
-        AlignmentCandidate candidate,
-        const AlgorithmCostEstimate &estimate,
+bool exactCandidateFastLaneEligible(
         double predictedWaitMinutes,
-        double fastestExactRiskAdjustedMinutes) {
-    if (candidate != AlignmentCandidate::SingletrackWfa &&
-        candidate != AlignmentCandidate::StandardWfa) {
-        return false;
-    }
+        double candidateExpectedMinutes,
+        double fastestExactExpectedMinutes,
+        double memoryOpportunityMinutes) {
     if (predictedWaitMinutes > 0.0 ||
         !std::isfinite(predictedWaitMinutes) ||
-        !std::isfinite(fastestExactRiskAdjustedMinutes)) {
+        !std::isfinite(candidateExpectedMinutes) ||
+        !std::isfinite(fastestExactExpectedMinutes) ||
+        !std::isfinite(memoryOpportunityMinutes) ||
+        memoryOpportunityMinutes > 0.0) {
         return false;
     }
-    const double highRuntime = alignmentRiskAdjustedMinutes(estimate);
-    return highRuntime <= fastestExactRiskAdjustedMinutes;
+    return candidateExpectedMinutes <= fastestExactExpectedMinutes;
 }
 
-bool fastExactDominatesSlowExact(
-        AlignmentCandidate fastCandidate,
-        const AlgorithmCostEstimate &fastEstimate,
-        double fastWaitMinutes,
-        AlignmentCandidate slowCandidate,
-        const AlgorithmCostEstimate &slowEstimate,
-        double fastMemoryShadowMinutes,
-        double slowMemoryShadowMinutes,
+bool waitingExactDominatesRunnableExact(
+        const AlgorithmCostEstimate &waitingEstimate,
+        double waitingMinutes,
+        const AlgorithmCostEstimate &runnableEstimate,
+        double waitingMemoryShadowMinutes,
+        double runnableMemoryShadowMinutes,
         double maximumWaitMinutes) {
-    const bool fast = fastCandidate == AlignmentCandidate::SingletrackWfa ||
-                      fastCandidate == AlignmentCandidate::StandardWfa ||
-                      fastCandidate ==
-                              AlignmentCandidate::Ksw2ScoreCertified ||
-                      fastCandidate == AlignmentCandidate::Ksw2Full;
-    const bool slow = slowCandidate == AlignmentCandidate::MediumWfa ||
-                      slowCandidate == AlignmentCandidate::LowWfa;
-    if (!fast || !slow || !std::isfinite(fastWaitMinutes) ||
-        !std::isfinite(maximumWaitMinutes) || fastWaitMinutes < 0.0 ||
+    if (!std::isfinite(waitingMinutes) ||
+        !std::isfinite(maximumWaitMinutes) || waitingMinutes < 0.0 ||
         maximumWaitMinutes < 0.0 ||
-        !std::isfinite(fastMemoryShadowMinutes) ||
-        !std::isfinite(slowMemoryShadowMinutes)) {
+        !std::isfinite(waitingMemoryShadowMinutes) ||
+        !std::isfinite(runnableMemoryShadowMinutes)) {
         return false;
     }
-    const double fastP50 = std::max(0.0, fastEstimate.estimatedMinutes);
-    const double fastP90 = std::max(
-            fastP50, fastEstimate.estimatedMinutesP90);
-    const double slowP50 = std::max(0.0, slowEstimate.estimatedMinutes);
-    const double fastShadow = std::max(0.0, fastMemoryShadowMinutes);
-    const double slowShadow = std::max(0.0, slowMemoryShadowMinutes);
-    if (!std::isfinite(fastP90) || !std::isfinite(slowP50)) {
+    const double waitingP50 = std::max(
+            0.0, waitingEstimate.estimatedMinutes);
+    const double waitingP90 = std::max(
+            waitingP50, waitingEstimate.estimatedMinutesP90);
+    const double runnableP50 = std::max(
+            0.0, runnableEstimate.estimatedMinutes);
+    const double waitingShadow = std::max(
+            0.0, waitingMemoryShadowMinutes);
+    const double runnableShadow = std::max(
+            0.0, runnableMemoryShadowMinutes);
+    if (!std::isfinite(waitingP90) || !std::isfinite(runnableP50)) {
         return false;
     }
 
@@ -963,15 +1682,16 @@ bool fastExactDominatesSlowExact(
     // exact tasks use ten percent of fast P90 so a statistically insignificant
     // difference cannot drain the process for a large reservation.
     const double guardMinutes = std::max(1.0 / 60.0,
-                                         0.10 * fastP90);
-    const double slowCompletion = slowP50 + slowShadow;
-    const double fastWithoutWait = fastP90 + fastShadow + guardMinutes;
+                                         0.10 * waitingP90);
+    const double runnableCompletion = runnableP50 + runnableShadow;
+    const double waitingWithoutWait =
+            waitingP90 + waitingShadow + guardMinutes;
     const double positiveSlack = std::max(
-            0.0, slowCompletion - fastWithoutWait);
+            0.0, runnableCompletion - waitingWithoutWait);
     const double holdBudget = std::min(maximumWaitMinutes, positiveSlack);
-    const double fastCompletion = fastWaitMinutes + fastWithoutWait;
-    return fastWaitMinutes <= holdBudget &&
-           fastCompletion < slowCompletion;
+    const double waitingCompletion = waitingMinutes + waitingWithoutWait;
+    return waitingMinutes <= holdBudget &&
+           waitingCompletion < runnableCompletion;
 }
 
 void configureExactAlignmentMaximumEstimatedMinutes(double minutes) {
@@ -1007,8 +1727,6 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
                 "exact-alignment maximum estimated minutes must be finite and >= 0");
     }
     AlignmentSelectionPlan plan;
-    plan.provenance.queryFingerprint = sequenceFingerprint(query);
-    plan.provenance.referenceFingerprint = sequenceFingerprint(reference);
     plan.provenance.windowWidth = windowWidth;
     plan.provenance.mismatchingPenalty = mismatchingPenalty;
     plan.provenance.openGapPenalty1 = openGapPenalty1;
@@ -1026,36 +1744,45 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
     AlignmentProfile &profile = plan.profile;
     profile.queryLength = query.size();
     profile.referenceLength = reference.size();
-    profile.identical = query == reference;
 
     const uint64_t maximumLength = std::max(profile.queryLength,
                                             profile.referenceLength);
     const uint64_t minimumLength = std::min(profile.queryLength,
                                             profile.referenceLength);
-    const uint64_t availableKmers = maximumLength >= kKmerLength
-                                    ? maximumLength - kKmerLength + 1
-                                    : 0;
-    const uint64_t samplingModulo = std::max<uint64_t>(
-            1, availableKmers / kTargetSketchSize);
-    // query == reference already performs one linear comparison.  Avoid two
-    // more full scans plus hash-table construction for the common exact case.
-    SequenceSummary querySummary;
-    SequenceSummary referenceSummary;
-    if (!profile.identical) {
-        querySummary = summarizeSequence(query, samplingModulo);
-        referenceSummary = summarizeSequence(reference, samplingModulo);
-    } else {
-        // The equality fast path skips the comparatively expensive sketches,
-        // but composition still matters: identical mixed A/C/G/T/N input
-        // makes KSW2 use its generic scoring kernel and must be priced as such.
-        querySummary = summarizeComposition(query);
-        referenceSummary = querySummary;
+    std::array<uint64_t, kSketchKmerLengths.size()> samplingModulos{};
+    for (std::size_t scale = 0; scale < kSketchKmerLengths.size(); ++scale) {
+        const uint64_t availableKmers =
+                maximumLength >= kSketchKmerLengths[scale]
+                ? maximumLength - kSketchKmerLengths[scale] + 1 : 0;
+        samplingModulos[scale] = std::max<uint64_t>(
+                1, availableKmers / kTargetSketchSizes[scale]);
     }
-    profile.sampledQueryKmers = querySummary.sketch.size();
-    profile.sampledReferenceKmers = referenceSummary.sketch.size();
+    // Fingerprints, equality, composition, entropy and all three sketch
+    // scales are collected during one sequential pass over each input.
+    auto summaries = summarizeSequencePair(
+            query, reference, samplingModulos, profile.identical);
+    SequenceSummary querySummary = std::move(summaries.first);
+    SequenceSummary referenceSummary = std::move(summaries.second);
+    plan.provenance.queryFingerprint = querySummary.fingerprint;
+    plan.provenance.referenceFingerprint = referenceSummary.fingerprint;
+
+    const auto &queryPrimary = querySummary.sketches[kPrimarySketchIndex];
+    const auto &referencePrimary =
+            referenceSummary.sketches[kPrimarySketchIndex];
+    profile.sampledQueryKmers = queryPrimary.size();
+    profile.sampledReferenceKmers = referencePrimary.size();
+    profile.sampledQueryKmersK9 = querySummary.sketches[0].size();
+    profile.sampledReferenceKmersK9 = referenceSummary.sketches[0].size();
+    profile.sampledQueryKmersK21 = querySummary.sketches[2].size();
+    profile.sampledReferenceKmersK21 = referenceSummary.sketches[2].size();
     profile.ambiguousBaseFraction =
             (querySummary.ambiguousFraction * profile.queryLength +
              referenceSummary.ambiguousFraction * profile.referenceLength) /
+            static_cast<double>(std::max<uint64_t>(1,
+                    profile.queryLength + profile.referenceLength));
+    profile.sequenceEntropy =
+            (querySummary.normalizedEntropy * profile.queryLength +
+             referenceSummary.normalizedEntropy * profile.referenceLength) /
             static_cast<double>(std::max<uint64_t>(1,
                     profile.queryLength + profile.referenceLength));
     profile.lowComplexityFraction =
@@ -1064,14 +1791,33 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
             static_cast<double>(std::max<uint64_t>(1,
                     profile.queryLength + profile.referenceLength));
 
-    const PositionMap queryIndex = indexSketch(querySummary.sketch);
-    const PositionMap referenceIndex = indexSketch(referenceSummary.sketch);
+    const PositionMap queryIndex = indexSketch(queryPrimary);
+    const PositionMap referenceIndex = indexSketch(referencePrimary);
+    const PositionMap queryIndexK9 = indexSketch(querySummary.sketches[0]);
+    const PositionMap referenceIndexK9 = indexSketch(
+            referenceSummary.sketches[0]);
+    const PositionMap queryIndexK21 = indexSketch(querySummary.sketches[2]);
+    const PositionMap referenceIndexK21 = indexSketch(
+            referenceSummary.sketches[2]);
+    profile.sketchJaccard = sketchJaccard(
+            queryIndex, referenceIndex, profile.identical);
+    profile.sketchJaccardK9 = sketchJaccard(
+            queryIndexK9, referenceIndexK9, profile.identical);
+    profile.sketchJaccardK21 = sketchJaccard(
+            queryIndexK21, referenceIndexK21, profile.identical);
+    const double minimumJaccard = std::min({
+            profile.sketchJaccardK9, profile.sketchJaccard,
+            profile.sketchJaccardK21});
+    const double maximumJaccard = std::max({
+            profile.sketchJaccardK9, profile.sketchJaccard,
+            profile.sketchJaccardK21});
+    profile.sketchJaccardDispersion = maximumJaccard - minimumJaccard;
     uint64_t sharedHashes = 0;
     uint64_t uniqueHashes = 0;
     std::vector<Anchor> anchors;
     std::vector<Anchor> uniqueAnchors;
-    anchors.reserve(std::min(querySummary.sketch.size(),
-                             referenceSummary.sketch.size()) * 2);
+    anchors.reserve(std::min(queryPrimary.size(),
+                             referencePrimary.size()) * 2);
     for (const auto &item : queryIndex) {
         const auto found = referenceIndex.find(item.first);
         if (found == referenceIndex.end()) {
@@ -1089,12 +1835,6 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
             }
         }
     }
-    const uint64_t unionHashes = queryIndex.size() + referenceIndex.size() -
-                                 sharedHashes;
-    profile.sketchJaccard = unionHashes == 0
-                            ? (profile.identical ? 1.0 : 0.0)
-                            : static_cast<double>(sharedHashes) /
-                              static_cast<double>(unionHashes);
     profile.uniqueAnchorFraction = sharedHashes == 0
                                    ? 0.0
                                    : static_cast<double>(uniqueHashes) /
@@ -1142,22 +1882,45 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
         haveCertificationAnchor = true;
     }
     profile.chainedAnchors = chain.size();
-    const uint64_t sketchDenominator = std::min(querySummary.sketch.size(),
-                                                referenceSummary.sketch.size());
+    const uint64_t sketchDenominator = std::min(queryPrimary.size(),
+                                                referencePrimary.size());
     profile.chainedAnchorFraction = sketchDenominator == 0
                                     ? 0.0
                                     : std::min(1.0,
                                       static_cast<double>(chain.size()) /
                                       static_cast<double>(sketchDenominator));
+    profile.chainQueryCoverage = chainedCoverage(
+            chain, true, profile.queryLength);
+    profile.chainReferenceCoverage = chainedCoverage(
+            chain, false, profile.referenceLength);
+    if (!chain.empty()) {
+        const double querySpan = static_cast<double>(
+                saturatingAdd(chain.back().query, kKmerLength) -
+                chain.front().query) /
+                static_cast<double>(std::max<uint64_t>(1,
+                        profile.queryLength));
+        const double referenceSpan = static_cast<double>(
+                saturatingAdd(chain.back().reference, kKmerLength) -
+                chain.front().reference) /
+                static_cast<double>(std::max<uint64_t>(1,
+                        profile.referenceLength));
+        profile.chainSpanCoverage = std::min(
+                1.0, std::min(querySpan, referenceSpan));
+    }
 
     profile.lengthRatio = maximumLength == 0 ? 1.0 :
             static_cast<double>(minimumLength) /
             static_cast<double>(maximumLength);
     if (!chain.empty()) {
         std::vector<double> diagonals;
+        std::vector<double> chainGaps;
         diagonals.reserve(chain.size());
+        if (chain.size() > 1) {
+            chainGaps.reserve(chain.size() - 1);
+        }
         double previousDiagonal = 0.0;
         bool havePrevious = false;
+        Anchor previousAnchor{};
         for (const Anchor &anchor : chain) {
             const double diagonal = static_cast<double>(anchor.reference) -
                                     static_cast<double>(anchor.query);
@@ -1166,10 +1929,19 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
                 profile.maximumDiagonalJump = std::max(
                         profile.maximumDiagonalJump,
                         std::fabs(diagonal - previousDiagonal));
+                const uint64_t queryGap = anchor.query > previousAnchor.query
+                        ? anchor.query - previousAnchor.query : 0;
+                const uint64_t referenceGap =
+                        anchor.reference > previousAnchor.reference
+                        ? anchor.reference - previousAnchor.reference : 0;
+                chainGaps.push_back(static_cast<double>(
+                        std::max(queryGap, referenceGap)));
             }
             previousDiagonal = diagonal;
+            previousAnchor = anchor;
             havePrevious = true;
         }
+        profile.chainGapP90 = quantile(chainGaps, 0.90);
         const double diagonalMedian = median(diagonals);
         for (double &diagonal : diagonals) {
             diagonal = std::fabs(diagonal - diagonalMedian);
@@ -1183,13 +1955,15 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
         profile.estimatedMismatchRate = 0.0;
         profile.confidence = 1.0;
     } else if (profile.sketchJaccard > 0.0) {
-        const double sharedKmerProbability =
-                2.0 * profile.sketchJaccard /
-                (1.0 + profile.sketchJaccard);
-        profile.estimatedMismatchRate = std::max(
-                0.0, std::min(1.0, 1.0 - std::pow(
-                        sharedKmerProbability,
-                        1.0 / static_cast<double>(kKmerLength))));
+        std::array<double, 3> scaleRates{{
+                mashMismatchRate(profile.sketchJaccardK9,
+                                 kSketchKmerLengths[0]),
+                mashMismatchRate(profile.sketchJaccard,
+                                 kSketchKmerLengths[1]),
+                mashMismatchRate(profile.sketchJaccardK21,
+                                 kSketchKmerLengths[2])}};
+        std::sort(scaleRates.begin(), scaleRates.end());
+        profile.estimatedMismatchRate = scaleRates[1];
         profile.estimatedMismatchRate = std::max(
                 profile.estimatedMismatchRate,
                 (1.0 - profile.chainedAnchorFraction) * 0.10);
@@ -1201,10 +1975,14 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
             1.0, static_cast<double>(sketchDenominator) / 256.0);
     const double repeatConfidence = 0.25 +
                                     0.75 * profile.uniqueAnchorFraction;
-    const double chainConfidence = std::min(
-            1.0, profile.chainedAnchorFraction * 2.0);
+    const double chainConfidence = std::min(1.0, std::max(
+            profile.chainedAnchorFraction * 2.0,
+            profile.chainSpanCoverage));
+    const double scaleAgreement = std::max(
+            0.0, 1.0 - profile.sketchJaccardDispersion);
     profile.confidence = profile.identical ? 1.0 :
             sketchSupport * repeatConfidence * chainConfidence *
+            scaleAgreement *
             (1.0 - 0.5 * profile.ambiguousBaseFraction);
     profile.confidence = std::max(0.0, std::min(1.0, profile.confidence));
     const double normalizedDiagonalRisk = maximumLength == 0 ? 0.0 :
@@ -1217,6 +1995,7 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
             0.62 * (1.0 - profile.confidence) +
             0.18 * profile.lowComplexityFraction +
             0.20 * profile.ambiguousBaseFraction +
+            0.20 * profile.sketchJaccardDispersion +
             0.35 * normalizedDiagonalRisk);
 
     const uint64_t mismatch = positivePenalty(mismatchingPenalty);
@@ -1315,21 +2094,27 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
             wfaCoreWork * kMediumWfaWorkMultiplier;
     const long double lowWfaWork =
             wfaCoreWork * kLowWfaWorkMultiplier;
-    const double singletrackWfaEstimatedMinutes = wfaMinutes(
-            maximumLength, timeScoreP50,
-            singletrackP50Factor);
+    const double singletrackWfaEstimatedMinutes =
+            wfaMinutes(maximumLength, timeScoreP50,
+                       singletrackP50Factor);
     const long double singletrackP90Score = std::max(
             kSingletrackP90EstimatedScoreMultiplier * estimatedScore,
             kSingletrackP90ConservativeScoreMultiplier *
                     static_cast<long double>(profile.conservativeScore));
-    const double singletrackWfaEstimatedMinutesP90 =
+    const double singletrackWfaEstimatedMinutesP90 = std::max(
+            singletrackWfaEstimatedMinutes,
             wfaMinutesAtScoreThroughput(
                     maximumLength, singletrackP90Score,
-                    kSingletrackP90ScoreSquaredPerSecond);
-    const double standardWfaEstimatedMinutes = wfaMinutes(
-            maximumLength, timeScoreP50, kStandardWfaWorkMultiplier);
-    const double standardWfaEstimatedMinutesP90 = wfaMinutes(
-            maximumLength, timeScoreP90, kStandardWfaWorkMultiplier);
+                    kSingletrackP90ScoreSquaredPerSecond));
+    const double standardWfaEstimatedMinutes =
+            wfaMinutes(
+                    maximumLength, timeScoreP50,
+                    kStandardWfaWorkMultiplier);
+    const double standardWfaEstimatedMinutesP90 = std::max(
+            standardWfaEstimatedMinutes,
+            wfaMinutes(
+                    maximumLength, timeScoreP90,
+                    kStandardWfaWorkMultiplier));
     const double mediumWfaEstimatedMinutes = wfaMinutes(
             maximumLength, timeScoreP50, kMediumWfaWorkMultiplier);
     const double mediumWfaEstimatedMinutesP90 = wfaMinutes(
@@ -1374,15 +2159,21 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
     }
     const bool lengthsFitInt = profile.queryLength <= INT_MAX &&
                                profile.referenceLength <= INT_MAX;
+    const bool matrixAreaWithinWorkerBudget = lengthsFitInt &&
+            profile.queryLength > 0 && profile.referenceLength > 0 &&
+            profile.queryLength <=
+                    workerBudget / profile.referenceLength;
+    plan.exactCellEnvelopeException = matrixAreaWithinWorkerBudget;
     const auto workWithinSlidingEnvelope = [slidingWork](long double work) {
         return work == 0.0L ||
                (slidingWork > 0.0L && work <= slidingWork);
     };
-    // -w is a hard per-alignment algorithm-memory ceiling.  A process-wide
-    // -M limit controls concurrency, but must never make an individual WFA or
-    // KSW2 attempt larger than w^2.  Keep the legacy elastic parameters as
-    // optional lower ceilings for source compatibility; they can no longer
-    // raise either high-WFA mode above the -w-derived budget.
+    // -w is the normal per-alignment algorithm-memory ceiling. A process-wide
+    // -M limit controls concurrency. Under the historical standard-DP contract
+    // qlen*rlen <= w^2, every exact implementation may exceed that normal
+    // ceiling and competes by expected wall time; -M admission remains the hard
+    // limit. Keep the legacy elastic parameters as optional lower ceilings for
+    // source compatibility outside this tier-wide exception.
     const uint64_t singletrackBudget = elasticHighWfaMemoryBudgetBytes > 0
                                        ? std::min(workerBudget,
                                                   elasticHighWfaMemoryBudgetBytes)
@@ -1393,20 +2184,27 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
                                         : standardBudget;
     const bool singletrackMemoryFeasible =
             lengthsFitInt && singletrackBudget > 0 &&
-            singletrackMemory <= singletrackBudget;
+            (singletrackMemory <= singletrackBudget ||
+             plan.exactCellEnvelopeException);
     const bool standardMemoryFeasible = lengthsFitInt &&
                                         highStandardBudget > 0 &&
-                                        standardMemory <= highStandardBudget;
+            (standardMemory <= highStandardBudget ||
+             plan.exactCellEnvelopeException);
     const bool mediumWfaMemoryFeasible =
             lengthsFitInt && workerBudget > 0 &&
-            mediumWfaMemory <= workerBudget;
+            (mediumWfaMemory <= workerBudget ||
+             plan.exactCellEnvelopeException);
     const bool lowWfaMemoryFeasible =
             lengthsFitInt && workerBudget > 0 &&
-            lowWfaMemory <= workerBudget;
+            (lowWfaMemory <= workerBudget ||
+             plan.exactCellEnvelopeException);
     const uint64_t scoreOnlyKswMemory = ksw2ScoreOnlyMemoryBytes(
             profile.queryLength, profile.referenceLength);
     plan.ksw2CertifiedScoreOnlyMemoryBytes = scoreOnlyKswMemory;
     const uint64_t fullKswMemory = ksw2TracebackMemoryBytes(
+            profile.queryLength, profile.referenceLength,
+            std::max(profile.queryLength, profile.referenceLength));
+    const uint64_t ksw2SingletrackMemory = ksw2SingletrackMemoryBytes(
             profile.queryLength, profile.referenceLength,
             std::max(profile.queryLength, profile.referenceLength));
     const uint64_t fullKswBudget = elasticFullKsw2MemoryBudgetBytes > 0
@@ -1414,16 +2212,21 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
                                               elasticFullKsw2MemoryBudgetBytes)
                                    : workerBudget;
     const bool fullKswFeasible = lengthsFitInt && fullKswBudget > 0 &&
-                                 fullKswMemory <= fullKswBudget;
-    const bool fastExactStructurallyUnavailable =
-            !singletrackMemoryFeasible &&
-            !standardMemoryFeasible &&
-            !fullKswFeasible;
-
+            (fullKswMemory <= fullKswBudget ||
+             plan.exactCellEnvelopeException);
+    const bool ksw2SingletrackLengthsFit = lengthsFitInt &&
+            profile.queryLength + profile.referenceLength - 1 <=
+                    static_cast<uint64_t>(INT_MAX);
+    const bool ksw2SingletrackFeasible = ksw2SingletrackLengthsFit &&
+            fullKswBudget > 0 &&
+            (ksw2SingletrackMemory <= fullKswBudget ||
+             plan.exactCellEnvelopeException);
     // Score-certified KSW2 separates exact scoring from traceback. Start from
     // a chain-informed band, then geometrically double inside one guarded
     // reservation.  Like every other sequence-alignment engine, the
-    // score-only plus traceback peak is capped by the per-task w^2 budget.
+    // score-only plus traceback peak is normally capped by the per-task w^2
+    // budget; the tier-wide cell-envelope exception below may expand it, with
+    // process-wide -M admission still deciding whether it can run.
     const long double diagonalSignal = std::min(
             profile.diagonalP99 > 0.0
                     ? static_cast<long double>(profile.diagonalP99)
@@ -1440,28 +2243,27 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
     certifiedInitialBand = std::min<uint64_t>(certifiedInitialBand,
                                               maximumLength);
     uint64_t certifiedInitialMemory = scoreOnlyKswMemory;
-    // This path is constructed only when both high-WFA modes and full-KSW2 are
-    // structurally unavailable.  The process scheduler may delay this large
-    // exact rescue candidate, but it cannot expand the candidate beyond w^2.
-    uint64_t certifiedBudget = 0;
-    uint64_t certifiedMaximumBand = 0;
-    bool scoreCertifiedKswFeasible = false;
-    if (fastExactStructurallyUnavailable) {
-        const uint64_t certifiedInitialTraceMemory =
-                ksw2TracebackMemoryBytes(
-                        profile.queryLength, profile.referenceLength,
-                        certifiedInitialBand);
-        certifiedInitialMemory = saturatingAdd(
-                scoreOnlyKswMemory, certifiedInitialTraceMemory);
-        certifiedBudget = fullKswBudget;
-        certifiedMaximumBand = ksw2MaximumBandForBudget(
-                profile.queryLength, profile.referenceLength,
-                scoreOnlyKswMemory, certifiedInitialBand,
-                certifiedBudget);
-        scoreCertifiedKswFeasible = lengthsFitInt &&
-                certifiedBudget > 0 &&
-                certifiedInitialBand <= certifiedMaximumBand;
+    // This is a conditional exact candidate, not a rescue-only special case.
+    // It competes with every other Tier-1 engine using the same expected-finish
+    // objective and is accepted only after its traceback score certifies the
+    // unrestricted score-only optimum.
+    const uint64_t certifiedInitialTraceMemory =
+            ksw2TracebackMemoryBytes(
+                    profile.queryLength, profile.referenceLength,
+                    certifiedInitialBand);
+    certifiedInitialMemory = saturatingAdd(
+            scoreOnlyKswMemory, certifiedInitialTraceMemory);
+    const uint64_t certifiedBudget = fullKswBudget;
+    uint64_t certifiedMaximumBand = ksw2MaximumBandForBudget(
+            profile.queryLength, profile.referenceLength,
+            scoreOnlyKswMemory, certifiedInitialBand,
+            certifiedBudget);
+    if (plan.exactCellEnvelopeException) {
+        certifiedMaximumBand = maximumLength;
     }
+    const bool scoreCertifiedKswFeasible = lengthsFitInt &&
+            certifiedBudget > 0 &&
+            certifiedInitialBand <= certifiedMaximumBand;
     const uint64_t scoreCertifiedKswMemory =
             scoreCertifiedKswFeasible
             ? ksw2CertifiedReservationBytes(
@@ -1576,21 +2378,6 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
             0.30, std::min(
                     0.70, 0.32 + 0.28 * certifiedBandCoverage +
                           0.10 * profile.confidence));
-    double nextExactP50Minutes = std::numeric_limits<double>::infinity();
-    double nextExactP90Minutes = std::numeric_limits<double>::infinity();
-    if (mediumWfaMemoryFeasible) {
-        nextExactP50Minutes = mediumWfaEstimatedMinutes;
-        nextExactP90Minutes = mediumWfaEstimatedMinutesP90;
-    }
-    if (lowWfaMemoryFeasible &&
-        lowWfaEstimatedMinutes < nextExactP50Minutes) {
-        nextExactP50Minutes = lowWfaEstimatedMinutes;
-        nextExactP90Minutes = lowWfaEstimatedMinutesP90;
-    }
-    const double fallbackP50Minutes = std::isfinite(nextExactP50Minutes)
-            ? nextExactP50Minutes : 0.0;
-    const double fallbackP90Minutes = std::isfinite(nextExactP90Minutes)
-            ? nextExactP90Minutes : 0.0;
     const long double scoreCertifiedKswWork = fullKswWork +
             certifiedP50TraceWork;
     const long double scoreCertifiedKswP90Work = fullKswWork +
@@ -1599,12 +2386,14 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
                                     allowedBand * kswScoringMultiplier;
     const double fullKswEstimatedMinutes = finiteMinutes(
             fullKswWork, kKsw2CellsPerSecond, kKsw2SetupSeconds);
+    const double ksw2SingletrackEstimatedMinutes = finiteMinutes(
+            fullKswWork, kKsw2SingletrackCellsPerSecond,
+            kKsw2SetupSeconds);
     const double scoreCertifiedAttemptMinutes = finiteMinutes(
             scoreCertifiedKswWork, kKsw2CellsPerSecond,
             2.0 * kKsw2SetupSeconds);
     const double scoreCertifiedKswEstimatedMinutes =
-            scoreCertifiedAttemptMinutes +
-            (1.0 - certifiedSuccessProbability) * fallbackP50Minutes;
+            scoreCertifiedAttemptMinutes;
     const double bandKswEstimatedMinutes = finiteMinutes(
             bandKswWork, kKsw2CellsPerSecond, kKsw2SetupSeconds);
     const double slidingEstimatedMinutes = finiteMinutes(
@@ -1642,9 +2431,9 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
     // band contains the best path.  In low-Jaccard/high-uncertainty maize
     // intervals the old model assigned zero loss and confidently selected a
     // catastrophically truncated band.  Charge a small unresolved-path floor
-    // equivalent to 64 uncertain mismatches at P50 and 128 at P90.  On 502
-    // paired B73/Mo17 fallback intervals this removed every large false-banded
-    // decision while retaining the high-confidence banded wins.
+    // equivalent to 64 uncertain mismatches at P50 and 128 at P90. This is the
+    // deterministic fallback for settings outside the versioned learned-model
+    // domain; it is not presented as a calibrated probability.
     const double unresolvedPathProbability = std::max(
             0.0, std::min(
                     1.0,
@@ -1698,17 +2487,21 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
     };
     const double fullKswEstimatedMinutesP90 = p90(
             AlignmentCandidate::Ksw2Full, fullKswEstimatedMinutes);
+    const double ksw2SingletrackEstimatedMinutesP90 = p90(
+            AlignmentCandidate::Ksw2Singletrack,
+            ksw2SingletrackEstimatedMinutes);
     const double scoreCertifiedKswEstimatedMinutesP90 = std::max(
             scoreCertifiedKswEstimatedMinutes,
             p90(AlignmentCandidate::Ksw2ScoreCertified,
                 finiteMinutes(scoreCertifiedKswP90Work,
                               kKsw2CellsPerSecond,
-                              2.0 * kKsw2SetupSeconds) +
-                fallbackP90Minutes));
-    const auto withinExactTimeLimit = [exactAlignmentMaximumMinutes](
+                              2.0 * kKsw2SetupSeconds)));
+    const auto withinExactTimeLimit = [exactAlignmentMaximumMinutes,
+                                       &plan](
             double p50, double p90Minutes) {
-        return exactCandidateWithinTimeLimit(
-                p50, p90Minutes, exactAlignmentMaximumMinutes);
+        return plan.exactCellEnvelopeException ||
+               exactCandidateWithinTimeLimit(
+                       p50, p90Minutes, exactAlignmentMaximumMinutes);
     };
     const bool singletrackWfaWithinTimeLimit = withinExactTimeLimit(
             singletrackWfaEstimatedMinutes,
@@ -1724,6 +2517,9 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
             lowWfaEstimatedMinutesP90);
     const bool fullKswWithinTimeLimit = withinExactTimeLimit(
             fullKswEstimatedMinutes, fullKswEstimatedMinutesP90);
+    const bool ksw2SingletrackWithinTimeLimit = withinExactTimeLimit(
+            ksw2SingletrackEstimatedMinutes,
+            ksw2SingletrackEstimatedMinutesP90);
     const bool scoreCertifiedKswWithinTimeLimit = withinExactTimeLimit(
             scoreCertifiedKswEstimatedMinutes,
             scoreCertifiedKswEstimatedMinutesP90);
@@ -1731,6 +2527,12 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
             0.75, 0.985 - 0.12 * profile.uncertainty);
     const double succinctSuccess = std::max(
             0.82, 0.992 - 0.08 * profile.uncertainty);
+    // After repairing virtual-boundary gap closure, 220,000 independent
+    // full-width executions across SSE, AVX2, AVX512 and NEON completed with
+    // valid optimal tracebacks. Allocation/deadline failures remain handled
+    // by the ordinary exact-tier loop, rather than being priced as a
+    // divergence-dependent algorithm failure.
+    constexpr double ksw2SingletrackSuccess = 0.99998;
     plan.estimates.push_back(estimate(
             AlignmentCandidate::SingletrackWfa,
             singletrackMemory, singletrackWfaWork,
@@ -1763,17 +2565,24 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
             lowWfaEstimatedMinutesP90, succinctSuccess,
             lowWfaWithinTimeLimit, lowWfaWithinTimeLimit));
     plan.estimates.push_back(estimate(
+            AlignmentCandidate::Ksw2Singletrack,
+            ksw2SingletrackMemory, fullKswWork,
+            ksw2SingletrackFeasible, true,
+            ksw2SingletrackEstimatedMinutes,
+            ksw2SingletrackEstimatedMinutesP90,
+            ksw2SingletrackSuccess,
+            ksw2SingletrackWithinTimeLimit,
+            ksw2SingletrackWithinTimeLimit));
+    plan.estimates.push_back(estimate(
             AlignmentCandidate::Ksw2ScoreCertified,
             scoreCertifiedKswMemory, scoreCertifiedKswWork,
-            scoreCertifiedKswFeasible &&
-                    fastExactStructurallyUnavailable,
+            scoreCertifiedKswFeasible,
             true,
             scoreCertifiedKswEstimatedMinutes,
             scoreCertifiedKswEstimatedMinutesP90,
             certifiedSuccessProbability,
             scoreCertifiedKswWithinTimeLimit,
-            scoreCertifiedKswWithinTimeLimit &&
-                    fastExactStructurallyUnavailable));
+            scoreCertifiedKswWithinTimeLimit));
     plan.estimates.push_back(estimate(
             AlignmentCandidate::Ksw2Full, fullKswMemory, fullKswWork,
             fullKswFeasible, true, fullKswEstimatedMinutes,
@@ -1794,7 +2603,7 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
     plan.estimates.back().predictedScoreLoss = slidingScoreLoss;
     plan.estimates.back().predictedScoreLossP90 = slidingScoreLossP90;
 
-    plan.exactCandidates.reserve(6);
+    plan.exactCandidates.reserve(7);
     if (singletrackMemoryFeasible && singletrackWfaWithinTimeLimit) {
         plan.exactCandidates.push_back(AlignmentCandidate::SingletrackWfa);
     }
@@ -1807,8 +2616,11 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
     if (lowWfaMemoryFeasible && lowWfaWithinTimeLimit) {
         plan.exactCandidates.push_back(AlignmentCandidate::LowWfa);
     }
-    if (fastExactStructurallyUnavailable &&
-        scoreCertifiedKswFeasible &&
+    if (ksw2SingletrackFeasible && ksw2SingletrackWithinTimeLimit) {
+        plan.exactCandidates.push_back(
+                AlignmentCandidate::Ksw2Singletrack);
+    }
+    if (scoreCertifiedKswFeasible &&
         scoreCertifiedKswWithinTimeLimit) {
         plan.ksw2CertifiedInitialBandWidth = static_cast<int64_t>(
                 certifiedInitialBand);
@@ -1832,12 +2644,26 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
             plan.lastResortCandidates.begin(),
             plan.lastResortCandidates.end());
     // Banded KSW2 and sliding-window alignment share the approximate tier.
-    // Paired B73/Mo17 measurements across 502 independent fallback intervals
-    // showed that a small hand-written boolean classifier systematically
-    // reversed their quality order.  Rank them by the selector's predicted
-    // score loss instead: the lower risk-adjusted loss is preferred, and
-    // runtime breaks only an equal-quality tie.  Production normally executes
+    // Version 1 predicts their directly observed score difference from 305
+    // paired, currently feasible B73/Mo17 intervals. A one-sided calibrated
+    // residual admits banded KSW2 only when its predicted advantage remains
+    // positive after accounting for model error. Production normally executes
     // just this first candidate, so this does not pay for both alignments.
+    const bool hasBanded = std::find(
+            plan.approximateCandidates.begin(),
+            plan.approximateCandidates.end(),
+            AlignmentCandidate::Ksw2Banded) !=
+            plan.approximateCandidates.end();
+    const bool hasSliding = std::find(
+            plan.approximateCandidates.begin(),
+            plan.approximateCandidates.end(),
+            AlignmentCandidate::SlidingWindow) !=
+            plan.approximateCandidates.end();
+    if (hasBanded && hasSliding) {
+        plan.approximateDecision = calibratedApproximateQualityDecision(
+                profile, allowedBand, slidingWidth, requestedSlidingWidth,
+                mismatch, gapOpen1, gapExtend1, gapOpen2, gapExtend2);
+    }
     const auto approximateQuality = [&plan](AlignmentCandidate candidate) {
         const auto found = std::find_if(
                 plan.estimates.begin(), plan.estimates.end(),
@@ -1855,14 +2681,34 @@ AlignmentSelectionPlan makeAlignmentSelectionPlan(
         return std::make_pair(riskAdjustedLoss,
                               alignmentRiskAdjustedMinutes(*found));
     };
-    std::stable_sort(
-            plan.approximateCandidates.begin(),
-            plan.approximateCandidates.end(),
-            [&approximateQuality](
-                    AlignmentCandidate first,
-                    AlignmentCandidate second) {
-                return approximateQuality(first) < approximateQuality(second);
-            });
+    if (plan.approximateDecision.calibrated) {
+        const AlignmentCandidate selected =
+                plan.approximateDecision.selected;
+        std::stable_sort(
+                plan.approximateCandidates.begin(),
+                plan.approximateCandidates.end(),
+                [selected](AlignmentCandidate first,
+                           AlignmentCandidate second) {
+                    return first == selected && second != selected;
+                });
+    } else {
+        // Explicit out-of-domain fallback. The analytic score-loss model is
+        // deterministic for non-default scoring/-w settings and runtime is
+        // used only to break an equal predicted-quality tie.
+        std::stable_sort(
+                plan.approximateCandidates.begin(),
+                plan.approximateCandidates.end(),
+                [&approximateQuality](
+                        AlignmentCandidate first,
+                        AlignmentCandidate second) {
+                    return approximateQuality(first) <
+                           approximateQuality(second);
+                });
+        if (!plan.approximateCandidates.empty()) {
+            plan.approximateDecision.selected =
+                    plan.approximateCandidates.front();
+        }
+    }
     return plan;
 }
 
@@ -1902,6 +2748,7 @@ bool alignmentSelectionPlanMatches(
 }
 
 void resetAlignmentSelectionTelemetry() {
+    resetAlignmentRuntimeCalibration();
     evaluatedIntervals.store(0, std::memory_order_relaxed);
     exactTierIntervals.store(0, std::memory_order_relaxed);
     bandedOnlyIntervals.store(0, std::memory_order_relaxed);
@@ -1918,6 +2765,8 @@ void resetAlignmentSelectionTelemetry() {
     lowWfaMemoryRejects.store(0, std::memory_order_relaxed);
     lowWfaWorkWarnings.store(0, std::memory_order_relaxed);
     lowWfaTimeRejects.store(0, std::memory_order_relaxed);
+    ksw2SingletrackMemoryRejects.store(0, std::memory_order_relaxed);
+    ksw2SingletrackTimeRejects.store(0, std::memory_order_relaxed);
     scoreCertifiedKsw2MemoryRejects.store(0,
                                           std::memory_order_relaxed);
     scoreCertifiedKsw2TimeRejects.store(0,
@@ -1944,6 +2793,7 @@ void recordAlignmentSelectionPlan(const AlignmentSelectionPlan &plan) {
     const AlgorithmCostEstimate *standard = nullptr;
     const AlgorithmCostEstimate *medium = nullptr;
     const AlgorithmCostEstimate *low = nullptr;
+    const AlgorithmCostEstimate *ksw2Singletrack = nullptr;
     const AlgorithmCostEstimate *scoreCertifiedKsw2 = nullptr;
     const AlgorithmCostEstimate *fullKsw2 = nullptr;
     const AlgorithmCostEstimate *bandedKsw2 = nullptr;
@@ -1955,6 +2805,9 @@ void recordAlignmentSelectionPlan(const AlignmentSelectionPlan &plan) {
             case AlignmentCandidate::StandardWfa: standard = &item; break;
             case AlignmentCandidate::MediumWfa: medium = &item; break;
             case AlignmentCandidate::LowWfa: low = &item; break;
+            case AlignmentCandidate::Ksw2Singletrack:
+                ksw2Singletrack = &item;
+                break;
             case AlignmentCandidate::Ksw2ScoreCertified:
                 scoreCertifiedKsw2 = &item;
                 break;
@@ -2009,6 +2862,17 @@ void recordAlignmentSelectionPlan(const AlignmentSelectionPlan &plan) {
         if (low->memoryFeasible && !low->timeFeasible) {
             lowWfaTimeRejects.fetch_add(1, std::memory_order_relaxed);
         }
+    }
+    if (ksw2Singletrack == nullptr ||
+        !ksw2Singletrack->memoryFeasible) {
+        ksw2SingletrackMemoryRejects.fetch_add(
+                1, std::memory_order_relaxed);
+    }
+    if (ksw2Singletrack != nullptr &&
+        ksw2Singletrack->memoryFeasible &&
+        !ksw2Singletrack->timeFeasible) {
+        ksw2SingletrackTimeRejects.fetch_add(
+                1, std::memory_order_relaxed);
     }
     if (scoreCertifiedKsw2 == nullptr ||
         !scoreCertifiedKsw2->memoryFeasible) {
@@ -2080,6 +2944,12 @@ AlignmentSelectionTelemetry alignmentSelectionTelemetrySnapshot() {
             std::memory_order_relaxed);
     snapshot.lowWfaTimeRejects = lowWfaTimeRejects.load(
             std::memory_order_relaxed);
+    snapshot.ksw2SingletrackMemoryRejects =
+            ksw2SingletrackMemoryRejects.load(
+                    std::memory_order_relaxed);
+    snapshot.ksw2SingletrackTimeRejects =
+            ksw2SingletrackTimeRejects.load(
+                    std::memory_order_relaxed);
     snapshot.scoreCertifiedKsw2MemoryRejects =
             scoreCertifiedKsw2MemoryRejects.load(
                     std::memory_order_relaxed);
@@ -2122,11 +2992,26 @@ void configureAlignmentTraceFile(const std::string &path) {
     }
     traceStream
             << "model_version\tinterval_id\tattempt\tquery_length"
-               "\treference_length\testimated_score\tconservative_score"
-               "\tconfidence\tuncertainty\tsketch_jaccard"
-               "\tambiguous_base_fraction\tlow_complexity_fraction"
-               "\tdiagonal_p90\tdiagonal_p99"
-               "\tmaximum_diagonal_jump\tcandidate"
+               "\treference_length\tprofile_version\testimated_score"
+               "\tconservative_score\tconfidence\tuncertainty"
+               "\tsketch_jaccard_k9\tsketch_jaccard_k15"
+               "\tsketch_jaccard_k21\tsketch_jaccard_dispersion"
+               "\tambiguous_base_fraction\tsequence_entropy"
+               "\tlow_complexity_fraction\tunique_anchor_fraction"
+               "\tchained_anchor_fraction\tchain_query_coverage"
+               "\tchain_reference_coverage\tchain_span_coverage"
+               "\tchain_gap_p90\tdiagonal_mad\tdiagonal_p90"
+               "\tdiagonal_p99\tmaximum_diagonal_jump\tlength_ratio"
+               "\testimated_mismatch_rate\testimated_band"
+               "\trequested_window_width\tmismatching_penalty"
+               "\topen_gap_penalty1\textend_gap_penalty1"
+               "\topen_gap_penalty2\textend_gap_penalty2"
+               "\tapproximate_ksw2_band\tapproximate_sliding_window"
+               "\tapproximate_model_version\tapproximate_selected"
+               "\tpredicted_banded_minus_sliding_score"
+               "\tresidual_adjusted_banded_minus_sliding_score"
+               "\tapproximate_applicability_maximum_absolute_z"
+               "\tapproximate_calibrated\tcandidate"
                "\tpredicted_minutes_p50\tpredicted_minutes_p90"
                "\tpredicted_memory_bytes\treserved_memory_bytes"
                "\tpredicted_wait_minutes\tactual_seconds"
@@ -2171,21 +3056,53 @@ void recordAlignmentAttemptTrace(const AlignmentAttemptTrace &record) {
     std::string resultMethod = record.resultMethod;
     std::replace(resultMethod.begin(), resultMethod.end(), '\t', ' ');
     std::replace(resultMethod.begin(), resultMethod.end(), '\n', ' ');
-    traceStream << "b73-mo17-v8"
+    const ApproximateQualityDecision &approximate =
+            record.approximateDecision;
+    traceStream << "b73-mo17-v15-profile-v2-approx-v1"
                 << '\t' << record.intervalId
                 << '\t' << record.attempt
                 << '\t' << profile.queryLength
                 << '\t' << profile.referenceLength
+                << '\t' << profile.version
                 << '\t' << profile.estimatedScore
                 << '\t' << profile.conservativeScore
                 << '\t' << std::setprecision(9) << profile.confidence
                 << '\t' << profile.uncertainty
+                << '\t' << profile.sketchJaccardK9
                 << '\t' << profile.sketchJaccard
+                << '\t' << profile.sketchJaccardK21
+                << '\t' << profile.sketchJaccardDispersion
                 << '\t' << profile.ambiguousBaseFraction
+                << '\t' << profile.sequenceEntropy
                 << '\t' << profile.lowComplexityFraction
+                << '\t' << profile.uniqueAnchorFraction
+                << '\t' << profile.chainedAnchorFraction
+                << '\t' << profile.chainQueryCoverage
+                << '\t' << profile.chainReferenceCoverage
+                << '\t' << profile.chainSpanCoverage
+                << '\t' << profile.chainGapP90
+                << '\t' << profile.diagonalMad
                 << '\t' << profile.diagonalP90
                 << '\t' << profile.diagonalP99
                 << '\t' << profile.maximumDiagonalJump
+                << '\t' << profile.lengthRatio
+                << '\t' << profile.estimatedMismatchRate
+                << '\t' << profile.estimatedBandWidth
+                << '\t' << record.provenance.windowWidth
+                << '\t' << record.provenance.mismatchingPenalty
+                << '\t' << record.provenance.openGapPenalty1
+                << '\t' << record.provenance.extendGapPenalty1
+                << '\t' << record.provenance.openGapPenalty2
+                << '\t' << record.provenance.extendGapPenalty2
+                << '\t' << record.approximateKsw2BandWidth
+                << '\t' << record.approximateSlidingWindowWidth
+                << '\t' << approximate.modelVersion
+                << '\t' << alignmentCandidateName(approximate.selected)
+                << '\t' << approximate.predictedBandedMinusSlidingScore
+                << '\t' << approximate.
+                        residualAdjustedBandedMinusSlidingScore
+                << '\t' << approximate.applicabilityMaximumAbsoluteZ
+                << '\t' << (approximate.calibrated ? 1 : 0)
                 << '\t' << alignmentCandidateName(record.candidate)
                 << '\t' << record.predictedMinutesP50
                 << '\t' << record.predictedMinutesP90

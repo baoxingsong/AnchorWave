@@ -73,10 +73,20 @@ struct WfaAlignmentResult {
 uint64_t wfaMemoryBudgetBytes(int64_t windowWidth);
 
 // Standard and Singletrack full-CIGAR WFA are high-memory fast paths.
-// Singletrack retains only M wavefronts for traceback. In legacy mode the
-// standard trial is capped at 2 GiB; with process-wide -M scheduling both high
-// modes instead use their guarded task-specific reservations.
+// Singletrack retains only M wavefronts for traceback. Both modes use the
+// caller's complete per-alignment -w^2 budget; process-wide -M scheduling
+// controls how many such attempts may run concurrently.
 uint64_t standardWfaTrialMemoryBudgetBytes(uint64_t workerMemoryBudgetBytes);
+
+// Release every WFA cache owned by the calling worker. The resource scheduler
+// uses this once before treating a stable RSS floor as unavailable memory.
+void reapCurrentThreadWfaCaches();
+
+// Return released alignment allocations to the operating system when the
+// process is memory-idle but its allocator still reports a high RSS. This is
+// a pressure-path operation, not part of the normal per-alignment fast path.
+// Returns true when the platform allocator reports that it released pages.
+bool releaseUnusedAlignmentMemoryToSystem();
 
 // BiWFA owns three subsidiary WFA objects. Divide an already-computed byte
 // budget among them; no sequence length, score, or -w admission rule is used.

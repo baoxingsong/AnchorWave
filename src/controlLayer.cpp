@@ -20,6 +20,11 @@
 #include "myImportandFunction/WfaAlignment.h"
 #include "service/NovelAnchorThreshold.h"
 
+#include <cerrno>
+#include <cmath>
+#include <cstdlib>
+#include <limits>
+
 namespace {
 
 bool configureAlignmentTimePolicy(InputParser &inputParser) {
@@ -71,6 +76,87 @@ bool configureNovelAnchorMinimumLength(InputParser &inputParser,
     return true;
 }
 
+void splitTabFields(const std::string &line, std::vector<std::string> &fields) {
+    size_t begin = 0;
+    for (;;) {
+        const size_t tab = line.find('\t', begin);
+        if (tab == std::string::npos) {
+            fields.push_back(line.substr(begin));
+            return;
+        }
+        fields.push_back(line.substr(begin, tab - begin));
+        begin = tab + 1;
+    }
+}
+
+bool parseUint32Field(const std::string &text, uint32_t &value) {
+    if (text.empty()) {
+        return false;
+    }
+    char *end = NULL;
+    errno = 0;
+    const unsigned long long parsed = std::strtoull(text.c_str(), &end, 10);
+    if (errno != 0 || end == text.c_str() || *end != '\0' ||
+        parsed > std::numeric_limits<uint32_t>::max()) {
+        return false;
+    }
+    value = static_cast<uint32_t>(parsed);
+    return true;
+}
+
+bool parseDoubleField(const std::string &text, double &value) {
+    if (text.empty()) {
+        return false;
+    }
+    char *end = NULL;
+    errno = 0;
+    value = std::strtod(text.c_str(), &end);
+    return errno == 0 && end != text.c_str() && *end == '\0' && std::isfinite(value);
+}
+
+enum class SavedAnchorLineKind {
+    Anchor,
+    Interanchor,
+    Invalid
+};
+
+SavedAnchorLineKind parseSavedAnchorLine(const std::string &line,
+                                         AlignmentMatch &alignmentMatch) {
+    std::vector<std::string> fields;
+    splitTabFields(line, fields);
+    if (fields.size() != 10 || (fields[6] != "+" && fields[6] != "-")) {
+        return SavedAnchorLineKind::Invalid;
+    }
+    if (fields[7] == "interanchor") {
+        return SavedAnchorLineKind::Interanchor;
+    }
+
+    uint32_t referenceStart = 0;
+    uint32_t referenceEnd = 0;
+    uint32_t queryStart = 0;
+    uint32_t queryEnd = 0;
+    if (!parseUint32Field(fields[1], referenceStart) ||
+        !parseUint32Field(fields[2], referenceEnd) ||
+        !parseUint32Field(fields[4], queryStart) ||
+        !parseUint32Field(fields[5], queryEnd) ||
+        referenceStart > referenceEnd || queryStart > queryEnd) {
+        return SavedAnchorLineKind::Invalid;
+    }
+
+    double parsedScore = 0.0;
+    if (fields[9] != "NA" && !parseDoubleField(fields[9], parsedScore)) {
+        return SavedAnchorLineKind::Invalid;
+    }
+    // Preserve the historical saved-anchor reload semantics: exact-score 1 is
+    // retained as one and every other/unknown score is treated as zero.
+    const double score = fields[9] == "1" ? 1.0 : 0.0;
+    alignmentMatch = AlignmentMatch(fields[0], fields[3], referenceStart,
+                                    referenceEnd, queryStart, queryEnd, score,
+                                    fields[6] == "-" ? NEGATIVE : POSITIVE,
+                                    fields[7], "");
+    return SavedAnchorLineKind::Anchor;
+}
+
 }  // namespace
 
 int gff2seq(int argc, char **argv) {
@@ -109,9 +195,8 @@ int gff2seq(int argc, char **argv) {
         if (inputParser.cmdOptionExists("-x")) {
             exonModel = true;
         }
-        getSequences(inputGffFile, genome, outputCdsSequences, minExon, exonModel);
-
-        return 0;
+        return getSequences(inputGffFile, genome, outputCdsSequences, minExon, exonModel)
+               ? 0 : 1;
     }else{
         std::cerr << usage.str();
         return 1;
@@ -140,16 +225,16 @@ bool genGenoMapFromFile(std::string path_anchors, std::string wholeCommand, std:
             }
         }
 
-        if (line[0] != '#') {
+        if (line.empty() || line[0] != '#') {
             continue;
         }
 
-        if(line.find("#block begin")) {
+        if(line.find("#block begin") != std::string::npos) {
             has_begin = true;
             count_begin++;
         }
 
-        if(line.find("#block end")) {
+        if(line.find("#block end") != std::string::npos) {
             has_end = true;
             count_end++;
         }
@@ -166,17 +251,12 @@ bool genGenoMapFromFile(std::string path_anchors, std::string wholeCommand, std:
         std::vector <AlignmentMatch> v_am;
         std::string line;
         bool flag_begin = false;
-        int line_std_n_no = 0;
-        int line_std_p_no = 0;
-        STRAND last_strand = POSITIVE;
 
         while (std::getline(infile, line)) {
             // --line like :    5B	387734189	387739576	GWHBJBH00000005	293115001	293120759	+	transcript:TraesCS5B02G214600.2	1	0.99872
             // refChr	referenceStart	referenceEnd	queryChr	queryStart	queryEnd	strand	gene	score
             if (!flag_begin && line.find("#block begin") != std::string::npos) {
                 flag_begin = true;
-                line_std_n_no = 0;
-                line_std_p_no = 0;
                 continue;
             }
 
@@ -185,72 +265,22 @@ bool genGenoMapFromFile(std::string path_anchors, std::string wholeCommand, std:
             }
 
             if (line.find("#block end") != std::string::npos) {
+                if (v_am.empty()) {
+                    return false;
+                }
                 map_v_am[v_am[0].getRefChr()] = v_am;
                 v_am.clear();
                 flag_begin = false;
+                continue;
             }
 
-            int size = line.size();
-
-            char refChr[size];
-            uint32_t referenceStart, referenceEnd;
-            uint32_t last_referenceEnd;
-            char queryChr[size];
-            uint32_t queryStart, queryEnd;
-            uint32_t last_queryStart;
-            char strand_[size];
-            char c_gene[size];
-            char c_score[size];
-
-            int ret = sscanf(line.c_str(), "%s%d%d%s%d%d%s%s%*s%s", refChr, &referenceStart, &referenceEnd, queryChr, &queryStart, &queryEnd, strand_, c_gene, c_score);
-
-            if (ret == 9) {
-                STRAND strand;
-                if (strand_[0] == '-') {
-                    strand = NEGATIVE;
-                } else {
-                    strand = POSITIVE;
-                }
-
-                if (last_strand != strand) {
-                    if (strand == POSITIVE) {
-                        line_std_p_no = 0;
-                        line_std_p_no++;
-                    } else {
-                        line_std_n_no = 0;
-                        line_std_n_no++;
-                    }
-                    last_strand = strand;
-                } else {
-                    if (strand == POSITIVE) {
-                        int r = line_std_p_no++ % 2;
-                        if (r != 0) {
-                            last_referenceEnd = referenceEnd;
-                            last_queryStart = queryStart;
-                            continue;
-                        }
-                    } else {
-                        bool b_2 = (last_referenceEnd < referenceStart) && (last_queryStart > queryEnd);
-                        if (b_2) {
-                            if (line_std_n_no++ % 2 == 1) {
-                                last_referenceEnd = referenceEnd;
-                                last_queryStart = queryStart;
-                                continue;
-                            }
-                        }
-                    }
-                }
-
-                double score = 1;
-                if (std::string(c_score) != "1") {
-                    score = 0;
-                }
-
-                last_referenceEnd = referenceEnd;
-                last_queryStart = queryStart;
-
-                AlignmentMatch am = AlignmentMatch(std::string(refChr), std::string(queryChr), referenceStart, referenceEnd, queryStart, queryEnd, score, strand, std::string(c_gene), "");
-                v_am.push_back(am);
+            AlignmentMatch alignmentMatch;
+            const SavedAnchorLineKind kind = parseSavedAnchorLine(line, alignmentMatch);
+            if (kind == SavedAnchorLineKind::Invalid) {
+                return false;
+            }
+            if (kind == SavedAnchorLineKind::Anchor) {
+                v_am.push_back(alignmentMatch);
             }
         }
 
@@ -280,7 +310,7 @@ int genomeAlignment(int argc, char **argv) {
     double MIN_ALIGNMENT_SCORE = 2;
     bool considerInversion = false;
 
-    int64_t wfaSize3 = 100000; // novel-anchor search requires ref_len * query_len > wfaSize3^2
+    int64_t wfaSize3 = 50000; // novel-anchor search requires ref_len * query_len > wfaSize3^2
     int64_t windowWidth = 100000;
     int expectedCopies = 1;
     double maximumSimilarity = 0.6; // the maximum simalarity between secondary hist the primary hit. If the second hit is too similary with primary hit, that is unwanted duplications
@@ -305,18 +335,23 @@ int genomeAlignment(int argc, char **argv) {
           " -o   FILE    output file in maf format" << std::endl <<
           " -f   FILE    output sequence alignment for each anchor/inter-anchor region in maf format" << std::endl <<
           " -b   FILE    output the actual alignment method for each interval in BED format" << std::endl <<
-          "              all WFA memory modes are reported as WAVEFRONT" << std::endl <<
+          "              WFA modes: WAVEFRONT; exact KSW2 modes: KSW2" << std::endl <<
+          "              fallback modes: BANDED_KSW2 or SLIDING_WINDOW" << std::endl <<
           " -t   INT     maximum number of anchor-organization and alignment threads (default: " << threads << ")" << std::endl <<
           " -M   FLOAT   predictive maximum total AnchorWave memory in GiB" << std::endl <<
+          "              omitted by default (no process-wide memory envelope)" << std::endl <<
           "              enables dynamic scheduling; must be at least w^2 bytes" << std::endl <<
+          "              not an operating-system-enforced hard RSS limit" << std::endl <<
           " -bt  FLOAT   exact-DP prediction/runtime ceiling per interval in minutes (default: 0)" << std::endl <<
           "              0 selects exact-first mode; a positive value selects balanced mode" << std::endl <<
+          "              qlen*rlen <= w^2 remains a mandatory Tier-1 exception" << std::endl <<
           " -m   INT     minimum exon length to use (default: " << minExon << ", should be identical with the setting of gff2seq function)" << std::endl <<
           " -mi  DOUBLE  minimum full-length CDS anchor hit similarity to use (default:" << minimumSimilarity << ")" << std::endl <<
           " -mi2 DOUBLE  minimum novel anchor hit similarity to use (default:" << minimumSimilarity2 << ")" << std::endl <<
           " -ar  FILE    sam file generated by mapping conserved sequence to reference genome" << std::endl <<
-          " -w   INT     alignment window and hard per-thread algorithm budget w^2 bytes" << std::endl <<
-          "              (default: " << windowWidth << ", about 9.3 GiB per thread)" << std::endl <<
+          " -w   INT     alignment window and normal per-alignment budget w^2 bytes" << std::endl <<
+          "              (default: " << windowWidth << ", about 9.3 GiB per alignment)" << std::endl <<
+          "              qlen*rlen <= w^2 forces Tier 1; exact memory may exceed w^2" << std::endl <<
           " -fa3 INT     minimum side length for novel-anchor search: require" << std::endl <<
           "              reference_length * query_length > fa3^2 (default: " << wfaSize3 << ")" << std::endl <<
           " -B   INT     mismatching penalty (default: " << mismatchingPenalty << ")" << std::endl <<
@@ -343,7 +378,7 @@ int genomeAlignment(int argc, char **argv) {
     }
     else if (inputParser.cmdOptionExists("-i") && inputParser.cmdOptionExists("-r") &&
                inputParser.cmdOptionExists("-a") && inputParser.cmdOptionExists("-s") && inputParser.cmdOptionExists("-as") &&
-               (inputParser.cmdOptionExists("-n") || inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-o") || inputParser.cmdOptionExists("-l"))) {
+               (inputParser.cmdOptionExists("-n") || inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-o") || inputParser.cmdOptionExists("-b"))) {
 
         if (!configureAlignmentTimePolicy(inputParser) ||
             !configureAlignmentTrace(inputParser)) {
@@ -425,15 +460,15 @@ int genomeAlignment(int argc, char **argv) {
         if (inputParser.cmdOptionExists("-O2")) {
             openGapPenalty2 = std::stoi(inputParser.getCmdOption("-O2"));
             if (openGapPenalty2 >= 0) {
-                std::cout << "parameter of O1 should be a negative value" << std::endl;
+                std::cout << "parameter of O2 should be a negative value" << std::endl;
                 return 1;
             }
         }
 
         if (inputParser.cmdOptionExists("-E2")) {
             extendGapPenalty2 = std::stoi(inputParser.getCmdOption("-E2"));
-            if (extendGapPenalty2 > 0) {
-                std::cout << "parameter of E1 should be a negative value" << std::endl;
+            if (extendGapPenalty2 >= 0) {
+                std::cout << "parameter of E2 should be a negative value" << std::endl;
                 return 1;
             }
         }
@@ -541,6 +576,11 @@ int genomeAlignment(int argc, char **argv) {
 
                 std::ofstream ofile;
                 ofile.open(inputParser.getCmdOption("-n"));
+                if (!ofile.good()) {
+                    std::cerr << "cannot create anchors output file "
+                              << inputParser.getCmdOption("-n") << std::endl;
+                    return 1;
+                }
                 ofile << "#" << PROGRAMNAME << " " << wholeCommand << std::endl;
                 int blockIndex = 0;
                 ofile << "refChr" << "\t"
@@ -554,6 +594,9 @@ int genomeAlignment(int argc, char **argv) {
                       << "blockIndex" << "\tscore" << std::endl;
 
                 for (std::map < std::string, std::vector < AlignmentMatch >> ::iterator it = map_v_am.begin(); it != map_v_am.end(); ++it) {
+                    if (it->second.empty()) {
+                        continue;
+                    }
                     ofile << "#block begin" << std::endl;
                     const std::vector<AlignmentMatch> &v_am = it->second;
                     blockIndex++;
@@ -627,18 +670,25 @@ int genomeAlignment(int argc, char **argv) {
                     ofile << "#block end" << std::endl;
                 }
                 ofile.close();
+                if (!ofile.good()) {
+                    std::cerr << "an error occurred while writing anchors output file "
+                              << inputParser.getCmdOption("-n") << std::endl;
+                    return 1;
+                }
             }
 
             std::cout << "anchors generate done!" << std::endl;
         }
 
-        if (inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-o") || inputParser.cmdOptionExists("-l")) {
-            genomeAlignmentAndVariantCalling(map_v_am, path_ref_GenomeSequence, path_target_GenomeSequence,
+        if (inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-o") || inputParser.cmdOptionExists("-b")) {
+            if (!genomeAlignmentAndVariantCalling(map_v_am, path_ref_GenomeSequence, path_target_GenomeSequence,
                                              windowWidth,
                                              outPutMafFile, outPutFragedFile, outPutBedFile,
                                              matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1,
                                              openGapPenalty2, extendGapPenalty2,
-                                             threads, maxProcessMemoryBytes);
+                                             threads, maxProcessMemoryBytes)) {
+                return 1;
+            }
 
             std::cout << "AnchorWave done!" << std::endl;
         }
@@ -673,16 +723,16 @@ bool genProVectorFromFile(std::string path_anchors, std::string wholeCommand, st
             }
         }
 
-        if (line[0] != '#') {
+        if (line.empty() || line[0] != '#') {
             continue;
         }
 
-        if(line.find("#block begin")) {
+        if(line.find("#block begin") != std::string::npos) {
             has_begin = true;
             count_begin++;
         }
 
-        if(line.find("#block end")) {
+        if(line.find("#block end") != std::string::npos) {
             has_end = true;
             count_end++;
         }
@@ -699,17 +749,12 @@ bool genProVectorFromFile(std::string path_anchors, std::string wholeCommand, st
         std::vector <AlignmentMatch> v_am;
         std::string line;
         bool flag_begin = false;
-        int line_std_n_no = 0;
-        int line_std_p_no = 0;
-        STRAND last_strand = POSITIVE;
 
         while (std::getline(infile, line)) {
             // --line like :    5B	387734189	387739576	GWHBJBH00000005	293115001	293120759	+	transcript:TraesCS5B02G214600.2	1	0.99872
             // refChr	referenceStart	referenceEnd	queryChr	queryStart	queryEnd	strand	gene	score
             if (!flag_begin && line.find("#block begin") != std::string::npos) {
                 flag_begin = true;
-                line_std_n_no = 0;
-                line_std_p_no = 0;
                 continue;
             }
 
@@ -718,60 +763,22 @@ bool genProVectorFromFile(std::string path_anchors, std::string wholeCommand, st
             }
 
             if (line.find("#block end") != std::string::npos) {
+                if (v_am.empty()) {
+                    return false;
+                }
                 v_v_am.push_back(v_am);
                 v_am.clear();
                 flag_begin = false;
+                continue;
             }
 
-            int size = line.size();
-
-            char refChr[size];
-            uint32_t referenceStart, referenceEnd;
-            char queryChr[size];
-            uint32_t queryStart, queryEnd;
-            char strand_[size];
-            char c_gene[size];
-            char c_score[size];
-
-            int ret = sscanf(line.c_str(), "%s%d%d%s%d%d%s%s%*s%s", refChr, &referenceStart, &referenceEnd, queryChr, &queryStart, &queryEnd, strand_, c_gene, c_score);
-
-            if (ret == 9) {
-                STRAND strand;
-                if (strand_[0] == '-') {
-                    strand = NEGATIVE;
-                } else {
-                    strand = POSITIVE;
-                }
-
-                if (last_strand != strand) {
-                    if (strand == POSITIVE) {
-                        line_std_p_no = 0;
-                        line_std_p_no++;
-                    } else {
-                        line_std_n_no = 0;
-                        line_std_n_no++;
-                    }
-                    last_strand = strand;
-                } else {
-                    if (strand == POSITIVE) {
-                        int r = line_std_p_no++ % 2;
-                        if (r != 0) {
-                            continue;
-                        }
-                    } else {
-                        if (line_std_n_no++ % 2 == 1) {
-                            continue;
-                        }
-                    }
-                }
-
-                double score = 1;
-                if (std::string(c_score) != "1") {
-                    score = 0;
-                }
-
-                AlignmentMatch am = AlignmentMatch(std::string(refChr), std::string(queryChr), referenceStart, referenceEnd, queryStart, queryEnd, score, strand, std::string(c_gene), "");
-                v_am.push_back(am);
+            AlignmentMatch alignmentMatch;
+            const SavedAnchorLineKind kind = parseSavedAnchorLine(line, alignmentMatch);
+            if (kind == SavedAnchorLineKind::Invalid) {
+                return false;
+            }
+            if (kind == SavedAnchorLineKind::Anchor) {
+                v_am.push_back(alignmentMatch);
             }
         }
 
@@ -798,7 +805,7 @@ int proportionalAlignment(int argc, char **argv) {
     double minimumSimilarity = 0;
     double minimumSimilarity2 = 0;
 
-    int64_t wfaSize3 = 100000; // novel-anchor search requires ref_len * query_len > wfaSize3^2
+    int64_t wfaSize3 = 50000; // novel-anchor search requires ref_len * query_len > wfaSize3^2
     int64_t windowWidth = 100000;
     int expectedCopies = 1;
     double maximumSimilarity = 0.6;
@@ -831,16 +838,21 @@ int proportionalAlignment(int argc, char **argv) {
           " -o   FILE    output file in maf format" << std::endl <<
           " -f   FILE    output sequence alignment for each anchor/inter-anchor region in maf format" << std::endl <<
           " -b   FILE    output the actual alignment method for each interval in BED format" << std::endl <<
-          "              all WFA memory modes are reported as WAVEFRONT" << std::endl <<
+          "              WFA modes: WAVEFRONT; exact KSW2 modes: KSW2" << std::endl <<
+          "              fallback modes: BANDED_KSW2 or SLIDING_WINDOW" << std::endl <<
           " -t   INT     maximum number of anchor-organization and alignment threads (default: " << threads << ")" << std::endl <<
           " -M   FLOAT   predictive maximum total AnchorWave memory in GiB" << std::endl <<
+          "              omitted by default (no process-wide memory envelope)" << std::endl <<
           "              enables dynamic scheduling; must be at least w^2 bytes" << std::endl <<
+          "              not an operating-system-enforced hard RSS limit" << std::endl <<
           " -bt  FLOAT   exact-DP prediction/runtime ceiling per interval in minutes (default: 0)" << std::endl <<
           "              0 selects exact-first mode; a positive value selects balanced mode" << std::endl <<
+          "              qlen*rlen <= w^2 remains a mandatory Tier-1 exception" << std::endl <<
           " -fa3 INT     minimum side length for novel-anchor search: require" << std::endl <<
           "              reference_length * query_length > fa3^2 (default: " << wfaSize3 << ")" << std::endl <<
-          " -w   INT     alignment window and hard per-thread algorithm budget w^2 bytes" << std::endl <<
-          "              (default: " << windowWidth << ", about 9.3 GiB per thread)" << std::endl <<
+          " -w   INT     alignment window and normal per-alignment budget w^2 bytes" << std::endl <<
+          "              (default: " << windowWidth << ", about 9.3 GiB per alignment)" << std::endl <<
+          "              qlen*rlen <= w^2 forces Tier 1; exact memory may exceed w^2" << std::endl <<
           " -R   INT     reference genome maximum alignment coverage " << std::endl <<
           " -Q   INT     query genome maximum alignment coverage " << std::endl <<
           " -B   INT     mismatching penalty (default: " << mismatchingPenalty << ")" << std::endl <<
@@ -872,7 +884,7 @@ int proportionalAlignment(int argc, char **argv) {
         return 0;
     } else if (inputParser.cmdOptionExists("-i") && inputParser.cmdOptionExists("-r") &&
                inputParser.cmdOptionExists("-a") && inputParser.cmdOptionExists("-s") && inputParser.cmdOptionExists("-as")
-               && (inputParser.cmdOptionExists("-n") || inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-o") ) ) {
+               && (inputParser.cmdOptionExists("-n") || inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-o") || inputParser.cmdOptionExists("-b") ) ) {
 
         if (!configureAlignmentTimePolicy(inputParser) ||
             !configureAlignmentTrace(inputParser)) {
@@ -976,14 +988,14 @@ int proportionalAlignment(int argc, char **argv) {
         if (inputParser.cmdOptionExists("-O2")) {
             openGapPenalty2 = std::stoi(inputParser.getCmdOption("-O2"));
             if (openGapPenalty2 >= 0) {
-                std::cout << "parameter of O1 should be a negative value" << std::endl;
+                std::cout << "parameter of O2 should be a negative value" << std::endl;
                 return 1;
             }
         }
         if (inputParser.cmdOptionExists("-E2")) {
             extendGapPenalty2 = std::stoi(inputParser.getCmdOption("-E2"));
-            if (extendGapPenalty2 > 0) {
-                std::cout << "parameter of E1 should be a negative value" << std::endl;
+            if (extendGapPenalty2 >= 0) {
+                std::cout << "parameter of E2 should be a negative value" << std::endl;
                 return 1;
             }
         }
@@ -1080,6 +1092,11 @@ int proportionalAlignment(int argc, char **argv) {
 
                 std::ofstream ofile;
                 ofile.open(inputParser.getCmdOption("-n"));
+                if (!ofile.good()) {
+                    std::cerr << "cannot create anchors output file "
+                              << inputParser.getCmdOption("-n") << std::endl;
+                    return 1;
+                }
                 ofile << "#" << PROGRAMNAME << " " << wholeCommand << std::endl;
                 ofile << "refChr" << "\t"
                       << "referenceStart" << "\t"
@@ -1150,17 +1167,24 @@ int proportionalAlignment(int argc, char **argv) {
                 }
 
                 ofile.close();
+                if (!ofile.good()) {
+                    std::cerr << "an error occurred while writing anchors output file "
+                              << inputParser.getCmdOption("-n") << std::endl;
+                    return 1;
+                }
                 std::cout << "totalAnchors:" << totalAnchors << std::endl;
             }
 
             std::cout << "anchors generate done!" << std::endl;
         }
 
-        if (inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-o") || inputParser.cmdOptionExists("-l")) {
-            genomeAlignment(v_v_am, referenceGenomeSequence, targetGenomeSequence, windowWidth,
+        if (inputParser.cmdOptionExists("-f") || inputParser.cmdOptionExists("-o") || inputParser.cmdOptionExists("-b")) {
+            if (!genomeAlignment(v_v_am, referenceGenomeSequence, targetGenomeSequence, windowWidth,
                             outPutMafFile, outPutFragedFile, outPutBedFile, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1,
                             openGapPenalty2, extendGapPenalty2, threads,
-                            maxProcessMemoryBytes);
+                            maxProcessMemoryBytes)) {
+                return 1;
+            }
             std::cout << "AnchorWave done!" << std::endl;
         }
     }
@@ -1188,12 +1212,14 @@ int ali(int argc, char **argv) {
           " ali -r refSeq.fa -s querySeq.fa" << std::endl <<
           "Options" << std::endl <<
           " -h           produce help message" << std::endl <<
-          " -r   FILE    reference sequence (single sequence in FASTA format)" << std::endl <<
-          " -s   FILE    target sequence (single sequence in FASTA format)" << std::endl <<
-          " -w   INT     alignment window and hard per-thread algorithm budget w^2 bytes" << std::endl <<
+          " -r   FILE    reference sequence (one-record plain or gzip/BGZF FASTA)" << std::endl <<
+          " -s   FILE    target sequence (one-record plain or gzip/BGZF FASTA)" << std::endl <<
+          " -w   INT     alignment window and normal per-alignment budget w^2 bytes" << std::endl <<
           "              (default: " << windowWidth << ", about 9.3 GiB)" << std::endl <<
+          "              qlen*rlen <= w^2 forces Tier 1; exact memory may exceed w^2" << std::endl <<
           " -bt  FLOAT   exact-DP prediction/runtime ceiling per interval in minutes (default: 0)" << std::endl <<
           "              0 selects exact-first mode; a positive value selects balanced mode" << std::endl <<
+          "              qlen*rlen <= w^2 remains a mandatory Tier-1 exception" << std::endl <<
           " -B   INT     mismatching penalty (default: " << mismatchingPenalty << ")" << std::endl <<
           " -O1  INT     open gap penalty (default: " << openGapPenalty1 << ")" << std::endl <<
           " -E1  INT     extend gap penalty (default: " << extendGapPenalty1 << ")" << std::endl <<
@@ -1251,14 +1277,14 @@ int ali(int argc, char **argv) {
     if (inputParser.cmdOptionExists("-O2")) {
         openGapPenalty2 = std::stoi(inputParser.getCmdOption("-O2"));
         if (openGapPenalty2 >= 0) {
-            std::cout << "parameter of O1 should be a negative value" << std::endl;
+            std::cout << "parameter of O2 should be a negative value" << std::endl;
             return 1;
         }
     }
     if (inputParser.cmdOptionExists("-E2")) {
         extendGapPenalty2 = std::stoi(inputParser.getCmdOption("-E2"));
-        if (extendGapPenalty2 > 0) {
-            std::cout << "parameter of E1 should be a negative value" << std::endl;
+        if (extendGapPenalty2 >= 0) {
+            std::cout << "parameter of E2 should be a negative value" << std::endl;
             return 1;
         }
     }
@@ -1268,6 +1294,7 @@ int ali(int argc, char **argv) {
 
     if (map_ref.size() != 1) {
         std::cerr << "There should be one and only one sequence in the reference FASTA file" << std::endl;
+        return 1;
     }
 
     std::map<std::string, std::tuple<std::string, long, long, int> > map_qry;
@@ -1275,6 +1302,7 @@ int ali(int argc, char **argv) {
 
     if (map_qry.size() != 1) {
         std::cerr << "There should be one and only one sequence in the query FASTA file" << std::endl;
+        return 1;
     }
 
     std::string _alignment_q;
@@ -1282,6 +1310,11 @@ int ali(int argc, char **argv) {
 
     std::string refSeqStr = getSubsequence2(map_ref, map_ref.begin()->first);
     std::string querySeqStr = getSubsequence2(map_qry, map_qry.begin()->first);
+    if (refSeqStr.empty() || querySeqStr.empty()) {
+        std::cerr << "Reference and query sequences must both contain at least one base"
+                  << std::endl;
+        return 1;
+    }
     std::string alignmentMethod= "UNKNOWN";
     alignSlidingWindow(querySeqStr, refSeqStr, _alignment_q, _alignment_d, alignmentMethod, windowWidth, matchingScore, mismatchingPenalty, openGapPenalty1, extendGapPenalty1, openGapPenalty2, extendGapPenalty2);
 
@@ -1634,7 +1667,17 @@ int geno(int argc, char **argv) {
         std::cerr << usage.str();
     }
  */
-    return 0;
+    for (int i = 1; i < argc; ++i) {
+        const std::string option = argv[i];
+        if (option == "-h" || option == "--help") {
+            std::cerr << "The legacy 'geno' command is not implemented in this build; "
+                      << "use 'genoAli' instead." << std::endl;
+            return 0;
+        }
+    }
+    std::cerr << "The legacy 'geno' command is not implemented in this build; "
+              << "use 'genoAli' instead." << std::endl;
+    return 1;
 }
 
 
@@ -1655,7 +1698,7 @@ int pro(int argc, char **argv) {
     std::stringstream usage;
 
     usage << "Usage: " << PROGRAMNAME
-          << " pro -i inputFile -n outputAnchorFile -R refMaximumTimes -Q queryMaximumTimes" << std::endl <<
+          << " pro -i inputFile -o outputAnchorFile -R refMaximumTimes -Q queryMaximumTimes" << std::endl <<
           "Options" << std::endl <<
           " -h           produce help message" << std::endl <<
           " -i   FILE    input file" << std::endl <<
@@ -1678,16 +1721,13 @@ int pro(int argc, char **argv) {
           << std::endl;
 
     InputParser inputParser(argc, argv);
+    if (inputParser.cmdOptionExists("-h") || inputParser.cmdOptionExists("--help")) {
+        std::cerr << usage.str();
+        return 0;
+    }
     if (inputParser.cmdOptionExists("-i") && inputParser.cmdOptionExists("-o")) {
         std::string fakeBlastpResultFile = inputParser.getCmdOption("-i");
         std::string path_anchors = inputParser.getCmdOption("-o");
-        std::ofstream outputFile_test(path_anchors);          // avoid output path exists spelling error
-        if (!outputFile_test.good()) {
-            std::cerr << "error in creating outputResultFile file, please check your output path :" << path_anchors
-                      << std::endl;
-            exit(1);
-        }
-        outputFile_test.close();
 
         if (inputParser.cmdOptionExists("-R")) {
             refMaximumTimes = std::stoi(inputParser.getCmdOption("-R"));
@@ -1733,28 +1773,60 @@ int pro(int argc, char **argv) {
         std::ifstream infile(fakeBlastpResultFile);
         if (!infile.good()) {
             std::cerr << "error in opening fakeBlastpResultFile file:" << fakeBlastpResultFile << std::endl;
-            exit(1);
+            return 1;
         }
         std::string line;
         int flag = 0;
+        size_t inputLineNumber = 0;
         // prepare data in RAM begin
         while (std::getline(infile, line)) {
+            ++inputLineNumber;
+            if (line.empty() || line[0] == '#') {
+                continue;
+            }
             std::vector<std::string> elems;
-            char separator = '\t';
-            split(line, separator, elems);
+            splitTabFields(line, elems);
+            if (elems.size() != 13) {
+                std::cerr << fakeBlastpResultFile << ":" << inputLineNumber
+                          << ": expected 13 tab-separated columns, found "
+                          << elems.size() << std::endl;
+                return 1;
+            }
+            int refId = 0;
+            int queryId = 0;
+            uint32_t refStart = 0;
+            uint32_t refEnd = 0;
+            uint32_t queryStart = 0;
+            uint32_t queryEnd = 0;
+            double alignmentPercent = 0.0;
+            try {
+                size_t consumed = 0;
+                refId = std::stoi(elems[2], &consumed);
+                if (consumed != elems[2].size()) throw std::invalid_argument("refId");
+                queryId = std::stoi(elems[8], &consumed);
+                if (consumed != elems[8].size()) throw std::invalid_argument("queryId");
+            } catch (const std::exception &) {
+                std::cerr << fakeBlastpResultFile << ":" << inputLineNumber
+                          << ": invalid gene index" << std::endl;
+                return 1;
+            }
+            if (!parseUint32Field(elems[3], refStart) ||
+                !parseUint32Field(elems[4], refEnd) ||
+                !parseUint32Field(elems[9], queryStart) ||
+                !parseUint32Field(elems[10], queryEnd) ||
+                !parseDoubleField(elems[12], alignmentPercent) ||
+                refStart > refEnd || queryStart > queryEnd) {
+                std::cerr << fakeBlastpResultFile << ":" << inputLineNumber
+                          << ": invalid coordinate or alignment score" << std::endl;
+                return 1;
+            }
             std::string refGene = elems[0];
             std::string refChr = elems[1];
-            int refId = std::stoi(elems[2]);
-            int32_t refStart = stoi(elems[3]);
-            int32_t refEnd = stoi(elems[4]);
             std::string refStrand = elems[5];
             std::string queryGene = elems[6];
             std::string queryChr = elems[7];
-            int queryId = std::stoi(elems[8]);
-            int32_t queryStart = stoi(elems[9]);
-            int32_t queryEnd = stoi(elems[10]);
             std::string queryStrand = elems[11];
-            double alignmentScore = stod(elems[12])/100.0;
+            double alignmentScore = alignmentPercent / 100.0;
             STRAND thisStrand = POSITIVE;
             if (refStrand != queryStrand) {
                 thisStrand = NEGATIVE;
@@ -1781,27 +1853,17 @@ int pro(int argc, char **argv) {
         // begin setting index, they are necessary in the longest path approach
         std::map <std::string, std::map<int, std::string>> queryIndexMap; // chr : index : queryGeneName
         for (const auto &ii: alignmentMatchsMapT) {
-            if (queryIndexMap.find(ii.getQueryChr()) == queryIndexMap.end()) {
-                queryIndexMap[ii.getQueryChr()] = std::map<int, std::string>();
-            } else {
-                if (queryIndexMap[ii.getQueryChr()].find(ii.getQueryId())
-                    == queryIndexMap[ii.getQueryChr()].end()) {
-                    queryIndexMap[ii.getQueryChr()][ii.getQueryId()] =
-                            ii.getQueryGeneName();
-                }
+            if (queryIndexMap[ii.getQueryChr()].find(ii.getQueryId()) ==
+                queryIndexMap[ii.getQueryChr()].end()) {
+                queryIndexMap[ii.getQueryChr()][ii.getQueryId()] = ii.getQueryGeneName();
             }
         }
 
         std::map <std::string, std::map<int, std::string>> refIndexMap;  // chr : index : refGeneName
         for (const auto &ii: alignmentMatchsMapT) {
-            if (refIndexMap.find(ii.getRefChr()) == refIndexMap.end()) {
-                refIndexMap[ii.getRefChr()] = std::map<int, std::string>();
-            } else {
-                if (refIndexMap[ii.getRefChr()].find(ii.getRefId())
-                    == refIndexMap[ii.getRefChr()].end()) {
-                    refIndexMap[ii.getRefChr()][ii.getRefId()] =
-                            ii.getReferenceGeneName();
-                }
+            if (refIndexMap[ii.getRefChr()].find(ii.getRefId()) ==
+                refIndexMap[ii.getRefChr()].end()) {
+                refIndexMap[ii.getRefChr()][ii.getRefId()] = ii.getReferenceGeneName();
             }
         }
 
@@ -1824,6 +1886,9 @@ int pro(int argc, char **argv) {
 
         for (const auto &subAlignmentMatchT : groupedMapAlignmentMatch) {
             alignmentMatchsMapT = subAlignmentMatchT.second;
+            if (alignmentMatchsMapT.empty()) {
+                continue;
+            }
 
             // prepare data in RAM end
             if (OVER_LAP_WINDOW != 0) {
@@ -1889,8 +1954,8 @@ int pro(int argc, char **argv) {
                             match_bin2.clear();
                         }
                         match_bin2.push_back(*it2);
-                    } else if (it1->getRefChr() != prev_pair1->getRefChr() ||
-                               it1->getQueryChr() != prev_pair1->getQueryChr()) {
+                    } else if (it2->getRefChr() != prev_pair2->getRefChr() ||
+                               it2->getQueryChr() != prev_pair2->getQueryChr()) {
                         orthologPairSortMatchBin(match_bin2);
 
                         alignmentMatchsMapT_cpy2.push_back(match_bin2[0]);
@@ -1932,6 +1997,11 @@ int pro(int argc, char **argv) {
             }
             std::ofstream offile;
             offile.open(inputParser.getCmdOption("-o"));
+            if (!offile.good()) {
+                std::cerr << "cannot create anchors output file "
+                          << inputParser.getCmdOption("-o") << std::endl;
+                return 1;
+            }
             offile << "#" << PROGRAMNAME << " " << wholeCommand << std::endl;
             offile << "refGene" << "\t"
                    << "refChr" << "\t"
@@ -1950,13 +2020,19 @@ int pro(int argc, char **argv) {
             size_t totalAnchors = 0;
             int blockIndex = 1;
             for (std::vector<AlignmentMatch> v_am: alignmentMatchsMap) {
+                    if (v_am.empty()) {
+                        continue;
+                    }
 //                if (v_am.size() >= 4) {
                     std::string plus_minus = "NEGATIVE";
-                    if (v_am[0].getQueryId() < v_am[1].getQueryId()) {
+                    if ((v_am.size() > 1 && v_am[0].getQueryId() < v_am[1].getQueryId()) ||
+                        (v_am.size() == 1 && v_am[0].getStrand() == POSITIVE)) {
                         plus_minus = "POSITIVE";
                     }
+                    const double thisBlockScore = blockIndex <= static_cast<int>(block_score.size())
+                                                  ? block_score[blockIndex - 1] : 0.0;
                     offile << "##Alignment" << "\t" << blockIndex << "\t" << "N=" << v_am.size() << "\t"
-                           << "score=" << block_score[blockIndex - 1] << "\t" << v_am[0].getRefChr() << "&" <<
+                           << "score=" << thisBlockScore << "\t" << v_am[0].getRefChr() << "&" <<
                            v_am[0].getQueryChr() << "\t" << plus_minus << std::endl;
                     blockIndex++;
 
@@ -1982,11 +2058,17 @@ int pro(int argc, char **argv) {
                     }
             }
             offile.close();
+            if (!offile.good()) {
+                std::cerr << "an error occurred while writing anchors output file "
+                          << inputParser.getCmdOption("-o") << std::endl;
+                return 1;
+            }
             std::cout << "totalAnchors:" << totalAnchors << std::endl;
             std::cout << "anchors generate done!" << std::endl;
         }
     } else {
         std::cerr << usage.str();
+        return 1;
     }
     return 0;
 }

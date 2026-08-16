@@ -37,11 +37,13 @@ void readFastaFile(const std::string &filePath, std::map<std::string, std::tuple
             if (name.size() > 0) {
                 map[name] = std::make_tuple(readablePath, size, offset, line_bases);
 
-                if(line_last == line_bases) {
-                    offset += size + size/line_bases;
-                }
-                else {
-                    offset += size + size/line_bases + 1;
+                if (line_bases > 0) {
+                    if(line_last == line_bases) {
+                        offset += size + size/line_bases;
+                    }
+                    else {
+                        offset += size + size/line_bases + 1;
+                    }
                 }
             }
 

@@ -17,6 +17,7 @@
 #include "../util/myutil.h"
 
 #include "../../minimap2/ksw2.h"
+#include "../../minimap2/ksw2_singletrack.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -61,6 +62,34 @@ int64_t alignSlidingWindow_minimap2(
         const int32_t &extendGapPenalty1,
         const int32_t &openGapPenalty2,
         const int32_t &extendGapPenalty2);
+
+// Exact, end-to-end two-piece affine KSW2 alignment with Singletrack
+// traceback. It optimizes the same objective as alignSlidingWindow_minimap2;
+// only the traceback representation differs.
+int64_t alignKsw2Singletrack(
+        const std::string &dna_q, const std::string &dna_d,
+        std::string &alignment_q, std::string &alignment_d,
+        const int32_t &mismatchingPenalty,
+        const int32_t &openGapPenalty1,
+        const int32_t &extendGapPenalty1,
+        const int32_t &openGapPenalty2,
+        const int32_t &extendGapPenalty2,
+        bool *stopped = nullptr);
+
+// The same Singletrack traceback representation with KSW2's native diagonal
+// band enabled. A negative band width selects the exact unbanded mode. A
+// restrictive band may legitimately return KSW_NEG_INF when the end-to-end
+// path lies outside the band; that is not reported as a validation failure.
+int64_t alignKsw2SingletrackBanded(
+        const std::string &dna_q, const std::string &dna_d,
+        std::string &alignment_q, std::string &alignment_d,
+        int64_t bandWidth,
+        const int32_t &mismatchingPenalty,
+        const int32_t &openGapPenalty1,
+        const int32_t &extendGapPenalty1,
+        const int32_t &openGapPenalty2,
+        const int32_t &extendGapPenalty2,
+        bool *stopped = nullptr);
 
 // Compute the exact unbanded KSW2 score without traceback storage, then grow
 // a banded traceback geometrically until its score certifies that the emitted

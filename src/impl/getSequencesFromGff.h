@@ -8,4 +8,4 @@
 #include "readFastaFile.h"
 #include "TranscriptUpdateInformation.h"
 
-void getSequences(const std::string &gffFile, const std::string &genome, const std::string &outputCdsSequences, const int &minIntron, const bool &exonModel);
+bool getSequences(const std::string &gffFile, const std::string &genome, const std::string &outputCdsSequences, const int &minIntron, const bool &exonModel);

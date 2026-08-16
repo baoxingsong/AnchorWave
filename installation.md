@@ -7,6 +7,10 @@ detected from compiler architecture macros and use NEON through SSE2NEON. During
 cross-compilation, the CMake toolchain remains responsible for target CPU flags.
 
 Requirements are CMake 3.10 or newer, a C++14 compiler, pthreads, and zlib.
+WFA2, minimap2/KSW2, SSE2NEON, and the KSW2-Singletrack adaptation are
+vendored in the source tree; no submodule initialization is required. The
+KSW2-Singletrack attribution and MIT notice are in
+`minimap2/KSW2_SINGLETRACK_NOTICE`.
 
 ## Build
 

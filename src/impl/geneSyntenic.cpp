@@ -652,6 +652,10 @@ void myAlignmentMatchSort(std::vector<AlignmentMatch> &pairedSimilarFragments, c
 }
 
 void longestPath(std::vector<AlignmentMatch> &pairedSimilarFragments, std::vector<AlignmentMatch> &sortedOrthologPairs, const bool &keepTandemDuplication, double &scoreThreshold) { //double checked used for self to self alignment
+    if (pairedSimilarFragments.empty()) {
+        sortedOrthologPairs.clear();
+        return;
+    }
     double maxSore = 0;
     int bestEnd = 0;
     double scoreArray[pairedSimilarFragments.size()]; // arrays of scores

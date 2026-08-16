@@ -12,13 +12,22 @@ extern "C" {
 #include <cstdint>
 #include <limits>
 
+#if defined(__APPLE__)
+#include <malloc/malloc.h>
+#elif defined(__GLIBC__)
+#include <malloc.h>
+#endif
+
 namespace anchorwave {
 namespace {
 
 constexpr uint64_t kBiWfaComponents = 3;
-constexpr uint64_t kRetainedMemoryCeiling = 512ULL * 1024ULL * 1024ULL;
-constexpr uint64_t kStandardWfaTrialMemoryCeiling =
-        2ULL * 1024ULL * 1024ULL * 1024ULL;
+// A cached aligner is private to one worker and one WFA memory mode. With
+// dozens of workers, the old 512-MiB ceiling allowed completed attempts to
+// retain tens of GiB after their global reservation was released. Most tasks
+// also use a different memory cap, which invalidates that cache on the next
+// call. Keep only genuinely small reusable working sets.
+constexpr uint64_t kRetainedMemoryCeiling = 64ULL * 1024ULL * 1024ULL;
 constexpr int kHistoricalBiWfaLeafScore = 250;
 constexpr int kMaximumBiWfaLeafScore = 16384;
 // Reserve half of one BiWFA component and price a two-piece affine high-WFA
@@ -396,8 +405,26 @@ uint64_t wfaMemoryBudgetBytes(int64_t windowWidth) {
 
 uint64_t standardWfaTrialMemoryBudgetBytes(
         uint64_t workerMemoryBudgetBytes) {
-    return std::min(workerMemoryBudgetBytes,
-                    kStandardWfaTrialMemoryCeiling);
+    return workerMemoryBudgetBytes;
+}
+
+void reapCurrentThreadWfaCaches() {
+    standardThreadAligner.reap();
+    singletrackThreadAligner.reap();
+    mediumThreadAligner.reap();
+    lowThreadAligner.reap();
+    bidirectionalThreadAligner.reap();
+}
+
+bool releaseUnusedAlignmentMemoryToSystem() {
+    reapCurrentThreadWfaCaches();
+#if defined(__APPLE__)
+    return malloc_zone_pressure_relief(nullptr, 0) != 0;
+#elif defined(__GLIBC__)
+    return malloc_trim(0) != 0;
+#else
+    return false;
+#endif
 }
 
 uint64_t biWfaComponentMemoryLimitBytes(

@@ -103,14 +103,19 @@ CandidateMemoryEnvelope candidateMemoryEnvelope(
             isWfaCandidate(candidate) ? 125 : 100;
     uint64_t algorithmBudget = addFractionalMargin(
             predictedAlgorithmBytes, predictionMarginPercent, 100);
-    // The engine working set is hard-capped at w^2 for every candidate,
-    // independent of -M. Standard high WFA retains its smaller historical
-    // trial ceiling. The reservation can be larger because transient input,
-    // output and allocator guard bytes are separately charged to process -M.
+    // The engine working set is capped at w^2 except for the tier-wide
+    // qlen*rlen <= w^2 quality contract. The reservation can be larger because
+    // transient input/output and allocator guard bytes are separately charged
+    // to process -M.
     uint64_t algorithmCeiling = workerBudget;
-    if (candidate == anchorwave::AlignmentCandidate::StandardWfa) {
-        algorithmCeiling = anchorwave::standardWfaTrialMemoryBudgetBytes(
-                workerBudget);
+    const bool exactCandidate = std::find(
+            plan.exactCandidates.begin(), plan.exactCandidates.end(),
+            candidate) != plan.exactCandidates.end();
+    if (plan.exactCellEnvelopeException && exactCandidate) {
+        // The raw cell envelope is the quality exception, not a KSW2-full
+        // exception. Let every Tier-1 implementation request its guarded
+        // prediction; process-wide -M admission remains the hard bound.
+        algorithmCeiling = std::max(workerBudget, algorithmBudget);
     }
     algorithmBudget = std::min(algorithmBudget, algorithmCeiling);
     const uint64_t reservationGuardPercent =
@@ -120,23 +125,6 @@ CandidateMemoryEnvelope candidateMemoryEnvelope(
     return CandidateMemoryEnvelope{
             algorithmBudget,
             saturatedAdd(guardedAlgorithmBytes, transientBytes)};
-}
-
-bool isHighWfaCandidate(anchorwave::AlignmentCandidate candidate) {
-    return candidate == anchorwave::AlignmentCandidate::SingletrackWfa ||
-           candidate == anchorwave::AlignmentCandidate::StandardWfa;
-}
-
-bool isSuccinctWfaCandidate(anchorwave::AlignmentCandidate candidate) {
-    return candidate == anchorwave::AlignmentCandidate::MediumWfa ||
-           candidate == anchorwave::AlignmentCandidate::LowWfa;
-}
-
-bool isFastExactCandidate(anchorwave::AlignmentCandidate candidate) {
-    return isHighWfaCandidate(candidate) ||
-           candidate ==
-                   anchorwave::AlignmentCandidate::Ksw2ScoreCertified ||
-           candidate == anchorwave::AlignmentCandidate::Ksw2Full;
 }
 
 std::size_t candidateIndex(anchorwave::AlignmentCandidate candidate) {
@@ -152,11 +140,17 @@ struct PreparedAlignmentSelection {
     uint64_t queryLength = 0;
     uint64_t referenceLength = 0;
     double exactRuntimeSpentSeconds = 0.0;
+    double certifiedScoreRuntimeSeconds = 0.0;
     int64_t certifiedOptimalScore = 0;
     bool certifiedOptimalScoreReady = false;
     int64_t certifiedFinalBandWidth = -1;
     uint64_t certifiedTracebackAttempts = 0;
     bool exactTimeLimitReached = false;
+    bool lastExactAttemptMemoryLimited = false;
+    uint64_t lastExactAttemptMemoryBytes = 0;
+    bool singletrackMemoryModelInvalidated = false;
+    bool singletrackExpandedRetryPending = false;
+    bool singletrackExpandedRetryUsed = false;
     bool selectionRecorded = false;
     bool planTraced = false;
     int64_t retainedBandedScore = std::numeric_limits<int64_t>::min();
@@ -166,6 +160,8 @@ struct PreparedAlignmentSelection {
     std::array<bool, anchorwave::kAlignmentCandidateCount> attempted{};
     std::array<bool, anchorwave::kAlignmentCandidateCount>
             runtimeFloorRecorded{};
+    std::array<bool, anchorwave::kAlignmentCandidateCount>
+            allocatorReclaimAttempted{};
     std::array<anchorwave::AlignmentMemoryPressureState,
                anchorwave::kAlignmentCandidateCount> memoryPressure{};
 };
@@ -174,11 +170,13 @@ struct RuntimeCandidate {
     anchorwave::AlignmentCandidate candidate =
             anchorwave::AlignmentCandidate::SlidingWindow;
     const anchorwave::AlgorithmCostEstimate *estimate = nullptr;
+    anchorwave::AlgorithmCostEstimate effectiveEstimate;
     CandidateMemoryEnvelope memoryEnvelope;
     double predictedWaitMinutes = 0.0;
-    double riskAdjustedMinutes = 0.0;
     double expectedCompletionMinutes = 0.0;
+    double memoryOpportunityMinutes = 0.0;
     double systemCost = 0.0;
+    bool expandedSingletrackRetry = false;
     anchorwave::MemoryAvailabilityEstimate memoryAvailability;
 };
 
@@ -196,38 +194,26 @@ double dynamicMemoryShadowMinutes(
             : static_cast<long double>(std::max<uint64_t>(
                       1, reservationBytes)) *
                       static_cast<long double>(std::max(1, load.workerCount));
-    const double memoryShare = static_cast<double>(
-            static_cast<long double>(reservationBytes) / capacity);
-    const double pressure = resources.enabled
-            ? static_cast<double>(saturatedAdd(
-                      resources.activeReservedBytes,
-                      resources.untrackedResidentBytes)) /
-                      static_cast<double>(std::max<uint64_t>(
-                              1, resources.taskMemoryCapacityBytes))
-            : 0.0;
-    // Dormant descriptors outside an ordered rolling window cannot consume
-    // the current memory opportunity.  Keep them in global progress telemetry
-    // but charge only the schedulable frontier here.
-    const double backlogPerWorker = static_cast<double>(
-            load.schedulableTasks) /
-            static_cast<double>(std::max(1, load.workerCount));
-    const double shadowStrength = std::min(
-            4.0, std::max(0.0, backlogPerWorker - 0.5)) *
-            (0.25 + std::min(1.0, pressure));
-    return runtimeMinutes * memoryShare * shadowStrength;
-}
-
-double dynamicCandidateSystemCost(
-        const anchorwave::AlgorithmCostEstimate &estimate,
-        uint64_t reservationBytes,
-        double waitMinutes,
-        const anchorwave::AlignmentResourceSnapshot &resources,
-        const anchorwave::AnchorTaskExecutor::LoadSnapshot &load) {
-    const double riskAdjustedRuntime =
-            anchorwave::alignmentRiskAdjustedMinutes(estimate);
-    return waitMinutes + riskAdjustedRuntime +
-           dynamicMemoryShadowMinutes(
-                   riskAdjustedRuntime, reservationBytes, resources, load);
+    const int workerCount = std::max(1, load.workerCount);
+    if (!resources.enabled || workerCount <= 1) {
+        return 0.0;
+    }
+    // Convert memory into the number of average worker shares it occupies.
+    // One share belongs to the task's own CPU slot; only the excess can displace
+    // other runnable exact tasks. The previous formula used only the process
+    // memory fraction, underpricing a 28-GiB task by roughly workerCount-fold on
+    // a 34-worker/102-GiB run.
+    const double memoryEquivalentWorkers = static_cast<double>(
+            static_cast<long double>(reservationBytes) * workerCount /
+            capacity);
+    const double displacedWorkers = std::max(
+            0.0, memoryEquivalentWorkers - 1.0);
+    const double competingTasks = load.schedulableTasks > 0
+            ? static_cast<double>(load.schedulableTasks - 1) : 0.0;
+    const double backlogUtilization = std::min(
+            1.0, competingTasks /
+                         static_cast<double>(workerCount - 1));
+    return runtimeMinutes * displacedWorkers * backlogUtilization;
 }
 
 }  // namespace
@@ -903,6 +889,162 @@ int64_t alignSlidingWindow_minimap2(const std::string &dna_q, const std::string 
     return totalScore;
 }
 
+static int64_t alignKsw2SingletrackImpl(
+        const std::string &dna_q, const std::string &dna_d,
+        std::string &alignment_q, std::string &alignment_d,
+        int64_t bandWidth,
+        const int32_t &mismatchingPenalty,
+        const int32_t &openGapPenalty1,
+        const int32_t &extendGapPenalty1,
+        const int32_t &openGapPenalty2,
+        const int32_t &extendGapPenalty2,
+        bool *stopped) {
+    if (stopped != nullptr) *stopped = false;
+    if (dna_q.empty() || dna_d.empty()) {
+        alignment_q = dna_q;
+        alignment_d = dna_d;
+        const std::size_t length = std::max(dna_q.size(), dna_d.size());
+        if (dna_q.empty()) alignment_q.assign(length, '-');
+        if (dna_d.empty()) alignment_d.assign(length, '-');
+        return std::max<int64_t>(
+                static_cast<int64_t>(openGapPenalty1) +
+                        static_cast<int64_t>(extendGapPenalty1) * length,
+                static_cast<int64_t>(openGapPenalty2) +
+                        static_cast<int64_t>(extendGapPenalty2) * length);
+    }
+    if (dna_q.size() > static_cast<std::size_t>(INT_MAX) ||
+        dna_d.size() > static_cast<std::size_t>(INT_MAX) ||
+        dna_q.size() + dna_d.size() - 1 >
+                static_cast<std::size_t>(INT_MAX)) {
+        throw std::length_error("KSW2-Singletrack input exceeds INT_MAX");
+    }
+    if (bandWidth < -1 || bandWidth > INT_MAX) {
+        throw std::invalid_argument(
+                "KSW2-Singletrack band width must be -1..INT_MAX");
+    }
+    const int8_t match = 0;
+    const int8_t mismatch = static_cast<int8_t>(
+            mismatchingPenalty < 0
+            ? mismatchingPenalty : -mismatchingPenalty);
+    int8_t matrix[25] = {
+            match, mismatch, mismatch, mismatch, mismatch,
+            mismatch, match, mismatch, mismatch, mismatch,
+            mismatch, mismatch, match, mismatch, mismatch,
+            mismatch, mismatch, mismatch, match, mismatch,
+            mismatch, mismatch, mismatch, mismatch, match};
+    int flags = 0;
+    std::vector<uint8_t> query;
+    std::vector<uint8_t> target;
+    encodeKswSequence(dna_q, query, flags);
+    encodeKswSequence(dna_d, target, flags);
+    ksw_extz_t result;
+    std::memset(&result, 0, sizeof(result));
+#ifdef __AVX512BW__
+    ksw_extd2_singletrack_avx512(
+#elif defined(__AVX2__)
+    ksw_extd2_singletrack_avx2(
+#else
+    ksw_extd2_singletrack_sse(
+#endif
+            nullptr, static_cast<int>(query.size()), query.data(),
+            static_cast<int>(target.size()), target.data(),
+            5, matrix,
+            static_cast<int8_t>(-openGapPenalty1),
+            static_cast<int8_t>(-extendGapPenalty1),
+            static_cast<int8_t>(-openGapPenalty2),
+            static_cast<int8_t>(-extendGapPenalty2),
+            static_cast<int>(bandWidth), -1, 0, flags, &result);
+    if (result.stopped || result.zdropped) {
+        if (stopped != nullptr) *stopped = result.stopped != 0;
+        std::free(result.cigar);
+        alignment_q.clear();
+        alignment_d.clear();
+        return KSW_NEG_INF;
+    }
+    alignment_q.clear();
+    alignment_d.clear();
+    alignment_q.reserve(dna_q.size() + dna_d.size());
+    alignment_d.reserve(alignment_q.capacity());
+    std::size_t queryPosition = 0;
+    std::size_t targetPosition = 0;
+    for (int i = 0; i < result.n_cigar; ++i) {
+        const std::size_t length = result.cigar[i] >> 4;
+        const int operation = result.cigar[i] & 0xf;
+        if (operation == 0 || operation == 7 || operation == 8) {
+            alignment_q.append(dna_q, queryPosition, length);
+            alignment_d.append(dna_d, targetPosition, length);
+            queryPosition += length;
+            targetPosition += length;
+        } else if (operation == 1) {
+            alignment_q.append(dna_q, queryPosition, length);
+            alignment_d.append(length, '-');
+            queryPosition += length;
+        } else if (operation == 2) {
+            alignment_q.append(length, '-');
+            alignment_d.append(dna_d, targetPosition, length);
+            targetPosition += length;
+        } else {
+            std::free(result.cigar);
+            alignment_q.clear();
+            alignment_d.clear();
+            return KSW_NEG_INF;
+        }
+    }
+    std::free(result.cigar);
+    // Bounds/endpoint checks are part of safe CIGAR decoding, not an
+    // engine-comparison validator. They do not trigger a special KSW2-full
+    // rescue; any structural/runtime failure follows the ordinary exact-tier
+    // selection loop.
+    if (queryPosition != dna_q.size() || targetPosition != dna_d.size()) {
+        alignment_q.clear();
+        alignment_d.clear();
+        return KSW_NEG_INF;
+    }
+    // The Singletrack traceback stores only score differences. Its internal
+    // KSW2 endpoint score is not a reliable public score after reconstructing
+    // from those tracks (this is observable even when the emitted CIGAR is
+    // byte-identical to KSW2-full). As in the established KSW2 wrapper, always
+    // report the objective value of the emitted end-to-end alignment. This is
+    // linear in the CIGAR length and negligible beside the DP pass.
+    return scoreGappedTwoPieceAffineAlignment(
+            alignment_q, alignment_d, mismatchingPenalty,
+            openGapPenalty1, extendGapPenalty1,
+            openGapPenalty2, extendGapPenalty2);
+}
+
+int64_t alignKsw2Singletrack(
+        const std::string &dna_q, const std::string &dna_d,
+        std::string &alignment_q, std::string &alignment_d,
+        const int32_t &mismatchingPenalty,
+        const int32_t &openGapPenalty1,
+        const int32_t &extendGapPenalty1,
+        const int32_t &openGapPenalty2,
+        const int32_t &extendGapPenalty2,
+        bool *stopped) {
+    return alignKsw2SingletrackImpl(
+            dna_q, dna_d, alignment_q, alignment_d, -1,
+            mismatchingPenalty, openGapPenalty1, extendGapPenalty1,
+            openGapPenalty2, extendGapPenalty2,
+            stopped);
+}
+
+int64_t alignKsw2SingletrackBanded(
+        const std::string &dna_q, const std::string &dna_d,
+        std::string &alignment_q, std::string &alignment_d,
+        int64_t bandWidth,
+        const int32_t &mismatchingPenalty,
+        const int32_t &openGapPenalty1,
+        const int32_t &extendGapPenalty1,
+        const int32_t &openGapPenalty2,
+        const int32_t &extendGapPenalty2,
+        bool *stopped) {
+    return alignKsw2SingletrackImpl(
+            dna_q, dna_d, alignment_q, alignment_d, bandWidth,
+            mismatchingPenalty, openGapPenalty1, extendGapPenalty1,
+            openGapPenalty2, extendGapPenalty2,
+            stopped);
+}
+
 namespace {
 
 enum class ChainedTracebackStatus {
@@ -1353,8 +1495,10 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
             anchorwave::alignmentTaskTransientMemoryBytes(
                     static_cast<uint64_t>(dna_q.size()),
                     static_cast<uint64_t>(dna_d.size()));
-    // -M no longer creates an elastic single-task budget. Every engine is
-    // planned and executed against the same hard -w^2 algorithm ceiling.
+    // -w^2 is the normal single-task algorithm budget.  The tier-wide
+    // qlen*rlen <= w^2 quality exception is expanded later from each exact
+    // engine's own prediction; process-wide -M admission remains the hard
+    // boundary.
     const uint64_t elasticHighWfaBudget = 0;
     const uint64_t elasticFullKsw2Budget = 0;
     std::shared_ptr<PreparedAlignmentSelection> prepared;
@@ -1406,6 +1550,10 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
         }
     }
     const anchorwave::AlignmentSelectionPlan &selection = prepared->plan;
+    const bool forceExactTier = selection.exactCellEnvelopeException;
+    const bool balancedTimeLimitEnabled =
+            selection.provenance.exactAlignmentMaximumEstimatedMinutes > 0.0 &&
+            !forceExactTier;
     // Tier 1: exact dynamic programming. Every admitted exact candidate is
     // exhausted before the executor may enter a lower-quality tier. With
     // -bt 0 the plan is exact-first; a positive -bt uses the balanced
@@ -1432,6 +1580,10 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
         trace.intervalId = prepared->intervalId;
         trace.attempt = ++prepared->attemptCount;
         trace.profile = selection.profile;
+        trace.provenance = selection.provenance;
+        trace.approximateDecision = selection.approximateDecision;
+        trace.approximateKsw2BandWidth = selection.ksw2BandWidth;
+        trace.approximateSlidingWindowWidth = selection.slidingWindowWidth;
         trace.candidate = candidate;
         if (estimate != nullptr) {
             trace.predictedMinutesP50 = estimate->estimatedMinutes;
@@ -1441,8 +1593,9 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
         trace.reservedMemoryBytes = memoryEnvelope.reservationBytes;
         trace.predictedWaitMinutes = predictedWaitMinutes;
         trace.actualSeconds = actualSeconds;
-        trace.configuredExactLimitMinutes =
-                selection.provenance.exactAlignmentMaximumEstimatedMinutes;
+        trace.configuredExactLimitMinutes = balancedTimeLimitEnabled
+                ? selection.provenance.exactAlignmentMaximumEstimatedMinutes
+                : 0.0;
         trace.exactRuntimeSpentSeconds =
                 prepared->exactRuntimeSpentSeconds;
         trace.exactRuntimeRemainingSeconds =
@@ -1517,7 +1670,7 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
     const auto remainingExactRuntimeSeconds = [&, prepared]() {
         const double limitMinutes =
                 selection.provenance.exactAlignmentMaximumEstimatedMinutes;
-        if (!(limitMinutes > 0.0)) {
+        if (!balancedTimeLimitEnabled) {
             return 0.0;
         }
         return std::max(0.0, limitMinutes * 60.0 -
@@ -1613,6 +1766,8 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
     const auto executeExactCandidate = [&, prepared](
             const RuntimeCandidate &runtime,
             uint64_t reservedBytes) {
+        prepared->lastExactAttemptMemoryLimited = false;
+        prepared->lastExactAttemptMemoryBytes = 0;
         if (runtime.candidate ==
                     anchorwave::AlignmentCandidate::Ksw2ScoreCertified &&
             !prepared->certifiedOptimalScoreReady) {
@@ -1629,6 +1784,8 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
         std::string statusText = "failed";
         const uint64_t residentBefore =
                 anchorwave::currentProcessResidentBytes();
+        const anchorwave::AnchorTaskExecutor::LoadSnapshot calibrationLoad =
+                anchorwave::currentAnchorTaskLoadSnapshot();
         const auto started = std::chrono::steady_clock::now();
         CandidateMemoryEnvelope startedEnvelope = runtime.memoryEnvelope;
         startedEnvelope.reservationBytes = reservedBytes;
@@ -1637,8 +1794,7 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
         bool completed = false;
         const double maximumRuntimeSeconds =
                 remainingExactRuntimeSeconds();
-        if (selection.provenance.exactAlignmentMaximumEstimatedMinutes >
-                    0.0 &&
+        if (balancedTimeLimitEnabled &&
             maximumRuntimeSeconds <= 0.0) {
             prepared->exactTimeLimitReached = true;
             recordAttempt(runtime.candidate, runtime.estimate,
@@ -1722,6 +1878,29 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
                 }
                 }
             } else if (runtime.candidate ==
+                       anchorwave::AlignmentCandidate::Ksw2Singletrack) {
+                ScopedKswDeadline deadline(maximumRuntimeSeconds);
+                bool stopped = false;
+                totalScore = alignKsw2Singletrack(
+                        dna_q, dna_d, _alignment_q, _alignment_d,
+                        mismatchingPenalty,
+                        openGapPenalty1, extendGapPenalty1,
+                        openGapPenalty2, extendGapPenalty2,
+                        &stopped);
+                if (stopped || deadline.stopped()) {
+                    _alignment_q.clear();
+                    _alignment_d.clear();
+                    statusText = "time_limit";
+                } else if (totalScore == KSW_NEG_INF) {
+                    statusText = "failed";
+                    anchorwave::recordExactAlignmentRuntimeFailure(false);
+                } else {
+                    _alignMethod = anchorwave::alignmentCandidateName(
+                            runtime.candidate);
+                    completed = true;
+                    statusText = "completed";
+                }
+            } else if (runtime.candidate ==
                        anchorwave::AlignmentCandidate::Ksw2Full) {
                 ScopedKswDeadline deadline(maximumRuntimeSeconds);
                 totalScore = alignSlidingWindow_minimap2(
@@ -1761,20 +1940,73 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
         const double seconds = std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - started).count();
         prepared->exactRuntimeSpentSeconds += seconds;
+        if (statusText == "score_ready" &&
+            runtime.candidate == anchorwave::AlignmentCandidate::
+                                         Ksw2ScoreCertified) {
+            prepared->certifiedScoreRuntimeSeconds = seconds;
+        }
         if (statusText == "time_limit" ||
-            (selection.provenance.exactAlignmentMaximumEstimatedMinutes >
-                     0.0 &&
+            (balancedTimeLimitEnabled &&
              prepared->exactRuntimeSpentSeconds >=
                      selection.provenance.
                              exactAlignmentMaximumEstimatedMinutes * 60.0)) {
             prepared->exactTimeLimitReached = true;
+        }
+        if (completed && runtime.candidate !=
+                                 anchorwave::AlignmentCandidate::
+                                         Ksw2ScoreCertified) {
+            anchorwave::recordAlignmentRuntimeObservation(
+                    runtime.candidate,
+                    runtime.estimate->estimatedMinutes,
+                    runtime.estimate->estimatedMinutesP90,
+                    seconds,
+                    calibrationLoad.activeTasks,
+                    calibrationLoad.workerCount);
         }
         CandidateMemoryEnvelope tracedEnvelope = runtime.memoryEnvelope;
         tracedEnvelope.reservationBytes = reservedBytes;
         recordAttempt(runtime.candidate, runtime.estimate, tracedEnvelope,
                       runtime.predictedWaitMinutes, seconds,
                       actualMemoryBytes, statusText);
+        prepared->lastExactAttemptMemoryLimited =
+                statusText == "memory_limit";
+        prepared->lastExactAttemptMemoryBytes = actualMemoryBytes;
         return completed;
+    };
+
+    const auto scheduleExpandedSingletrackRetry = [&, prepared](
+            const RuntimeCandidate &runtime) {
+        if (runtime.candidate !=
+                    anchorwave::AlignmentCandidate::SingletrackWfa ||
+            !prepared->lastExactAttemptMemoryLimited) {
+            return false;
+        }
+        prepared->singletrackMemoryModelInvalidated = true;
+        if (!memorySchedulingEnabled ||
+            prepared->exactTimeLimitReached) {
+            return false;
+        }
+        const uint64_t retryBudget =
+                anchorwave::expandedSingletrackRetryBudgetBytes(
+                        runtime.memoryEnvelope.algorithmBudgetBytes,
+                        prepared->lastExactAttemptMemoryBytes,
+                        wfaMemoryBudget,
+                        prepared->singletrackExpandedRetryUsed);
+        if (retryBudget == 0) {
+            return false;
+        }
+        prepared->singletrackExpandedRetryUsed = true;
+        prepared->singletrackExpandedRetryPending = true;
+        prepared->attempted[candidateIndex(runtime.candidate)] = false;
+        CandidateMemoryEnvelope retryEnvelope;
+        retryEnvelope.algorithmBudgetBytes = retryBudget;
+        retryEnvelope.reservationBytes = saturatedAdd(
+                addFractionalMargin(retryBudget, 115, 100),
+                transientMemoryBytes);
+        recordAttempt(runtime.candidate, runtime.estimate, retryEnvelope,
+                      0.0, 0.0, prepared->lastExactAttemptMemoryBytes,
+                      "memory_retry_planned");
+        return true;
     };
 
     // Tier 1 is a hard quality boundary.  Within it, rank every exact engine
@@ -1803,7 +2035,7 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
                 anchorwave::currentAnchorTaskLoadSnapshot();
         const double remainingRuntimeSeconds =
                 remainingExactRuntimeSeconds();
-        if (selection.provenance.exactAlignmentMaximumEstimatedMinutes > 0.0 &&
+        if (balancedTimeLimitEnabled &&
             remainingRuntimeSeconds <= 0.0) {
             prepared->exactTimeLimitReached = true;
             break;
@@ -1812,6 +2044,11 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
         ranked.reserve(selection.exactCandidates.size());
         for (const anchorwave::AlignmentCandidate candidate :
                 selection.exactCandidates) {
+            if (prepared->singletrackMemoryModelInvalidated &&
+                anchorwave::sharesSingletrackMemoryUnderpredictionRisk(
+                        candidate)) {
+                continue;
+            }
             if (prepared->attempted[candidateIndex(candidate)]) {
                 continue;
             }
@@ -1830,24 +2067,65 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
             RuntimeCandidate runtime;
             runtime.candidate = candidate;
             runtime.estimate = estimate;
+            runtime.effectiveEstimate =
+                    anchorwave::calibratedAlignmentCostEstimate(
+                            *estimate, load.activeTasks, load.workerCount);
+            if (candidate == anchorwave::AlignmentCandidate::
+                                     Ksw2ScoreCertified &&
+                prepared->certifiedOptimalScoreReady) {
+                const double spentMinutes =
+                        prepared->certifiedScoreRuntimeSeconds / 60.0;
+                runtime.effectiveEstimate.estimatedMinutes = std::max(
+                        0.0,
+                        runtime.effectiveEstimate.estimatedMinutes -
+                                spentMinutes);
+                runtime.effectiveEstimate.estimatedMinutesP90 = std::max(
+                        runtime.effectiveEstimate.estimatedMinutes,
+                        runtime.effectiveEstimate.estimatedMinutesP90 -
+                                spentMinutes);
+            }
+            const bool scoreOnlyStage =
+                    candidate == anchorwave::AlignmentCandidate::
+                                         Ksw2ScoreCertified &&
+                    !prepared->certifiedOptimalScoreReady;
+            const CandidateMemoryEnvelope completionMemoryEnvelope =
+                    candidateMemoryEnvelope(
+                            selection, candidate, wfaMemoryBudget,
+                            transientMemoryBytes, 0);
             runtime.memoryEnvelope = candidateMemoryEnvelope(
                     selection, candidate, wfaMemoryBudget,
                     transientMemoryBytes,
-                    candidate == anchorwave::AlignmentCandidate::
-                                         Ksw2ScoreCertified &&
-                            !prepared->certifiedOptimalScoreReady
+                    scoreOnlyStage
                     ? selection.ksw2CertifiedScoreOnlyMemoryBytes
                     : 0);
+            runtime.expandedSingletrackRetry =
+                    candidate ==
+                            anchorwave::AlignmentCandidate::SingletrackWfa &&
+                    prepared->singletrackExpandedRetryPending;
+            if (runtime.expandedSingletrackRetry) {
+                runtime.memoryEnvelope.algorithmBudgetBytes = wfaMemoryBudget;
+                runtime.memoryEnvelope.reservationBytes = saturatedAdd(
+                        addFractionalMargin(wfaMemoryBudget, 115, 100),
+                        transientMemoryBytes);
+            }
+            if (scoreOnlyStage &&
+                anchorwave::estimateAlignmentMemoryAvailability(
+                        completionMemoryEnvelope.reservationBytes, nullptr).
+                                availability ==
+                        anchorwave::MemoryAvailability::StaticInfeasible) {
+                prepared->attempted[candidateIndex(candidate)] = true;
+                anchorwave::recordExactAlignmentRuntimeFailure(true);
+                continue;
+            }
             // A previous exact failure may have consumed most of this
             // interval's balanced-mode budget. Do not start another expensive
             // exact engine when its admission quantiles no longer fit the
             // remaining wall time merely to have the cooperative deadline
             // abort it. Exact-first (-bt 0) never enters this branch.
-            if (selection.provenance.exactAlignmentMaximumEstimatedMinutes >
-                        0.0 &&
+            if (balancedTimeLimitEnabled &&
                 !anchorwave::exactCandidateWithinTimeLimit(
-                        estimate->estimatedMinutes,
-                        estimate->estimatedMinutesP90,
+                        runtime.effectiveEstimate.estimatedMinutes,
+                        runtime.effectiveEstimate.estimatedMinutesP90,
                         remainingRuntimeSeconds / 60.0)) {
                 prepared->attempted[candidateIndex(candidate)] = true;
                 recordAttempt(candidate, estimate, runtime.memoryEnvelope,
@@ -1862,6 +2140,20 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
                                     candidateIndex(candidate)]);
             runtime.predictedWaitMinutes =
                     runtime.memoryAvailability.waitMinutes;
+            if (runtime.memoryAvailability.availability ==
+                anchorwave::MemoryAvailability::StableRuntimeFloor) {
+                // A completed WFA attempt may leave a per-worker allocator
+                // cache in RSS after its scheduler token is released. Reclaim
+                // this worker's caches once before classifying the floor.
+                anchorwave::releaseUnusedAlignmentMemoryToSystem();
+                runtime.memoryAvailability =
+                        anchorwave::estimateAlignmentMemoryAvailability(
+                                runtime.memoryEnvelope.reservationBytes,
+                                &prepared->memoryPressure[
+                                        candidateIndex(candidate)]);
+                runtime.predictedWaitMinutes =
+                        runtime.memoryAvailability.waitMinutes;
+            }
             if (runtime.memoryAvailability.availability ==
                 anchorwave::MemoryAvailability::StaticInfeasible) {
                 prepared->attempted[candidateIndex(candidate)] = true;
@@ -1883,15 +2175,88 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
                 }
                 continue;
             }
-            const double riskAdjusted =
-                    anchorwave::alignmentRiskAdjustedMinutes(*estimate);
-            runtime.riskAdjustedMinutes = riskAdjusted;
-            runtime.expectedCompletionMinutes =
-                    runtime.predictedWaitMinutes + riskAdjusted;
-            runtime.systemCost = dynamicCandidateSystemCost(
-                    *estimate, runtime.memoryEnvelope.reservationBytes,
-                    runtime.predictedWaitMinutes, resources, load);
             ranked.push_back(runtime);
+        }
+        // On the active AVX512 implementation, the page-aware full-KSW2
+        // traceback uses no more resident memory than KSW2-Singletrack, and
+        // isolated B73/Mo17 pairs show lower P50 and P90 time for every tested
+        // stratum.  Remove the epsilon-dominated candidate while full KSW2 is
+        // still available. If full KSW2 fails at runtime, the next ranking
+        // pass restores KSW2-Singletrack as an independent Tier-1 fallback.
+        const auto fullKsw = std::find_if(
+                ranked.begin(), ranked.end(),
+                [](const RuntimeCandidate &runtime) {
+                    return runtime.candidate ==
+                            anchorwave::AlignmentCandidate::Ksw2Full;
+                });
+        const auto singletrackKsw = std::find_if(
+                ranked.begin(), ranked.end(),
+                [](const RuntimeCandidate &runtime) {
+                    return runtime.candidate ==
+                            anchorwave::AlignmentCandidate::Ksw2Singletrack;
+                });
+        constexpr double kKswImplementationReliabilityTolerance = 0.002;
+        if (fullKsw != ranked.end() &&
+            singletrackKsw != ranked.end() &&
+            anchorwave::exactCandidateEpsilonDominates(
+                    *fullKsw->estimate, *singletrackKsw->estimate,
+                    kKswImplementationReliabilityTolerance)) {
+            ranked.erase(singletrackKsw);
+        }
+        const bool fullKsw2RuntimeAvailable = std::any_of(
+                ranked.begin(), ranked.end(),
+                [](const RuntimeCandidate &runtime) {
+                    return runtime.candidate ==
+                            anchorwave::AlignmentCandidate::Ksw2Full;
+                });
+        if (anchorwave::deferScoreCertifiedKsw2BehindFullKsw2(
+                    prepared->singletrackMemoryModelInvalidated,
+                    fullKsw2RuntimeAvailable)) {
+            ranked.erase(
+                    std::remove_if(
+                            ranked.begin(), ranked.end(),
+                            [](const RuntimeCandidate &runtime) {
+                                return runtime.candidate ==
+                                        anchorwave::AlignmentCandidate::
+                                                Ksw2ScoreCertified;
+                            }),
+                    ranked.end());
+        }
+        const bool independentKsw2RuntimeAvailable = std::any_of(
+                ranked.begin(), ranked.end(),
+                [](const RuntimeCandidate &runtime) {
+                    return anchorwave::
+                            isIndependentExactAfterSingletrackMemoryFailure(
+                                    runtime.candidate);
+                });
+        if (independentKsw2RuntimeAvailable &&
+            anchorwave::preferIndependentKsw2ForAmbiguousWfaProfile(
+                    selection.profile)) {
+            ranked.erase(
+                    std::remove_if(
+                            ranked.begin(), ranked.end(),
+                            [](const RuntimeCandidate &runtime) {
+                                return isWfaCandidate(runtime.candidate);
+                            }),
+                    ranked.end());
+        }
+        if (prepared->singletrackExpandedRetryPending) {
+            const bool independentExactAvailable = std::any_of(
+                    ranked.begin(), ranked.end(),
+                    [](const RuntimeCandidate &runtime) {
+                        return anchorwave::
+                                isIndependentExactAfterSingletrackMemoryFailure(
+                                        runtime.candidate);
+                    });
+            if (independentExactAvailable) {
+                ranked.erase(
+                        std::remove_if(
+                                ranked.begin(), ranked.end(),
+                                [](const RuntimeCandidate &runtime) {
+                                    return runtime.expandedSingletrackRetry;
+                                }),
+                        ranked.end());
+            }
         }
         if (ranked.empty()) {
             // StableRuntimeFloor is a bounded runtime conclusion, not a
@@ -1908,11 +2273,17 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
                         prepared->attempted[index]) {
                         continue;
                     }
-                    const CandidateMemoryEnvelope memoryEnvelope =
+                    CandidateMemoryEnvelope memoryEnvelope =
                             candidateMemoryEnvelope(
                                     selection, candidate, wfaMemoryBudget,
                                     transientMemoryBytes,
-                                    0);
+                                    candidate ==
+                                                    anchorwave::AlignmentCandidate::
+                                                            Ksw2ScoreCertified &&
+                                            !prepared->certifiedOptimalScoreReady
+                                    ? selection.
+                                              ksw2CertifiedScoreOnlyMemoryBytes
+                                    : 0);
                     const anchorwave::MemoryAvailabilityEstimate availability =
                             anchorwave::estimateAlignmentMemoryAvailability(
                                     memoryEnvelope.reservationBytes,
@@ -1934,82 +2305,120 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
             }
             break;
         }
-        double fastestExactRiskAdjustedMinutes =
+        // Solve the complete exact-attempt chain as a small stochastic
+        // shortest-path problem. There are at most seven candidates, so the
+        // Bellman subset DP is exact (O(n*2^n)). One version minimizes the
+        // interval's expected finish; the resource-aware version also prices
+        // memory displaced from the global backlog. This avoids ranking the
+        // first engine with a resource-blind fallback chain.
+        std::vector<anchorwave::ExactAttemptSystemCost> completionAttempts;
+        std::vector<anchorwave::ExactAttemptSystemCost> systemAttempts;
+        completionAttempts.reserve(ranked.size());
+        systemAttempts.reserve(ranked.size());
+        for (RuntimeCandidate &runtime : ranked) {
+            runtime.memoryOpportunityMinutes = dynamicMemoryShadowMinutes(
+                    runtime.effectiveEstimate.estimatedMinutesP90,
+                    runtime.memoryEnvelope.reservationBytes,
+                    resources, load);
+            const double attemptMinutes = runtime.predictedWaitMinutes +
+                    anchorwave::alignmentRiskAdjustedMinutes(
+                            runtime.effectiveEstimate);
+            completionAttempts.push_back(
+                    anchorwave::ExactAttemptSystemCost{
+                            runtime.candidate, attemptMinutes,
+                            runtime.effectiveEstimate.successProbability});
+            systemAttempts.push_back(anchorwave::ExactAttemptSystemCost{
+                    runtime.candidate,
+                    attemptMinutes + runtime.memoryOpportunityMinutes,
+                    runtime.effectiveEstimate.successProbability});
+        }
+        for (std::size_t i = 0; i < ranked.size(); ++i) {
+            ranked[i].expectedCompletionMinutes =
+                    anchorwave::exactAttemptExpectedSystemMinutes(
+                            completionAttempts, i);
+            ranked[i].systemCost =
+                    anchorwave::exactAttemptExpectedSystemMinutes(
+                            systemAttempts, i);
+        }
+        double fastestExactExpectedMinutes =
                 std::numeric_limits<double>::infinity();
         for (const RuntimeCandidate &runtime : ranked) {
-            fastestExactRiskAdjustedMinutes = std::min(
-                    fastestExactRiskAdjustedMinutes,
-                    runtime.riskAdjustedMinutes);
+            fastestExactExpectedMinutes = std::min(
+                    fastestExactExpectedMinutes,
+                    runtime.expectedCompletionMinutes -
+                            runtime.predictedWaitMinutes);
         }
         for (RuntimeCandidate &runtime : ranked) {
-            // A high-memory WFA that can start now and is no slower than the
-            // fastest calibrated exact runtime enters a fast lane: do not
-            // charge it the backlog memory shadow.  A clearly faster KSW2
-            // (notably tiny matrices) still wins the ordinary ranking.
-            if (anchorwave::highWfaFastLaneEligible(
-                        runtime.candidate, *runtime.estimate,
+            // Whichever exact engine is fastest for this interval enters the
+            // same immediate-start lane. No algorithm name or memory mode is
+            // privileged inside Tier 1.
+            if (anchorwave::exactCandidateFastLaneEligible(
                         runtime.predictedWaitMinutes,
-                        fastestExactRiskAdjustedMinutes)) {
-                runtime.systemCost = runtime.expectedCompletionMinutes;
+                        runtime.expectedCompletionMinutes -
+                                runtime.predictedWaitMinutes,
+                        fastestExactExpectedMinutes,
+                        runtime.memoryOpportunityMinutes)) {
+                // The fast lane waives only this immediately runnable
+                // attempt's memory opportunity cost. Failure still enters the
+                // Bellman-optimal remaining chain with its own resource costs.
+                runtime.systemCost = std::max(
+                        0.0, runtime.systemCost -
+                                     runtime.memoryOpportunityMinutes);
             }
         }
 
-        // Do not start a memory-light but very slow exact engine merely
-        // because a fast exact engine needs a short reservation wait.  Use a
-        // deliberately conservative comparison: fast P90 (+ wait and memory
-        // shadow) must beat the best immediately runnable succinct mode's
-        // P50. This prevents medium/low WFA from consuming the interval while
-        // a substantially faster high-WFA/full-KSW candidate has a short
-        // reservation wait.
-        const RuntimeCandidate *bestFast = nullptr;
-        const RuntimeCandidate *bestSlow = nullptr;
-        double bestFastBound = std::numeric_limits<double>::infinity();
-        double bestSlowBound = std::numeric_limits<double>::infinity();
-        double bestFastShadow = 0.0;
-        double bestSlowShadow = 0.0;
+        // Compare all waiting and runnable Tier-1 alternatives on the same
+        // conservative bounds. A short wait is worthwhile only when the
+        // waiting candidate's P90 still beats the ready candidate's P50.
+        const RuntimeCandidate *bestWaiting = nullptr;
+        const RuntimeCandidate *bestReady = nullptr;
+        double bestWaitingBound = std::numeric_limits<double>::infinity();
+        double bestReadyBound = std::numeric_limits<double>::infinity();
+        double bestWaitingShadow = 0.0;
+        double bestReadyShadow = 0.0;
         for (const RuntimeCandidate &runtime : ranked) {
-            if (isFastExactCandidate(runtime.candidate) &&
+            if (runtime.memoryAvailability.availability !=
+                        anchorwave::MemoryAvailability::Ready &&
                 std::isfinite(runtime.predictedWaitMinutes)) {
                 const double p90 = std::max(
-                        runtime.estimate->estimatedMinutes,
-                        runtime.estimate->estimatedMinutesP90);
+                        runtime.effectiveEstimate.estimatedMinutes,
+                        runtime.effectiveEstimate.estimatedMinutesP90);
                 const double shadow = dynamicMemoryShadowMinutes(
                         p90, runtime.memoryEnvelope.reservationBytes,
                         resources, load);
                 const double bound = runtime.predictedWaitMinutes + p90 +
                                      shadow;
-                if (bound < bestFastBound) {
-                    bestFast = &runtime;
-                    bestFastBound = bound;
-                    bestFastShadow = shadow;
+                if (bound < bestWaitingBound) {
+                    bestWaiting = &runtime;
+                    bestWaitingBound = bound;
+                    bestWaitingShadow = shadow;
                 }
-            } else if (isSuccinctWfaCandidate(runtime.candidate) &&
-                       runtime.memoryAvailability.availability ==
+            } else if (runtime.memoryAvailability.availability ==
                                anchorwave::MemoryAvailability::Ready) {
                 const double p50 = std::max(
-                        0.0, runtime.estimate->estimatedMinutes);
+                        0.0, runtime.effectiveEstimate.estimatedMinutes);
                 const double shadow = dynamicMemoryShadowMinutes(
                         p50, runtime.memoryEnvelope.reservationBytes,
                         resources, load);
                 const double bound = p50 + shadow;
-                if (bound < bestSlowBound) {
-                    bestSlow = &runtime;
-                    bestSlowBound = bound;
-                    bestSlowShadow = shadow;
+                if (bound < bestReadyBound) {
+                    bestReady = &runtime;
+                    bestReadyBound = bound;
+                    bestReadyShadow = shadow;
                 }
             }
         }
-        anchorwave::AlignmentCandidate dominantFastCandidate =
+        anchorwave::AlignmentCandidate dominantWaitingCandidate =
                 anchorwave::AlignmentCandidate::SlidingWindow;
-        const bool holdForDominantFast = bestFast != nullptr &&
-                bestSlow != nullptr &&
-                anchorwave::fastExactDominatesSlowExact(
-                        bestFast->candidate, *bestFast->estimate,
-                        bestFast->predictedWaitMinutes,
-                        bestSlow->candidate, *bestSlow->estimate,
-                        bestFastShadow, bestSlowShadow);
-        if (holdForDominantFast) {
-            dominantFastCandidate = bestFast->candidate;
+        const bool holdForWaitingCandidate = bestWaiting != nullptr &&
+                bestReady != nullptr &&
+                anchorwave::waitingExactDominatesRunnableExact(
+                        bestWaiting->effectiveEstimate,
+                        bestWaiting->predictedWaitMinutes,
+                        bestReady->effectiveEstimate,
+                        bestWaitingShadow, bestReadyShadow);
+        if (holdForWaitingCandidate) {
+            dominantWaitingCandidate = bestWaiting->candidate;
         }
         std::stable_sort(
                 ranked.begin(), ranked.end(),
@@ -2021,18 +2430,18 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
                     return candidateIndex(left.candidate) <
                            candidateIndex(right.candidate);
                 });
-        if (holdForDominantFast &&
-            ranked.front().candidate != dominantFastCandidate) {
+        if (holdForWaitingCandidate &&
+            ranked.front().candidate != dominantWaitingCandidate) {
             const auto dominant = std::find_if(
                     ranked.begin(), ranked.end(),
-                    [dominantFastCandidate](const RuntimeCandidate &runtime) {
-                        return runtime.candidate == dominantFastCandidate;
+                    [dominantWaitingCandidate](
+                            const RuntimeCandidate &runtime) {
+                        return runtime.candidate == dominantWaitingCandidate;
                     });
             if (dominant != ranked.end()) {
                 std::rotate(ranked.begin(), dominant, dominant + 1);
             }
         }
-
         bool restartRanking = false;
         bool waiting = false;
         RuntimeCandidate waitingCandidate;
@@ -2040,7 +2449,7 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
             anchorwave::AlignmentMemoryTryResult admission =
                     anchorwave::tryAcquireAlignmentMemory(
                             runtime.memoryEnvelope.reservationBytes,
-                            runtime.estimate->estimatedMinutesP90);
+                            runtime.effectiveEstimate.estimatedMinutesP90);
             if (admission.admission ==
                 anchorwave::AlignmentMemoryAdmission::PermanentlyInfeasible) {
                 prepared->attempted[candidateIndex(runtime.candidate)] = true;
@@ -2059,11 +2468,15 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
                                                  Ksw2ScoreCertified &&
                     !prepared->certifiedOptimalScoreReady;
             prepared->attempted[candidateIndex(runtime.candidate)] = true;
+            if (runtime.expandedSingletrackRetry) {
+                prepared->singletrackExpandedRetryPending = false;
+            }
             const uint64_t reservedBytes =
                     admission.reservation.reservedBytes();
             if (executeExactCandidate(runtime, reservedBytes)) {
                 return totalScore;
             }
+            scheduleExpandedSingletrackRetry(runtime);
             if (scoreOnlyStage && prepared->certifiedOptimalScoreReady &&
                 !prepared->exactTimeLimitReached) {
                 // The low-memory score phase is complete. Release its token
@@ -2101,7 +2514,8 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
             anchorwave::AlignmentMemoryTryResult preferred =
                     anchorwave::acquirePreferredAlignmentMemory(
                             waitingCandidate.memoryEnvelope.reservationBytes,
-                            waitingCandidate.estimate->estimatedMinutesP90);
+                            waitingCandidate.effectiveEstimate.
+                                    estimatedMinutesP90);
             if (preferred) {
                 recordSelectionOnce();
                 const bool scoreOnlyStage =
@@ -2111,11 +2525,15 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
                         !prepared->certifiedOptimalScoreReady;
                 prepared->attempted[candidateIndex(
                         waitingCandidate.candidate)] = true;
+                if (waitingCandidate.expandedSingletrackRetry) {
+                    prepared->singletrackExpandedRetryPending = false;
+                }
                 if (executeExactCandidate(
                             waitingCandidate,
                             preferred.reservation.reservedBytes())) {
                     return totalScore;
                 }
+                scheduleExpandedSingletrackRetry(waitingCandidate);
                 if (scoreOnlyStage &&
                     prepared->certifiedOptimalScoreReady &&
                     !prepared->exactTimeLimitReached) {
@@ -2192,15 +2610,50 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
                                         transientMemoryBytes);
         const anchorwave::AlgorithmCostEstimate *const estimate =
                 candidateEstimate(selection, candidate);
-        anchorwave::AlignmentMemoryReservation memoryReservation =
-                anchorwave::acquireAlignmentMemory(
-                        memoryEnvelope.reservationBytes,
-                        estimate != nullptr
-                        ? anchorwave::alignmentRiskAdjustedMinutes(*estimate)
-                        : 0.0);
-        if (!memoryReservation) {
+        const double predictedMinutes = estimate != nullptr
+                ? anchorwave::alignmentRiskAdjustedMinutes(*estimate) : 0.0;
+        anchorwave::AlignmentMemoryTryResult admission =
+                anchorwave::tryAcquireAlignmentMemory(
+                        memoryEnvelope.reservationBytes, predictedMinutes);
+        const std::size_t approximateIndex = candidateIndex(candidate);
+        if (!admission &&
+            !prepared->allocatorReclaimAttempted[approximateIndex]) {
+            const anchorwave::AlignmentResourceSnapshot resources =
+                    anchorwave::alignmentResourceSnapshot();
+            if (resources.enabled && resources.activeReservations == 0) {
+                prepared->allocatorReclaimAttempted[approximateIndex] = true;
+                anchorwave::releaseUnusedAlignmentMemoryToSystem();
+                admission = anchorwave::tryAcquireAlignmentMemory(
+                        memoryEnvelope.reservationBytes, predictedMinutes);
+                recordAttempt(
+                        candidate, estimate, memoryEnvelope, 0.0, 0.0, 0,
+                        admission ? "allocator_reclaim_admitted"
+                                  : "allocator_reclaim_incomplete");
+            }
+        }
+        if (admission.admission ==
+                anchorwave::AlignmentMemoryAdmission::
+                        PermanentlyInfeasible) {
             continue;
         }
+        if (!admission) {
+            recordAttempt(candidate, estimate, memoryEnvelope, 0.0,
+                          0.0, 0, "deferred_approximate_memory");
+            if (anchorwave::currentAnchorTaskCanDefer()) {
+                throw anchorwave::AlignmentTaskDeferred(
+                        std::chrono::milliseconds(1000));
+            }
+            admission = anchorwave::acquirePreferredAlignmentMemory(
+                    memoryEnvelope.reservationBytes, predictedMinutes);
+            if (!admission) {
+                throw std::runtime_error(
+                        "approximate alignment is temporarily blocked by "
+                        "current process RSS inside the configured -M "
+                        "envelope");
+            }
+        }
+        anchorwave::AlignmentMemoryReservation memoryReservation =
+                std::move(admission.reservation);
         recordSelectionOnce();
         const uint64_t residentBefore =
                 anchorwave::currentProcessResidentBytes();
@@ -2279,14 +2732,30 @@ int64_t alignSlidingWindow_local_wfa2_v2(std::string &dna_q, std::string &dna_d,
     const CandidateMemoryEnvelope memoryEnvelope = candidateMemoryEnvelope(
             selection, anchorwave::AlignmentCandidate::SlidingWindow,
             wfaMemoryBudget, transientMemoryBytes);
-    anchorwave::AlignmentMemoryReservation memoryReservation =
-            anchorwave::acquireAlignmentMemory(
+    anchorwave::AlignmentMemoryTryResult admission =
+            anchorwave::tryAcquireAlignmentMemory(
                     memoryEnvelope.reservationBytes);
-    if (!memoryReservation) {
-        throw std::runtime_error(
-                "no fallback alignment fits inside the configured -M memory "
-                "envelope");
+    if (!admission && admission.admission ==
+            anchorwave::AlignmentMemoryAdmission::TemporarilyUnavailable) {
+        if (anchorwave::currentAnchorTaskCanDefer()) {
+            throw anchorwave::AlignmentTaskDeferred(
+                    std::chrono::milliseconds(1000));
+        }
+        admission = anchorwave::acquirePreferredAlignmentMemory(
+                memoryEnvelope.reservationBytes);
     }
+    if (!admission) {
+        throw std::runtime_error(
+                admission.admission ==
+                        anchorwave::AlignmentMemoryAdmission::
+                                PermanentlyInfeasible
+                ? "no fallback alignment fits inside the configured -M "
+                  "memory envelope"
+                : "fallback alignment is temporarily blocked by current "
+                  "process RSS inside the configured -M memory envelope");
+    }
+    anchorwave::AlignmentMemoryReservation memoryReservation =
+            std::move(admission.reservation);
     recordSelectionOnce();
     anchorwave::recordSlidingFallbackExecution();
     const uint64_t residentBefore = anchorwave::currentProcessResidentBytes();

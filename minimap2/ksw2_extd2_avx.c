@@ -34,7 +34,18 @@ Modified Copyright (C) 2021 Intel Corporation
 #ifndef HAVE_KALLOC
 #define HAVE_KALLOC 1
 #endif
+#include <limits.h>
 #include "ksw2.h"
+
+// Implemented in ksw2_singletrack.cpp. The AVX kernels below share KSW2's
+// score recurrence and call this width-independent reconstruction only when
+// the internal KSW_EZ_SINGLETRACK flag is set.
+extern void ksw2_singletrack_backtrace_affine2p(
+        void *km, int qlen, const uint8_t *query,
+        int tlen, const uint8_t *target, int8_t alphabet_size,
+        const int8_t *mat, int8_t q, int8_t e, int8_t q2, int8_t e2,
+        int n_col, const int *off, const int *off_end,
+        const int8_t *p, const int8_t *p2, ksw_extz_t *ez);
 
 #ifdef __AVX512BW__ 
 void ksw_extd2_avx512(void *km, int qlen, const uint8_t *query, int tlen, const uint8_t *target, int8_t m, const int8_t *mat,
@@ -114,15 +125,20 @@ void ksw_extd2_avx512(void *km, int qlen, const uint8_t *query, int tlen, const 
     
     int r, t, qe = q + e, n_col_, *off = 0, *off_end = 0, tlen_, qlen_, last_st, last_en, wl, wr, max_sc, min_sc, long_thres, long_diff;
     int with_cigar = !(flag&KSW_EZ_SCORE_ONLY), approx_max = !!(flag&KSW_EZ_APPROX_MAX);
+    const int singletrack = !!(flag & KSW_EZ_SINGLETRACK);
     int32_t *H = 0, H0 = 0, last_H0_t = 0;
     uint8_t *qr, *sf, *mem, *mem2 = 0;
     
     __m512i q_, q2_, qe_, qe2_, zero_, sc_mch_, sc_mis_, m1_, sc_N_;
-    __m512i *u, *v, *x, *y, *x2, *y2, *s, *p = 0;
+    __m512i *u, *v, *x, *y, *x2, *y2, *s, *p = 0, *p2 = 0;
     __m512i one_, two_, three_, four_, s1_, s2_, s3_, s4_;
         
     ksw_reset_extz(ez);
     if (m <= 1 || qlen <= 0 || tlen <= 0) return;
+    if (qlen > INT_MAX - tlen + 1) {
+        ez->zdropped = 1;
+        return;
+    }
 
     if (q2 + e2 < q + e) t = q, q = q2, q2 = t, t = e, e = e2, e2 = t; // make sure q+e no larger than q2+e2
     s1_   = _mm512_set1_epi8(0x08);
@@ -166,12 +182,45 @@ void ksw_extd2_avx512(void *km, int qlen, const uint8_t *query, int tlen, const 
     // scratch arena this guarantees that a following window reuses the intact
     // large block before small work arrays can split it.
     if (with_cigar) {
-        mem2 = (uint8_t*)kmalloc(km, ((size_t)(qlen + tlen - 1) * n_col_ + 1) * 64);
+        const size_t diagonal_count = (size_t)qlen + tlen - 1;
+        const size_t trace_tracks = singletrack ? 2u : 1u;
+        size_t trace_vectors, trace_bytes;
+        if (diagonal_count > (SIZE_MAX - 1) / (size_t)n_col_) {
+            ez->zdropped = 1;
+            return;
+        }
+        trace_vectors = diagonal_count * (size_t)n_col_ + 1;
+        if (trace_vectors > (SIZE_MAX - 63) / (64u * trace_tracks) ||
+            diagonal_count > SIZE_MAX / (sizeof(int) * 2u)) {
+            ez->zdropped = 1;
+            return;
+        }
+        trace_bytes = trace_vectors * 64u * trace_tracks;
+        // malloc/kalloc guarantees fundamental alignment, not 64-byte AVX512
+        // alignment. Reserve the complete alignment displacement so the last
+        // Singletrack track cannot overrun the allocation.
+        mem2 = (uint8_t*)kmalloc(km, trace_bytes + 63);
+        if (mem2 == 0) {
+            ez->zdropped = 1;
+            return;
+        }
         p = (__m512i*)(((size_t)mem2 + 63) >> 6 << 6);
-        off = (int*)kmalloc(km, (qlen + tlen - 1) * sizeof(int) * 2);
-        off_end = off + qlen + tlen - 1;
+        if (singletrack) p2 = p + trace_vectors;
+        off = (int*)kmalloc(km, diagonal_count * sizeof(int) * 2u);
+        if (off == 0) {
+            kfree(km, mem2);
+            ez->zdropped = 1;
+            return;
+        }
+        off_end = off + diagonal_count;
     }
-    mem = (uint8_t*)kcalloc(km, tlen_ * 8 + qlen_ + 1 + 63, 64); 
+    mem = (uint8_t*)kcalloc(
+            km, (size_t)tlen_ * 8 + qlen_ + 1 + 63, 64);
+    if (mem == 0) {
+        if (with_cigar) { kfree(km, mem2); kfree(km, off); }
+        ez->zdropped = 1;
+        return;
+    }
     u = (__m512i*)(((size_t)mem + 63) >> 6 << 6); // 16-byte aligned 
     v = u + tlen_, x = v + tlen_, y = x + tlen_, x2 = y + tlen_, y2 = x2 + tlen_;
     s = y2 + tlen_, sf = (uint8_t*)(s + tlen_), qr = sf + tlen_ * 64;
@@ -182,7 +231,13 @@ void ksw_extd2_avx512(void *km, int qlen, const uint8_t *query, int tlen, const 
     memset(x2, -q2 - e2, tlen_ * 64);
     memset(y2, -q2 - e2, tlen_ * 64);
     if (!approx_max) {
-        H = (int32_t*)kmalloc(km, tlen_ * 64 * 4);
+        H = (int32_t*)kmalloc(km, (size_t)tlen_ * 64 * 4);
+        if (H == 0) {
+            kfree(km, mem);
+            if (with_cigar) { kfree(km, mem2); kfree(km, off); }
+            ez->zdropped = 1;
+            return;
+        }
         for (t = 0; t < tlen_ * 64; ++t) H[t] = KSW_NEG_INF;
     }
 
@@ -334,6 +389,8 @@ void ksw_extd2_avx512(void *km, int qlen, const uint8_t *query, int tlen, const 
             
         } else if (!(flag&KSW_EZ_RIGHT)) { // gap left-alignment
             __m512i *pr = p + (size_t)r * n_col_ - st_;
+            __m512i *pr2 = singletrack
+                    ? p2 + (size_t)r * n_col_ - st_ : 0;
             off[r] = st, off_end[r] = en;
 
            
@@ -372,7 +429,14 @@ void ksw_extd2_avx512(void *km, int qlen, const uint8_t *query, int tlen, const 
                     tmp_mask = _mm512_cmpgt_epi8_mask(b2, zero_);
                     _mm512_store_si512(&y2[t], _mm512_sub_epi8(_mm512_mask_blend_epi8(tmp_mask, zero_, b2), qe2_));
                     d = _mm512_or_si512(d, _mm512_mask_blend_epi8(tmp_mask, zero_, s4_)); // d = b > 0? 1<<6 : 0             
-                    _mm512_store_si512(&pr[t], d);
+                    if (singletrack) {
+                        _mm512_store_si512(
+                                &pr[t], _mm512_sub_epi8(z, ut));
+                        _mm512_store_si512(
+                                &pr2[t], _mm512_sub_epi8(z, vt1));
+                    } else {
+                        _mm512_store_si512(&pr[t], d);
+                    }
             }
             {
                 __m512i d, z, a, b, a2, b2, xt1, x2t1, vt1, ut, tmp;
@@ -425,13 +489,22 @@ void ksw_extd2_avx512(void *km, int qlen, const uint8_t *query, int tlen, const 
                     _mm512_mask_storeu_epi8(&y2[t], msk, _mm512_sub_epi8(_mm512_mask_blend_epi8(tmp_mask, zero_, b2), qe2_));
                     d = _mm512_or_si512(d, _mm512_mask_blend_epi8(tmp_mask, zero_, s4_)); // d = b > 0? 1<<6 : 0
                     //_mm512_store_si512(&pr[t], d);
-                    _mm512_mask_storeu_epi8(&pr[t], msk, d);
+                    if (singletrack) {
+                        _mm512_mask_storeu_epi8(
+                                &pr[t], msk, _mm512_sub_epi8(z, ut));
+                        _mm512_mask_storeu_epi8(
+                                &pr2[t], msk, _mm512_sub_epi8(z, vt1));
+                    } else {
+                        _mm512_mask_storeu_epi8(&pr[t], msk, d);
+                    }
                 }
             }
 
 
         } else { // gap right-alignment
             __m512i *pr = p + (size_t)r * n_col_ - st_;
+            __m512i *pr2 = singletrack
+                    ? p2 + (size_t)r * n_col_ - st_ : 0;
             off[r] = st, off_end[r] = en;
             // off[r] = stn, off_end[r] = enn;
             // fprintf(stderr, "t: %d, st0: %d\n", st_, st0);
@@ -485,7 +558,14 @@ void ksw_extd2_avx512(void *km, int qlen, const uint8_t *query, int tlen, const 
                     _mm512_store_si512(&y2[t], _mm512_sub_epi8(_mm512_mask_blend_epi8(tmp_mask, b2, zero_), qe2_));
                     // d = b > 0? 1<<6 : 0
                     d = _mm512_or_si512(d, _mm512_mask_blend_epi8(tmp_mask, s4_, zero_)); // d = b > 0? 1<<6 : 0
-                    _mm512_store_si512(&pr[t], d);
+                    if (singletrack) {
+                        _mm512_store_si512(
+                                &pr[t], _mm512_sub_epi8(z, ut));
+                        _mm512_store_si512(
+                                &pr2[t], _mm512_sub_epi8(z, vt1));
+                    } else {
+                        _mm512_store_si512(&pr[t], d);
+                    }
                     
                 }
             }
@@ -543,7 +623,14 @@ void ksw_extd2_avx512(void *km, int qlen, const uint8_t *query, int tlen, const 
                     _mm512_mask_storeu_epi8(&y2[t], msk, _mm512_sub_epi8(_mm512_mask_blend_epi8(tmp_mask, b2, zero_), qe2_));
                     d = _mm512_or_si512(d, _mm512_mask_blend_epi8(tmp_mask, s4_, zero_)); // d = b > 0? 1<<6 : 0
                     // _mm512_store_si512(&pr[t], d);
-                    _mm512_mask_storeu_epi8(&pr[t], msk, d);
+                    if (singletrack) {
+                        _mm512_mask_storeu_epi8(
+                                &pr[t], msk, _mm512_sub_epi8(z, ut));
+                        _mm512_mask_storeu_epi8(
+                                &pr2[t], msk, _mm512_sub_epi8(z, vt1));
+                    } else {
+                        _mm512_mask_storeu_epi8(&pr[t], msk, d);
+                    }
 
                 }
             }
@@ -564,7 +651,12 @@ void ksw_extd2_avx512(void *km, int qlen, const uint8_t *query, int tlen, const 
                     __m512i H1, t_;
                     __mmask16 tmp_mask;
                     H1 = _mm512_loadu_si512((__m512i*)&H[t]);
-                    __m128i t__ = _mm_load_si128((__m128i*) &v8[t]);
+                    // st0 is the biological band boundary and is not
+                    // necessarily 16-byte aligned.  Loading v8[t] as aligned
+                    // is undefined on x86 and is not portable through
+                    // SSE2NEON; only the DP work vectors themselves are
+                    // guaranteed SIMD-aligned.
+                    __m128i t__ = _mm_loadu_si128((__m128i*) &v8[t]);
                     t_ = _mm512_cvtepi8_epi32(t__);
                     H1 = _mm512_add_epi32(H1, t_);
                     _mm512_storeu_si512((__m512i*)&H[t], H1);
@@ -657,7 +749,19 @@ void ksw_extd2_avx512(void *km, int qlen, const uint8_t *query, int tlen, const 
     
     kfree(km, mem);
     if (!approx_max) kfree(km, H);
-    if (with_cigar) { // backtrack
+    if (with_cigar && singletrack) {
+        if (!ez->stopped && !ez->zdropped &&
+            !(flag & (KSW_EZ_EXTZ_ONLY | KSW_EZ_SEMIGLOBAL_END))) {
+            ksw2_singletrack_backtrace_affine2p(
+                    km, qlen, query, tlen, target, m, mat,
+                    q, e, q2, e2, n_col_ * 64, off, off_end,
+                    (const int8_t*)p, (const int8_t*)p2, ez);
+            if (ez->n_cigar == 0) ez->zdropped = 1;
+        } else if (!ez->stopped && !ez->zdropped) {
+            ez->zdropped = 1;
+        }
+        kfree(km, mem2); kfree(km, off);
+    } else if (with_cigar) { // backtrack
         int rev_cigar = !!(flag & KSW_EZ_REV_CIGAR);
         if (!ez->stopped && !ez->zdropped &&
                 (flag & KSW_EZ_SEMIGLOBAL_END)) {
@@ -791,15 +895,20 @@ void ksw_extd2_avx2(void *km, int qlen, const uint8_t *query, int tlen, const ui
 
     int r, t, qe = q + e, n_col_, *off = 0, *off_end = 0, tlen_, qlen_, last_st, last_en, wl, wr, max_sc, min_sc, long_thres, long_diff;
     int with_cigar = !(flag&KSW_EZ_SCORE_ONLY), approx_max = !!(flag&KSW_EZ_APPROX_MAX);
+    const int singletrack = !!(flag & KSW_EZ_SINGLETRACK);
     int32_t *H = 0, H0 = 0, last_H0_t = 0;
     uint8_t *qr, *sf, *mem, *mem2 = 0;
 
     __m256i q_, q2_, qe_, qe2_, zero_, sc_mch_, sc_mis_, m1_, sc_N_;
-    __m256i *u, *v, *x, *y, *x2, *y2, *s, *p = 0;
+    __m256i *u, *v, *x, *y, *x2, *y2, *s, *p = 0, *p2 = 0;
     __m256i one_, two_, three_, four_, s1_, s2_, s3_, s4_;
 
     ksw_reset_extz(ez);
     if (m <= 1 || qlen <= 0 || tlen <= 0) return;
+    if (qlen > INT_MAX - tlen + 1) {
+        ez->zdropped = 1;
+        return;
+    }
 
     if (q2 + e2 < q + e) t = q, q = q2, q2 = t, t = e, e = e2, e2 = t; // make sure q+e no larger than q2+e2
     s1_   = _mm256_set1_epi8(0x08);
@@ -840,12 +949,42 @@ void ksw_extd2_avx2(void *km, int qlen, const uint8_t *query, int tlen, const ui
     long_diff = long_thres * (e - e2) - (q2 - q) - e2;
 
     if (with_cigar) {
-        mem2 = (uint8_t*)kmalloc(km, ((size_t)(qlen + tlen - 1) * n_col_ + 1) * 32);
+        const size_t diagonal_count = (size_t)qlen + tlen - 1;
+        const size_t trace_tracks = singletrack ? 2u : 1u;
+        size_t trace_vectors, trace_bytes;
+        if (diagonal_count > (SIZE_MAX - 1) / (size_t)n_col_) {
+            ez->zdropped = 1;
+            return;
+        }
+        trace_vectors = diagonal_count * (size_t)n_col_ + 1;
+        if (trace_vectors > (SIZE_MAX - 31) / (32u * trace_tracks) ||
+            diagonal_count > SIZE_MAX / (sizeof(int) * 2u)) {
+            ez->zdropped = 1;
+            return;
+        }
+        trace_bytes = trace_vectors * 32u * trace_tracks;
+        mem2 = (uint8_t*)kmalloc(km, trace_bytes + 31);
+        if (mem2 == 0) {
+            ez->zdropped = 1;
+            return;
+        }
         p = (__m256i*)(((size_t)mem2 + 31) >> 5 << 5);
-        off = (int*)kmalloc(km, (qlen + tlen - 1) * sizeof(int) * 2);
-        off_end = off + qlen + tlen - 1;
+        if (singletrack) p2 = p + trace_vectors;
+        off = (int*)kmalloc(km, diagonal_count * sizeof(int) * 2u);
+        if (off == 0) {
+            kfree(km, mem2);
+            ez->zdropped = 1;
+            return;
+        }
+        off_end = off + diagonal_count;
     }
-    mem = (uint8_t*)kcalloc(km, tlen_ * 8 + qlen_ + 1 + 63, 64);
+    mem = (uint8_t*)kcalloc(
+            km, (size_t)tlen_ * 8 + qlen_ + 1 + 63, 64);
+    if (mem == 0) {
+        if (with_cigar) { kfree(km, mem2); kfree(km, off); }
+        ez->zdropped = 1;
+        return;
+    }
     u = (__m256i*)(((size_t)mem + 31) >> 5 << 5); // 16-byte aligned
     v = u + tlen_, x = v + tlen_, y = x + tlen_, x2 = y + tlen_, y2 = x2 + tlen_;
     s = y2 + tlen_, sf = (uint8_t*)(s + tlen_), qr = sf + tlen_ * 32;
@@ -856,7 +995,13 @@ void ksw_extd2_avx2(void *km, int qlen, const uint8_t *query, int tlen, const ui
     memset(x2, -q2 - e2, tlen_ * 32);
     memset(y2, -q2 - e2, tlen_ * 32);
     if (!approx_max) {
-        H = (int32_t*)kmalloc(km, tlen_ * 32 * 4);
+        H = (int32_t*)kmalloc(km, (size_t)tlen_ * 32 * 4);
+        if (H == 0) {
+            kfree(km, mem);
+            if (with_cigar) { kfree(km, mem2); kfree(km, off); }
+            ez->zdropped = 1;
+            return;
+        }
         for (t = 0; t < tlen_ * 32; ++t) H[t] = KSW_NEG_INF;
     }
 
@@ -1009,6 +1154,8 @@ void ksw_extd2_avx2(void *km, int qlen, const uint8_t *query, int tlen, const ui
 
         } else if (!(flag&KSW_EZ_RIGHT)) { // gap left-alignment
             __m256i *pr = p + (size_t)r * n_col_ - st_;
+            __m256i *pr2 = singletrack
+                    ? p2 + (size_t)r * n_col_ - st_ : 0;
             off[r] = st, off_end[r] = en;
 
 
@@ -1048,7 +1195,14 @@ void ksw_extd2_avx2(void *km, int qlen, const uint8_t *query, int tlen, const ui
                     tmp_mask = _mm256_cmpgt_epi8(b2, zero_);
                     _mm256_storeu_si256(&y2[t], _mm256_sub_epi8(_mm256_blendv_epi8(zero_, b2,tmp_mask), qe2_));
                     d = _mm256_or_si256(d, _mm256_blendv_epi8(zero_, s4_,tmp_mask)); // d = b > 0? 1<<6 : 0
-                    _mm256_storeu_si256(&pr[t], d);
+                    if (singletrack) {
+                        _mm256_storeu_si256(
+                                &pr[t], _mm256_sub_epi8(z, ut));
+                        _mm256_storeu_si256(
+                                &pr2[t], _mm256_sub_epi8(z, vt1));
+                    } else {
+                        _mm256_storeu_si256(&pr[t], d);
+                    }
             }
             {
                 __m256i d, z, a, b, a2, b2, xt1, x2t1, vt1, ut, tmp;
@@ -1102,7 +1256,19 @@ void ksw_extd2_avx2(void *km, int qlen, const uint8_t *query, int tlen, const ui
                     tmp_mask = _mm256_cmpgt_epi8(b2, zero_);
                     _mm256_storeu_si256(&y2[t], (get_mask_store2(msk_v,&y2[t], _mm256_sub_epi8(_mm256_blendv_epi8(zero_, b2, tmp_mask), qe2_))));
                     d = _mm256_or_si256(d, _mm256_blendv_epi8(zero_, s4_, tmp_mask)); // d = b > 0? 1<<6 : 0
-                    _mm256_storeu_si256(&pr[t], (get_mask_store2(msk_v, &pr[t], d)));
+                    if (singletrack) {
+                        _mm256_storeu_si256(
+                                &pr[t], get_mask_store2(
+                                        msk_v, &pr[t],
+                                        _mm256_sub_epi8(z, ut)));
+                        _mm256_storeu_si256(
+                                &pr2[t], get_mask_store2(
+                                        msk_v, &pr2[t],
+                                        _mm256_sub_epi8(z, vt1)));
+                    } else {
+                        _mm256_storeu_si256(
+                                &pr[t], get_mask_store2(msk_v, &pr[t], d));
+                    }
                     //_mm256_mask_storeu_epi8(&pr[t], msk, d);
                 }
             }
@@ -1110,6 +1276,8 @@ void ksw_extd2_avx2(void *km, int qlen, const uint8_t *query, int tlen, const ui
 
         } else { // gap right-alignment
             __m256i *pr = p + (size_t)r * n_col_ - st_;
+            __m256i *pr2 = singletrack
+                    ? p2 + (size_t)r * n_col_ - st_ : 0;
             off[r] = st, off_end[r] = en;
             // off[r] = stn, off_end[r] = enn;
             // fprintf(stderr, "t: %d, st0: %d\n", st_, st0);
@@ -1165,7 +1333,14 @@ void ksw_extd2_avx2(void *km, int qlen, const uint8_t *query, int tlen, const ui
                     _mm256_storeu_si256(&y2[t], _mm256_sub_epi8(_mm256_blendv_epi8(b2, zero_,tmp_mask), qe2_));
                     // d = b > 0? 1<<6 : 0
                     d = _mm256_or_si256(d, _mm256_blendv_epi8(s4_, zero_,tmp_mask)); // d = b > 0? 1<<6 : 0
-                    _mm256_storeu_si256(&pr[t], d);
+                    if (singletrack) {
+                        _mm256_storeu_si256(
+                                &pr[t], _mm256_sub_epi8(z, ut));
+                        _mm256_storeu_si256(
+                                &pr2[t], _mm256_sub_epi8(z, vt1));
+                    } else {
+                        _mm256_storeu_si256(&pr[t], d);
+                    }
 
                 }
             }
@@ -1224,7 +1399,20 @@ void ksw_extd2_avx2(void *km, int qlen, const uint8_t *query, int tlen, const ui
                     _mm256_storeu_si256(&y2[t], (get_mask_store2(msk_ar2_v[ind], &y2[t], _mm256_sub_epi8(_mm256_blendv_epi8(b2, zero_,tmp_mask), qe2_))));
                     d = _mm256_or_si256(d, _mm256_blendv_epi8(s4_, zero_, tmp_mask)); // d = b > 0? 1<<6 : 0
                     // _mm256_storeu_si256(&pr[t], d);
-                    _mm256_storeu_si256(&pr[t], (get_mask_store2(msk_ar2_v[ind], &pr[t], d)));
+                    if (singletrack) {
+                        _mm256_storeu_si256(
+                                &pr[t], get_mask_store2(
+                                        msk_ar2_v[ind], &pr[t],
+                                        _mm256_sub_epi8(z, ut)));
+                        _mm256_storeu_si256(
+                                &pr2[t], get_mask_store2(
+                                        msk_ar2_v[ind], &pr2[t],
+                                        _mm256_sub_epi8(z, vt1)));
+                    } else {
+                        _mm256_storeu_si256(
+                                &pr[t], get_mask_store2(
+                                        msk_ar2_v[ind], &pr[t], d));
+                    }
 
 
             }
@@ -1347,7 +1535,19 @@ void ksw_extd2_avx2(void *km, int qlen, const uint8_t *query, int tlen, const ui
 
     kfree(km, mem);
     if (!approx_max) kfree(km, H);
-    if (with_cigar) { // backtrack
+    if (with_cigar && singletrack) {
+        if (!ez->stopped && !ez->zdropped &&
+            !(flag & (KSW_EZ_EXTZ_ONLY | KSW_EZ_SEMIGLOBAL_END))) {
+            ksw2_singletrack_backtrace_affine2p(
+                    km, qlen, query, tlen, target, m, mat,
+                    q, e, q2, e2, n_col_ * 32, off, off_end,
+                    (const int8_t*)p, (const int8_t*)p2, ez);
+            if (ez->n_cigar == 0) ez->zdropped = 1;
+        } else if (!ez->stopped && !ez->zdropped) {
+            ez->zdropped = 1;
+        }
+        kfree(km, mem2); kfree(km, off);
+    } else if (with_cigar) { // backtrack
         int rev_cigar = !!(flag & KSW_EZ_REV_CIGAR);
         if (!ez->stopped && !ez->zdropped &&
                 (flag & KSW_EZ_SEMIGLOBAL_END)) {

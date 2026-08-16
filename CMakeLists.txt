@@ -257,6 +257,7 @@ add_executable(anchorwave
         minimap2/ksw2_dispatch.c
         minimap2/ksw2_extd2_sse.c
         minimap2/ksw2_extd2_avx.c
+        minimap2/ksw2_singletrack.cpp
         minimap2/ksw2_exts2_sse.c
         minimap2/ksw2_extz2_sse.c
         minimap2/ksw2_ll_sse.c

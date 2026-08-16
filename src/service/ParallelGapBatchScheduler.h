@@ -30,9 +30,12 @@ namespace anchorwave {
 // Half protects the earliest anchor-order frontier and half prefetches the
 // largest predicted tasks. Completion or memory deferral immediately frees a
 // runnable slot, so a replacement may be submitted before ordered output
-// consumes the old slot. At most two windows may be submitted but unconsumed;
-// this bounded overcommit keeps workers useful behind a slow ordered head
-// without allowing chromosome-scale alignment strings to accumulate.
+// consumes the old slot. Normal operation retains at most two windows. When
+// ordered output hides a dormant future backlog and the process memory
+// scheduler approves, a wider look-ahead window may be exposed. This
+// changes queue visibility only: no more than one worker-width is runnable and
+// every alignment attempt still passes the process-wide memory admission gate.
+// The owning pipeline additionally limits retained completed-result bytes.
 template <typename Result>
 class ParallelGapBatchSchedulerCore {
 public:
@@ -40,6 +43,8 @@ public:
     using WorkFunction =
             std::function<Result(AlignmentGapDescriptor &)>;
     using ResultBytesFunction = std::function<uint64_t(const Result &)>;
+    using EmergencyBackfillFunction =
+            std::function<bool(uint64_t, std::size_t)>;
 
     ParallelGapBatchSchedulerCore(
             std::vector<AlignmentGapDescriptor> descriptors,
@@ -47,7 +52,11 @@ public:
             AnchorTaskExecutor &executor,
             WorkFunction work,
             std::atomic<uint64_t> *submittedTaskCount = nullptr,
-            ResultBytesFunction resultBytes = ResultBytesFunction())
+            ResultBytesFunction resultBytes = ResultBytesFunction(),
+            EmergencyBackfillFunction emergencyBackfill =
+                    EmergencyBackfillFunction(),
+            uint64_t maximumCompletedResultBytes =
+                    std::numeric_limits<uint64_t>::max())
             : descriptors_(std::move(descriptors)),
               maximumPendingResults_(maximumPendingResults),
               maximumOutstandingResults_(
@@ -55,11 +64,13 @@ public:
                       ? 1 : saturatingDouble(maximumPendingResults)),
               maximumEmergencyOutstandingResults_(
                       maximumPendingResults == 1
-                      ? 1 : saturatingAddSize(
-                                saturatingDouble(maximumPendingResults), 1)),
+                      ? 1 : saturatingDouble(saturatingDouble(
+                                saturatingDouble(maximumPendingResults)))),
               executor_(executor),
               work_(std::move(work)),
               resultBytes_(std::move(resultBytes)),
+              emergencyBackfill_(std::move(emergencyBackfill)),
+              maximumCompletedResultBytes_(maximumCompletedResultBytes),
               submittedTaskCount_(submittedTaskCount),
               longestPlanned_(DescriptorPriorityLess{&descriptors_}) {
         if (maximumPendingResults_ == 0) {
@@ -495,6 +506,14 @@ private:
         if (!started_ || shuttingDown_ || !backfillEnabled_) {
             return;
         }
+        // Completed alignments remain resident after their per-attempt memory
+        // token is released.  Stop speculative refill once that retained
+        // output reaches the owning pipeline's budget; consuming an ordered
+        // result calls fillWindowLocked() again and resumes progress.
+        if (completedResults_ > 0 &&
+            completedResultBytes_ >= maximumCompletedResultBytes_) {
+            return;
+        }
         const std::size_t availableRunnableSlots =
                 inFlightResults_ < maximumPendingResults_
                 ? maximumPendingResults_ - inFlightResults_ : 0;
@@ -504,14 +523,15 @@ private:
             pending_.size() < maximumEmergencyOutstandingResults_) {
             const AnchorTaskExecutor::LoadSnapshot load =
                     executor_.loadSnapshot();
-            // Ordered output can fill every normal 2T result slot with
-            // completed/deferred tasks while a large dormant future backlog
-            // still contains cheap work. Permit exactly one extra descriptor
-            // per blocked chromosome only when workers are observably idle,
-            // no ready task exists, and memory deferral is the reason. The
-            // extra result remains bounded; normal operation still uses 2T.
-            if (load.activeTasks < load.workerCount &&
-                load.readyTasks == 0 && load.deferredTasks > 0 &&
+            // Ordered output can fill every normal 2T result slot behind one
+            // slow head while dormant future work could use idle CPUs. Expose
+            // up to 8T descriptors only when the caller accepts the currently
+            // retained result bytes and the process-wide memory state. The
+            // runnable count remains T, so this is look-ahead rather than
+            // thread oversubscription.
+            if (emergencyBackfill_ &&
+                emergencyBackfill_(completedResultBytes_, pending_.size()) &&
+                load.deferredTasks == 0 &&
                 load.globalFutureTasks > 0) {
                 outstandingCeiling = maximumEmergencyOutstandingResults_;
             }
@@ -690,6 +710,8 @@ private:
     AnchorTaskExecutor &executor_;
     WorkFunction work_;
     ResultBytesFunction resultBytes_;
+    EmergencyBackfillFunction emergencyBackfill_;
+    const uint64_t maximumCompletedResultBytes_;
     std::atomic<uint64_t> *submittedTaskCount_;
     mutable std::mutex stateMutex_;
     std::size_t peakPendingResultCount_ = 0;

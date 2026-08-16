@@ -24,7 +24,7 @@
 #include <unordered_map>
 #include <unistd.h>
 
-void genomeAlignmentAndVariantCalling(std::map<std::string, std::vector<AlignmentMatch>> &map_v_am,
+bool genomeAlignmentAndVariantCalling(std::map<std::string, std::vector<AlignmentMatch>> &map_v_am,
                                       const std::string &refFastaFilePath, const std::string &targetFastaFilePath,
                                       const int32_t &windowWidth, const std::string &outPutMafFile,
                                       const std::string &outPutFragedFile, const std::string &outPutBedFile, const int32_t &matchingScore,
@@ -33,7 +33,7 @@ void genomeAlignmentAndVariantCalling(std::map<std::string, std::vector<Alignmen
                                       const int &maxThread,
                                       const uint64_t &maxProcessMemoryBytes);
 
-void genomeAlignment(std::vector<std::vector<AlignmentMatch>> &v_v_am,
+bool genomeAlignment(std::vector<std::vector<AlignmentMatch>> &v_v_am,
                      const std::string &refFastaFilePath, const std::string &targetFastaFilePath,
                      const int32_t &windowWidth,
                      const std::string &outPutMafFile, const std::string &outPutFragedFile, const std::string &outPutBedFile,

@@ -258,7 +258,8 @@ uint64_t AlignmentMemoryScheduler::projectedProcessBytesLocked() const {
 }
 
 bool AlignmentMemoryScheduler::fitsLocked(
-        uint64_t predictedPeakBytes, bool respectPreferredQueue) const {
+        uint64_t predictedPeakBytes,
+        bool respectPreferredQueue) const {
     const uint64_t observed = residentMemoryReader_
                               ? residentMemoryReader_()
                               : 0;

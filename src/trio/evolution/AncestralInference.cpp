@@ -456,7 +456,8 @@ void AncestralWriters::writeChildMap(
     for (const AncestorChildAlignmentBlock &projection : projections) {
         std::ostringstream sites;
         for (std::size_t i = 0; i < projection.siteIds.size(); ++i) {
-            if (i) sites << ','; sites << projection.siteIds[i];
+            if (i) sites << ',';
+            sites << projection.siteIds[i];
         }
         for (const ChildProjectionRow &row : projection.children) {
             output << projection.projectionId << '\t' << projection.ancestorBlockId

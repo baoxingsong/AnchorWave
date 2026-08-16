@@ -49,29 +49,34 @@ int main(int argc, char **argv) {
     std::cerr << "If you find anything abnormal, please contact us." << std::endl;
 #endif
 
-    if (program.compare("gff2seq") == 0) {
-        return gff2seq(--argc, ++argv);
-    }
-    else if (program.compare("proali") == 0) {
-        return proportionalAlignment(--argc, ++argv);
-    }
-    else if (program.compare("genoAli") == 0) {
-        return genomeAlignment(--argc, ++argv);
-    }
-    else if (program.compare("ali") == 0) {
-        return ali(--argc, ++argv);
-    }
-    else if (program.compare("geno") == 0) {
-        return geno(--argc, ++argv);
-    }
-    else if (program.compare("pro") == 0) {
-        return pro(--argc, ++argv);
-    }
-    else if (program.compare("trioGraphAli") == 0) {
-        return trioGraphAli(--argc, ++argv);
+    try {
+        if (program.compare("gff2seq") == 0) {
+            return gff2seq(--argc, ++argv);
+        }
+        else if (program.compare("proali") == 0) {
+            return proportionalAlignment(--argc, ++argv);
+        }
+        else if (program.compare("genoAli") == 0) {
+            return genomeAlignment(--argc, ++argv);
+        }
+        else if (program.compare("ali") == 0) {
+            return ali(--argc, ++argv);
+        }
+        else if (program.compare("geno") == 0) {
+            return geno(--argc, ++argv);
+        }
+        else if (program.compare("pro") == 0) {
+            return pro(--argc, ++argv);
+        }
+        else if (program.compare("trioGraphAli") == 0) {
+            return trioGraphAli(--argc, ++argv);
+        }
+    } catch (const std::exception &error) {
+        std::cerr << PROGRAMNAME << " " << program << ": " << error.what() << std::endl;
+        return 1;
     }
 
     usage();
 
-    return 0;
+    return 1;
 }

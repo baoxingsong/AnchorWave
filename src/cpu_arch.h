@@ -6,7 +6,8 @@
  * builds and Apple universal builds.  Minimap2's SIMD sources use the SSE2
  * interface; on ARM, SSE2NEON supplies that interface using NEON instructions.
  */
-#if defined(__aarch64__) || defined(_M_ARM64) || defined(__arm__) || defined(_M_ARM)
+#if defined(__aarch64__) || defined(__arm64__) || defined(_M_ARM64) || \
+        defined(__arm__) || defined(_M_ARM)
 #define ANCHORWAVE_ARCH_ARM 1
 #ifndef __SSE2NEON__
 #define __SSE2NEON__ 1

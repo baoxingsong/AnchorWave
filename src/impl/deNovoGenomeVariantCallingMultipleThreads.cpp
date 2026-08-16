@@ -21,6 +21,33 @@ struct ParallelGapResult {
     int64_t score = 0;
 };
 
+uint64_t parallelGapResultResidentBytes(const ParallelGapResult &result) {
+    uint64_t bytes = static_cast<uint64_t>(sizeof(result));
+    const auto addCapacity = [&bytes](std::size_t capacity) {
+        const uint64_t addition = static_cast<uint64_t>(capacity);
+        bytes = addition > std::numeric_limits<uint64_t>::max() - bytes
+                ? std::numeric_limits<uint64_t>::max()
+                : bytes + addition;
+    };
+    addCapacity(result.queryAlignment.capacity());
+    addCapacity(result.referenceAlignment.capacity());
+    addCapacity(result.method.capacity());
+    return bytes;
+}
+
+uint64_t parallelGapRetainedResultBudgetBytes(
+        const anchorwave::AlignmentResourceSnapshot &resources) {
+    if (!resources.enabled) {
+        return std::numeric_limits<uint64_t>::max();
+    }
+    const uint64_t mebibyte = 1024ULL * 1024ULL;
+    return std::min<uint64_t>(
+            512ULL * mebibyte,
+            std::max<uint64_t>(
+                    64ULL * mebibyte,
+                    resources.taskMemoryCapacityBytes / 128));
+}
+
 void reportAlignmentSelectionTelemetry() {
     const anchorwave::AlignmentSelectionTelemetry telemetry =
             anchorwave::alignmentSelectionTelemetrySnapshot();
@@ -54,6 +81,10 @@ void reportAlignmentSelectionTelemetry() {
               << telemetry.lowWfaWorkWarnings
               << ", wfa_low_time_rejects="
               << telemetry.lowWfaTimeRejects
+              << ", ksw2_singletrack_memory_rejects="
+              << telemetry.ksw2SingletrackMemoryRejects
+              << ", ksw2_singletrack_time_rejects="
+              << telemetry.ksw2SingletrackTimeRejects
               << ", score_certified_ksw2_memory_rejects="
               << telemetry.scoreCertifiedKsw2MemoryRejects
               << ", score_certified_ksw2_time_rejects="
@@ -297,14 +328,11 @@ public:
                 openGapPenalty2_, extendGapPenalty2_);
         resultWindow_.reset(new GapResultWindow(
                 std::move(descriptors),
-                // Keep one worker-width runnable. The core may retain at most
-                // two worker-widths of submitted-but-unconsumed results (2T),
-                // plus one bounded emergency backfill when memory deferrals
-                // otherwise leave a CPU idle. A full B73/Mo17 run with a 2T
-                // runnable input (4T retained results) accumulated enough
-                // ordered output strings to exceed -M despite correct per-
-                // attempt reservations; the tighter bound keeps that
-                // persistent RSS inside the process memory plan.
+                // Keep one worker-width runnable. Normal look-ahead is 2T;
+                // when ordered output hides useful work, the core may expose
+                // more descriptors while -M and a retained-result byte budget
+                // both approve. This improves LPT visibility without raising
+                // the number of concurrently running alignments.
                 static_cast<std::size_t>(executor.workerCount()), executor,
                 [this](anchorwave::AlignmentGapDescriptor &descriptor) {
                     return alignParallelGap(
@@ -314,7 +342,29 @@ public:
                             openGapPenalty1_, extendGapPenalty1_,
                             openGapPenalty2_, extendGapPenalty2_);
                 },
-                &submittedTaskCount));
+                &submittedTaskCount,
+                [](const ParallelGapResult &result) {
+                    return parallelGapResultResidentBytes(result);
+                },
+                [](uint64_t completedResultBytes, std::size_t) {
+                    const anchorwave::AlignmentResourceSnapshot resources =
+                            anchorwave::alignmentResourceSnapshot();
+                    if (!resources.enabled) {
+                        return false;
+                    }
+                    const uint64_t mebibyte = 1024ULL * 1024ULL;
+                    const uint64_t retainedBudget =
+                            parallelGapRetainedResultBudgetBytes(resources);
+                    // Completed alignment strings are persistent RSS after
+                    // their attempt reservation is released. Bound that RSS
+                    // independently and still require room for an ordinary
+                    // alignment transient before widening queue visibility.
+                    return completedResultBytes < retainedBudget &&
+                           resources.immediatelyAvailableBytes >=
+                                   128ULL * mebibyte;
+                },
+                parallelGapRetainedResultBudgetBytes(
+                        anchorwave::alignmentResourceSnapshot())));
         resultWindow_->start();
     }
 
@@ -782,7 +832,7 @@ void genomeAlignmentSingleThread(const std::vector<AlignmentMatch> &alignmentMat
 
 }
 
-void genomeAlignment(std::vector<std::vector<AlignmentMatch>> &alignmentMatchsMap,
+bool genomeAlignment(std::vector<std::vector<AlignmentMatch>> &alignmentMatchsMap,
                      const std::string &refFastaFilePath, const std::string &targetFastaFilePath,
                      const int32_t &windowWidth,
                      const std::string &outPutMafFile, const std::string &outPutFragedFile, const std::string &outPutBedFile,
@@ -821,7 +871,7 @@ void genomeAlignment(std::vector<std::vector<AlignmentMatch>> &alignmentMatchsMa
                 anchorwave::currentProcessResidentBytes());
     } catch (const std::exception &error) {
         std::cerr << "cannot schedule alignments: " << error.what() << std::endl;
-        return;
+        return false;
     }
     anchorwave::AlignmentMemoryScheduler memoryScheduler(resourcePlan);
     anchorwave::ScopedAlignmentMemoryScheduler memorySchedulerScope(
@@ -858,16 +908,30 @@ void genomeAlignment(std::vector<std::vector<AlignmentMatch>> &alignmentMatchsMa
 
     if (outPutMaf) {
         omaffile.open(outPutMafFile);
+        if (!omaffile.good()) {
+            std::cerr << "cannot create MAF output file " << outPutMafFile << std::endl;
+            return false;
+        }
 //        omaffile << "##maf version=1" << std::endl;
     }
 
     if (outPutFraged) {
         ofragfile.open(outPutFragedFile);
+        if (!ofragfile.good()) {
+            std::cerr << "cannot create fragment MAF output file "
+                      << outPutFragedFile << std::endl;
+            return false;
+        }
 //        ofragfile << "##maf version=1" << std::endl;
     }
 
     if (oMethodBed){
         oMethodBedfile.open(outPutBedFile);
+        if (!oMethodBedfile.good()) {
+            std::cerr << "cannot create alignment-method BED output file "
+                      << outPutBedFile << std::endl;
+            return false;
+        }
     }
 
     int32_t size = alignmentMatchsMap.size();
@@ -913,6 +977,16 @@ void genomeAlignment(std::vector<std::vector<AlignmentMatch>> &alignmentMatchsMa
     if (outPutFraged) {
         ofragfile.close();
     }
+    if (oMethodBed) {
+        oMethodBedfile.close();
+    }
+    const bool outputSucceeded = (!outPutMaf || omaffile.good()) &&
+                                 (!outPutFraged || ofragfile.good()) &&
+                                 (!oMethodBed || oMethodBedfile.good());
+    if (!outputSucceeded) {
+        std::cerr << "an error occurred while writing alignment output" << std::endl;
+    }
+    return outputSucceeded;
 }
 
 void genomeAlignmentAndVariantCallingSingleThread(
@@ -1487,7 +1561,7 @@ void genomeAlignmentAndVariantCallingSingleThread(
 }
 
 
-void genomeAlignmentAndVariantCalling(std::map<std::string, std::vector<AlignmentMatch>> &map_v_am,
+bool genomeAlignmentAndVariantCalling(std::map<std::string, std::vector<AlignmentMatch>> &map_v_am,
                                       const std::string &path_ref_GenomeSequence, const std::string &path_target_GenomeSequence,
                                       const int32_t &windowWidth, const std::string &outPutMafFile,
                                       const std::string &outPutFragedFile, const std::string &outPutBedFile, const int32_t &matchingScore, const int32_t &mismatchingPenalty,
@@ -1523,7 +1597,7 @@ void genomeAlignmentAndVariantCalling(std::map<std::string, std::vector<Alignmen
                 anchorwave::currentProcessResidentBytes());
     } catch (const std::exception &error) {
         std::cerr << "cannot schedule alignments: " << error.what() << std::endl;
-        return;
+        return false;
     }
     anchorwave::AlignmentMemoryScheduler memoryScheduler(resourcePlan);
     anchorwave::ScopedAlignmentMemoryScheduler memorySchedulerScope(
@@ -1559,6 +1633,10 @@ void genomeAlignmentAndVariantCalling(std::map<std::string, std::vector<Alignmen
     std::ofstream ofragfile;
     if (outPutMaf) {
         omaffile.open(outPutMafFile);
+        if (!omaffile.good()) {
+            std::cerr << "cannot create MAF output file " << outPutMafFile << std::endl;
+            return false;
+        }
 //        omaffile << "##maf version=1" << std::endl;
     }
 
@@ -1573,18 +1651,28 @@ void genomeAlignmentAndVariantCalling(std::map<std::string, std::vector<Alignmen
 
     if (outPutFraged) {
         ofragfile.open(outPutFragedFile);
+        if (!ofragfile.good()) {
+            std::cerr << "cannot create fragment MAF output file "
+                      << outPutFragedFile << std::endl;
+            return false;
+        }
 //        ofragfile << "##maf version=1" << std::endl;
     }
     std::ofstream oMethodBedfile;
 
     if (oMethodBed){
         oMethodBedfile.open(outPutBedFile);
+        if (!oMethodBedfile.good()) {
+            std::cerr << "cannot create alignment-method BED output file "
+                      << outPutBedFile << std::endl;
+            return false;
+        }
         oMethodBedfile << "# FILLING: no alignment was performed" << std::endl;
         oMethodBedfile << "# WAVEFRONT: exact 2-piece affine alignment was performed using a WFA mode (Singletrack/high/medium/low)" << std::endl;
-        oMethodBedfile << "# MINIMAP2: exact 2-piece affine alignment was performed using the ksw_extd2 approach implemented in minimap2, without setting band" << std::endl;
-        oMethodBedfile << "# BANDED_MINIMAP2: alignment was performed using the ksw_extd2 approach implemented in minimap2, with band setting" << std::endl;
+        oMethodBedfile << "# KSW2: exact 2-piece affine alignment was performed using KSW2 (full, score-certified, or Singletrack traceback)" << std::endl;
+        oMethodBedfile << "# BANDED_KSW2: alignment was performed using KSW2 with a band" << std::endl;
         oMethodBedfile << "# SLIDING_WINDOW: alignment was performed using a sliding window approach" << std::endl;
-        oMethodBedfile << "# WAVEFRONT and MINIMAP2 are exact dynamic-programming alignments. BANDED_MINIMAP2 and SLIDING_WINDOW share the fallback-quality tier; the selector chooses the result predicted to have the higher alignment score" << std::endl;
+        oMethodBedfile << "# WAVEFRONT and KSW2 are exact dynamic-programming alignments. BANDED_KSW2 and SLIDING_WINDOW share the fallback-quality tier; the selector chooses the result predicted to have the higher alignment score" << std::endl;
     }
 
     for (std::map<std::string, std::vector<AlignmentMatch>>::iterator it = map_v_am.begin(); it != map_v_am.end(); ++it) {
@@ -1627,4 +1715,14 @@ void genomeAlignmentAndVariantCalling(std::map<std::string, std::vector<Alignmen
     if (outPutFraged) {
         ofragfile.close();
     }
+    if (oMethodBed) {
+        oMethodBedfile.close();
+    }
+    const bool outputSucceeded = (!outPutMaf || omaffile.good()) &&
+                                 (!outPutFraged || ofragfile.good()) &&
+                                 (!oMethodBed || oMethodBedfile.good());
+    if (!outputSucceeded) {
+        std::cerr << "an error occurred while writing alignment output" << std::endl;
+    }
+    return outputSucceeded;
 }

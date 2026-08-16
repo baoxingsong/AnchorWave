@@ -5,6 +5,10 @@
 #include "readGffFile.h"
 #include "../io/CompressedInput.h"
 
+#include <array>
+#include <cerrno>
+#include <climits>
+#include <cstdlib>
 #include <utility>
 
 namespace {
@@ -15,6 +19,139 @@ std::string readableAnnotationPath(const std::string &filePath) {
     } catch (const std::exception &error) {
         std::cerr << error.what() << std::endl;
         exit(1);
+    }
+}
+
+bool splitGffColumns(const std::string &line, std::array<std::string, 9> &columns) {
+    size_t begin = 0;
+    for (size_t column = 0; column < 8; ++column) {
+        const size_t tab = line.find('\t', begin);
+        if (tab == std::string::npos) {
+            return false;
+        }
+        columns[column] = line.substr(begin, tab - begin);
+        begin = tab + 1;
+    }
+    columns[8] = line.substr(begin);
+    return true;
+}
+
+bool parseGffCoordinate(const std::string &text, int &coordinate) {
+    if (text.empty()) {
+        return false;
+    }
+    char *end = NULL;
+    errno = 0;
+    const long value = std::strtol(text.c_str(), &end, 10);
+    if (errno != 0 || end == text.c_str() || *end != '\0' || value < 1 || value > INT_MAX) {
+        return false;
+    }
+    coordinate = static_cast<int>(value);
+    return true;
+}
+
+std::string gffAttributeValue(const std::string &attributes, const std::string &key) {
+    size_t begin = 0;
+    while (begin < attributes.size()) {
+        size_t end = attributes.find(';', begin);
+        if (end == std::string::npos) {
+            end = attributes.size();
+        }
+        size_t fieldBegin = begin;
+        while (fieldBegin < end && (attributes[fieldBegin] == ' ' || attributes[fieldBegin] == '\t')) {
+            ++fieldBegin;
+        }
+        if (attributes.compare(fieldBegin, key.size(), key) == 0) {
+            size_t valueBegin = fieldBegin + key.size();
+            if (valueBegin < end && attributes[valueBegin] == '=') {
+                ++valueBegin;
+            } else if (valueBegin < end &&
+                       (attributes[valueBegin] == ' ' || attributes[valueBegin] == '\t')) {
+                while (valueBegin < end &&
+                       (attributes[valueBegin] == ' ' || attributes[valueBegin] == '\t')) {
+                    ++valueBegin;
+                }
+            } else {
+                begin = end + 1;
+                continue;
+            }
+            if (valueBegin < end && attributes[valueBegin] == '"') {
+                ++valueBegin;
+                if (end > valueBegin && attributes[end - 1] == '"') {
+                    --end;
+                }
+            }
+            return attributes.substr(valueBegin, end - valueBegin);
+        }
+        begin = end + 1;
+    }
+    return std::string();
+}
+
+void readParentedFeatures(const std::string &filePath,
+                          std::map<std::string, std::vector<Transcript> > &transcriptHashSet,
+                          const std::string &featureType,
+                          const int minExon) {
+    std::map<std::string, Transcript> transcriptHashMap;
+    std::ifstream infile(readableAnnotationPath(filePath));
+    if (!infile.good()) {
+        std::cerr << "error in opening GFF/GTF file " << filePath << std::endl;
+        exit(1);
+    }
+
+    std::string line;
+    while (std::getline(infile, line)) {
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
+        std::array<std::string, 9> columns;
+        if (!splitGffColumns(line, columns) || columns[2] != featureType) {
+            continue;
+        }
+
+        int start = 0;
+        int end = 0;
+        if (!parseGffCoordinate(columns[3], start) || !parseGffCoordinate(columns[4], end)) {
+            continue;
+        }
+        if (start > end) {
+            std::swap(start, end);
+        }
+        if ((end - start + 1) < minExon) {
+            continue;
+        }
+
+        std::string parent = gffAttributeValue(columns[8], "Parent");
+        if (parent.empty()) {
+            // Accept conventional GTF as advertised by the command-line interface.
+            parent = gffAttributeValue(columns[8], "transcript_id");
+        }
+        const size_t comma = parent.find(',');
+        if (comma != std::string::npos) {
+            parent.erase(comma);
+        }
+        if (parent.empty()) {
+            continue;
+        }
+
+        if (transcriptHashMap.find(parent) == transcriptHashMap.end()) {
+            const STRAND strand = columns[6] == "-" ? NEGATIVE : POSITIVE;
+            transcriptHashMap[parent] = Transcript(parent, columns[0], strand);
+        }
+        transcriptHashMap[parent].addCds(GenomeBasicFeature(start, end));
+    }
+
+    for (std::map<std::string, Transcript>::iterator it = transcriptHashMap.begin();
+         it != transcriptHashMap.end(); ++it) {
+        it->second.updateInforCds();
+        const std::string chromosome = it->second.getChromeSomeName();
+        transcriptHashSet[chromosome].push_back(std::move(it->second));
+    }
+    for (std::map<std::string, std::vector<Transcript> >::iterator it = transcriptHashSet.begin();
+         it != transcriptHashSet.end(); ++it) {
+        std::sort(it->second.begin(), it->second.end(), [](const Transcript &a, const Transcript &b) {
+            return a.getPStart() < b.getPStart();
+        });
     }
 }
 
@@ -29,35 +166,35 @@ void get_map_from_gff(const std::string &filePath, std::map <std::string, std::s
 
     std::string line;
     while (std::getline(infile, line)) {
-        if (line.size() < 24 || line[0] == '#') {
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
+        std::array<std::string, 9> columns;
+        if (!splitGffColumns(line, columns)) {
             continue;
         }
 
-        std::string id;
-        size_t p_id_b = line.find("ID=");
-        if (p_id_b != std::string::npos) {
-            std::string line_s = line.substr(p_id_b + 3);
-            size_t p_id_e = line_s.find(";");
-            id = line_s.substr(0, p_id_e);
-        } else {
-            continue;
+        const std::string id = gffAttributeValue(columns[8], "ID");
+        std::string parent = gffAttributeValue(columns[8], "Parent");
+        const size_t comma = parent.find(',');
+        if (comma != std::string::npos) {
+            parent.erase(comma);
         }
-
-        size_t p_p_b = line.find("Parent=");
-        if (p_p_b != std::string::npos) {
-            std::string line_s = line.substr(p_p_b + 7);
-            size_t p_p_e = line_s.find(";");
-            std::string parent = line_s.substr(0, p_p_e);
+        if (!id.empty() && !parent.empty()) {
             map_transcript_to_gene[id] = parent;
             continue;
         }
 
-        size_t p_g_b = line.find("geneID=");
-        if (p_g_b != std::string::npos) {
-            std::string line_s = line.substr(p_g_b + 7);
-            size_t p_g_e = line_s.find(";");
-            std::string gene_id = line_s.substr(0, p_g_e);
-            map_transcript_to_gene[id] = gene_id;
+        const std::string geneId = gffAttributeValue(columns[8], "geneID");
+        if (!id.empty() && !geneId.empty()) {
+            map_transcript_to_gene[id] = geneId;
+            continue;
+        }
+
+        const std::string transcriptId = gffAttributeValue(columns[8], "transcript_id");
+        const std::string gtfGeneId = gffAttributeValue(columns[8], "gene_id");
+        if (!transcriptId.empty() && !gtfGeneId.empty()) {
+            map_transcript_to_gene[transcriptId] = gtfGeneId;
         }
     }
 
@@ -149,119 +286,10 @@ void readGffFile(const std::string &filePath, std::map <std::string, std::vector
 }
 
 void readGffFile1(const std::string &filePath, std::map <std::string, std::vector<Transcript>> &transcriptHashSet, const std::string &cdsParentRegex, const int &minExon) {
-    std::map <std::string, Transcript> transcriptHashMap;
-    std::ifstream infile(readableAnnotationPath(filePath));
-    if (!infile.good()) {
-        std::cerr << "error in opening GFF/GTF file " << filePath << std::endl;
-        exit(1);
-    }
-
-    std::regex reg("^(\\S*)\t([\\s\\S]*)\tCDS\t(\\S*)\t(\\S*)\t(\\S*)\t(\\S*)\t(\\S*)\t" + cdsParentRegex);
-    std::string line;
-    while (std::getline(infile, line)) {
-        std::smatch match;
-        regex_search(line, match, reg);
-
-        if (match.empty() || line[0] == '#' || line.size() < 9) {
-        } else {
-            int start = stoi(match[3]);
-            int end = stoi(match[4]);
-            if (start > end) {
-                int temp = start;
-                start = end;
-                end = temp;
-            }
-            if ((end - start + 1) >= minExon) {
-                std::string information = match[9];
-                if (transcriptHashMap.find(information) != transcriptHashMap.end()) {
-                } else {
-                    std::string chromosomeName = match[1];
-                    STRAND strand;
-                    if (match[6].compare("-") == 0) {
-                        strand = NEGATIVE;
-                    } else {
-                        strand = POSITIVE;
-                    }
-                    Transcript transcript1(information, chromosomeName, strand);
-                    transcriptHashMap[information] = transcript1;
-                }
-                GenomeBasicFeature cds(start, end);
-                //cds.setTranscript(transcriptHashMap[information]);
-                transcriptHashMap[information].addCds(cds);
-            }
-        }
-    }
-
-    for (std::map<std::string, Transcript>::iterator it = transcriptHashMap.begin(); it != transcriptHashMap.end(); ++it) {
-        if (transcriptHashSet.find(it->second.getChromeSomeName()) == transcriptHashSet.end()) {
-            transcriptHashSet[it->second.getChromeSomeName()] = std::vector<Transcript>();
-        }
-        it->second.updateInforCds();
-        const std::string chromosome = it->second.getChromeSomeName();
-        transcriptHashSet[chromosome].push_back(std::move(it->second));
-    }
-    for (std::map < std::string, std::vector < Transcript >> ::iterator it = transcriptHashSet.begin(); it != transcriptHashSet.end(); ++it) {
-        std::sort(it->second.begin(), it->second.end(), [](const Transcript &a, const Transcript &b) {
-            return a.getPStart() < b.getPStart();
-        });
-    }
+    (void)cdsParentRegex;
+    readParentedFeatures(filePath, transcriptHashSet, "CDS", minExon);
 }
 void readGffFile_exon(const std::string &filePath, std::map <std::string, std::vector<Transcript>> &transcriptHashSet, const std::string &cdsParentRegex, const int &minExon) {
-    std::map <std::string, Transcript> transcriptHashMap;
-    std::ifstream infile(readableAnnotationPath(filePath));
-    if (!infile.good()) {
-        std::cerr << "error in opening GFF/GTF file " << filePath << std::endl;
-        exit(1);
-    }
-    std::regex reg("^(\\S*)\t([\\s\\S]*)\texon\t(\\S*)\t(\\S*)\t(\\S*)\t(\\S*)\t(\\S*)\t" + cdsParentRegex);
-    std::string line;
-    while (std::getline(infile, line)) {
-        std::smatch match;
-        regex_search(line, match, reg);
-
-        if (match.empty() || line[0] == '#' || line.size() < 9) {
-        } else {
-            int start = stoi(match[3]);
-            int end = stoi(match[4]);
-            if (start > end) {
-                int temp = start;
-                start = end;
-                end = temp;
-            }
-
-            if ((end - start + 1) >= minExon) {
-                std::string information = match[9];
-                if (transcriptHashMap.find(information) != transcriptHashMap.end()) {
-                } else {
-                    std::string chromosomeName = match[1];
-                    STRAND strand;
-                    if (match[6].compare("-") == 0) {
-                        strand = NEGATIVE;
-                    } else {
-                        strand = POSITIVE;
-                    }
-                    Transcript transcript1(information, chromosomeName, strand);
-                    transcriptHashMap[information] = transcript1;
-                }
-
-                GenomeBasicFeature cds(start, end);
-                transcriptHashMap[information].addCds(cds);
-            }
-        }
-    }
-    infile.close();
-
-    for (std::map<std::string, Transcript>::iterator it = transcriptHashMap.begin(); it != transcriptHashMap.end(); ++it) {
-        if (transcriptHashSet.find(it->second.getChromeSomeName()) == transcriptHashSet.end()) {
-            transcriptHashSet[it->second.getChromeSomeName()] = std::vector<Transcript>();
-        }
-        it->second.updateInforCds();
-        const std::string chromosome = it->second.getChromeSomeName();
-        transcriptHashSet[chromosome].push_back(std::move(it->second));
-    }
-    for (std::map < std::string, std::vector < Transcript >> ::iterator it = transcriptHashSet.begin(); it != transcriptHashSet.end(); ++it) {
-        std::sort(it->second.begin(), it->second.end(), [](const Transcript &a, const Transcript &b) {
-            return a.getPStart() < b.getPStart();
-        });
-    }
+    (void)cdsParentRegex;
+    readParentedFeatures(filePath, transcriptHashSet, "exon", minExon);
 }

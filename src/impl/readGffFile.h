@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <iostream>
 #include <fstream>
-#include <regex>
 
 void get_map_from_gff(const std::string &filePath, std::map<std::string, std::string> &transcript_to_gene_map);
 

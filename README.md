@@ -23,8 +23,8 @@ Using a splice aware alignment program (minimap2 and GMAP have been tested) to l
 AnchorWave then identifies collinear anchors using one of three user-specified algorithm options (step 2) and uses the [WFA](https://github.com/smarco/WFA2-lib) and [minimap2](https://github.com/lh3/minimap2) algorithm to perform alignment for each anchor and inter anchor interval (step 4). Some anchor/inter-anchor regions cannot be aligned using our standard approach due to high memory and computational time costs. For these, AnchorWave either identifies novel anchors within long inter-anchor regions (step 3), or for those that cannot be split by novel anchors, aligns using the ksw_extd2 function implemented in minimap2 or a reimplemented sliding window approach (step 4). AnchorWave concatenates base pair sequence alignment for each anchor and inter-anchor region and outputs the alignment in MAF format (step 5).
 
 Version 1.3.0 uses two strict alignment-quality tiers. The exact tier contains
-WFA-Singletrack high, standard WFA high/medium/low, full KSW2, and rescue-only
-score-certified KSW2. The fallback tier contains banded KSW2 and
+WFA-Singletrack high, standard WFA high/medium/low, KSW2-Singletrack, full
+KSW2, and score-certified KSW2. The fallback tier contains banded KSW2 and
 `alignSlidingWindow`; the selector predicts which will return the larger score
 and normally runs only that method. BiWFA is retained only in developer
 benchmarks and is not part of the production selector.
@@ -32,15 +32,19 @@ benchmarks and is not part of the production selector.
 The vendored WFA2 implementation is pinned to upstream
 `main@2fc4a1afac0f624e7020ee5aadb7692b38157eaa`. `genoAli` and `proali`
 rank all memory-feasible exact candidates dynamically: WFA-Singletrack high,
-standard WFA high/medium/low and full KSW2. Score-certified KSW2 is considered
-only as a rescue when Singletrack, WFA-high and full KSW2 are structurally
-memory-infeasible. The scheduler uses the
+standard WFA high/medium/low, KSW2-Singletrack, full KSW2 and score-certified
+KSW2. The scheduler uses the
 user-specified thread and process-memory limits to minimize predicted global
-completion time while reserving memory inside `-M`. Banded KSW2 and the
-sliding-window method share the fallback tier. Banded KSW2 is admitted
-only when its band is at least the longer input and that complete matrix fits
-the per-task budget; narrow-band speed shortcuts are not used. See the
+completion time under the predictive `-M` admission envelope. Banded KSW2 and the
+sliding-window method share the fallback tier. When both fit the per-task
+budget, a versioned B73/Mo17-calibrated model predicts their score difference
+and normally executes only the predicted higher-scoring method. See the
 [v1.3.0 release notes](RELEASE_NOTES.md).
+
+The KSW2-Singletrack integration is adapted from
+[LorienLV/singletrack](https://github.com/LorienLV/singletrack) at commit
+`7185195cb4049fd5290875ab4fc503384c4891dd`; attribution and the upstream MIT
+license are retained in `minimap2/KSW2_SINGLETRACK_NOTICE`.
 
 `genoAli` also uses `-t` during global anchor organization. Reference and query
 chromosomes are scheduled through one cost-prioritized worker pool and merged
@@ -119,7 +123,7 @@ In general, totally four commands are need to run through the whole pipeline.
 If `proali` is proper, then need to think about how to set the values of `R`, `Q` and maybe `-e`.](#Note)
 Could refer [guideline.pdf](./doc/guideline.pdf) or
 [#16](https://github.com/baoxingsong/AnchorWave/issues/16) for how to do that.
-* Alignment of highly diverse genomes can still take a couple of CPU days. The default `-w 100000` sets a hard per-alignment algorithm budget of `w^2 = 10,000,000,000` bytes (about 9.3 GiB) and retains its KSW2 matrix/band/window role. The effective sliding chunk is automatically reduced when SIMD/page-rounded traceback metadata would otherwise exceed `w^2`. Banded KSW2 is eligible only when its band is at least the longer input and that complete traceback fits the same ceiling. Within WFA, `-w` is only a memory ceiling; it is not compared with sequence length, length difference, or alignment score. Set `-t` as the maximum worker count and `-M` as the predictive maximum total AnchorWave memory in GiB. `-M` never raises the per-task `w^2` ceiling: it deducts loaded-genome RSS and an in-limit safety reserve, then dynamically admits guarded WFA/KSW2 predictions plus transient sequence/output storage. Because this is an in-process predictive guard, use a cgroup or job-scheduler limit when the operating system must enforce a hard cap. Small tasks can use all `-t` workers without each reserving the worst-case `w^2` amount.
+* Alignment of highly diverse genomes can still take a couple of CPU days. The default `-w 100000` sets the normal per-alignment algorithm budget to `w^2 = 10,000,000,000` bytes (about 9.3 GiB) and retains its KSW2 matrix/band/window role. Sliding uses the widest window permitted by this budget; it is never narrowed merely to increase throughput. Banded KSW2 similarly uses the widest endpoint-reachable traceback band that fits. For the historical quality contract `query_length * reference_length <= w^2`, Tier 1 is mandatory and an exact candidate may request more than `w^2`; process-wide `-M` admission still applies. Within WFA, `-w` is not compared with sequence length, length difference, or alignment score outside that explicit cell-envelope rule. Set `-t` as the maximum worker count and optionally set `-M` as the predictive maximum total AnchorWave memory in GiB; omitting `-M` disables the process-wide memory envelope. When `-M` is set, AnchorWave deducts loaded-genome RSS and an internal reserve, then dynamically admits guarded algorithm predictions plus transient sequence/output storage. Because allocator peaks, caches, and sampling are not a hard RSS controller, use a cgroup or job-scheduler limit when the operating system must enforce a cap. Small tasks can use all `-t` workers without each reserving `w^2`.
 
 
 Options:
@@ -131,6 +135,31 @@ Commands:
     genoAli     whole chromosome global alignment and variant calling
     proali      genome alignment with relocation variation, chromosome fusion or whole genome duplication
     ali         perform global alignment for a pair of sequences using the 2-piece affine gap cost strategy
+```
+
+### Align one sequence pair with `ali`
+
+Both FASTA files must contain exactly one sequence; plain, gzip, and BGZF input
+are auto-detected. The command writes the two gapped sequences to standard
+output.
+
+```
+Usage: anchorwave ali -r refSeq.fa -s querySeq.fa
+Options
+ -h           produce help message
+ -r   FILE    reference sequence (one-record plain or gzip/BGZF FASTA)
+ -s   FILE    target sequence (one-record plain or gzip/BGZF FASTA)
+ -w   INT     alignment window and normal per-alignment budget w^2 bytes
+              (default: 100000, about 9.3 GiB)
+              qlen*rlen <= w^2 forces Tier 1; exact memory may exceed w^2
+ -bt  FLOAT   exact-DP prediction/runtime ceiling per interval in minutes (default: 0)
+              0 selects exact-first mode; a positive value selects balanced mode
+              qlen*rlen <= w^2 remains a mandatory Tier-1 exception
+ -B   INT     mismatching penalty (default: -6)
+ -O1  INT     gap open penalty (default: -8)
+ -E1  INT     gap extension penalty (default: -2)
+ -O2  INT     gap open penalty 2 (default: -75)
+ -E2  INT     gap extension penalty 2 (default: -1)
 ```
 
 ### Lift over the reference full-length CDS start/stop coordinates to the query genome (command 1-3)
@@ -213,7 +242,7 @@ anchorwave genoAli -i TAIR10_GFF3_genes.gff -as cds.fa -r tair10.fa -a ler.sam -
 anchorwave genoAli -i TAIR10_GFF3_genes.gff -as cds.fa -r tair10.fa -a ler.sam -ar ref.sam -s ler.fa -n ler.anchors -o ler.maf -f ler.f.maf -m 0 > ler.log
 ```
 The output file ```ler.anchors``` could be used to visualize collinear anchors/blocks.  
-Please note: Under the global alignment model, if the block length is longer than a preset window size, the output alignment maybe a suboptimal alignment. While a large window size (larger values of parameters ```-w``` and ```-fa3```) would cost more memory.  
+Please note: Under the global alignment model, if the block length is longer than a preset window size, the output alignment may be suboptimal. A larger ```-w``` permits a larger per-alignment memory budget. A smaller ```-fa3``` enables novel-anchor searches in more gaps, which can increase anchor-search work and change interval fragmentation.
 
 Options of the ```genoAli``` function:
 ```
@@ -230,20 +259,25 @@ Options
  -o   FILE    output file in maf format
  -f   FILE    output sequence alignment for each anchor/inter-anchor region in maf format
  -b   FILE    output the actual alignment method for each interval in BED format
-              all WFA memory modes are reported as WAVEFRONT
+              WFA modes: WAVEFRONT; exact KSW2 modes: KSW2
+              fallback modes: BANDED_KSW2 or SLIDING_WINDOW
  -t   INT     maximum number of anchor-organization and alignment threads (default: 1)
  -M   FLOAT   predictive maximum total AnchorWave memory in GiB
+              omitted by default (no process-wide memory envelope)
               enables dynamic scheduling; must be at least w^2 bytes
+              not an operating-system-enforced hard RSS limit
  -bt  FLOAT   exact-DP prediction/runtime ceiling per interval in minutes (default: 0)
               0 selects exact-first mode; a positive value selects balanced mode
+              qlen*rlen <= w^2 remains a mandatory Tier-1 exception
  -m   INT     minimum exon length to use (default: 20, should be identical with the setting of gff2seq function)
  -mi  DOUBLE  minimum full-length CDS anchor hit similarity to use (default:0.95)
  -mi2 DOUBLE  minimum novel anchor hit similarity to use (default:0.2)
  -ar  FILE    sam file generated by mapping conserved sequence to reference genome
- -w   INT     alignment window and hard per-thread algorithm budget w^2 bytes
-              (default: 100000, about 9.3 GiB per thread)
+ -w   INT     alignment window and normal per-alignment budget w^2 bytes
+              (default: 100000, about 9.3 GiB per alignment)
+              qlen*rlen <= w^2 forces Tier 1; exact memory may exceed w^2
  -fa3 INT     minimum side length for novel-anchor search: require
-              reference_length * query_length > fa3^2 (default: 100000)
+              reference_length * query_length > fa3^2 (default: 50000)
  -B   INT     mismatching penalty (default: -6)
  -O1  INT     gap open penalty (default: -8)
  -E1  INT     gap extension penalty (default: -2)
@@ -312,13 +346,19 @@ anchorwave genoAli -i Zea_mays.AGPv4.34.gff3 -as cds.fa -r Zea_mays.AGPv4.dna.to
 anchorwave genoAli -i Zea_mays.AGPv4.34.gff3 -as cds.fa -r Zea_mays.AGPv4.dna.toplevel.fa -a cds.sam -ar ref.sam -s Zm-Mo17-REFERENCE-CAU-1.0.fa -n anchors -o anchorwave.maf -f anchorwave.f.maf -IV -m 0
 ```
 
-This command might still cost a couple of days. WFA-Singletrack high and WFA high are the fast exact paths; memory-feasible intervals can also use medium/low WFA or full KSW2. Score-certified KSW2 is an internal exact rescue path used only when Singletrack, WFA-high and full KSW2 are structurally memory-infeasible. It first computes the unbanded global optimum without traceback, then accepts an adaptively widened banded traceback only when its score is identical. Every sequence-alignment engine is capped at `w^2`; `-M` controls only process-wide admission and concurrency. An immediately runnable high WFA that is no slower than the fastest calibrated exact runtime is not charged the normal memory-shadow penalty, but a faster KSW2 path still wins. If current memory is busy, AnchorWave compares predicted wait plus runtime across exact candidates, parks eligible gap tasks without occupying a worker, and drains memory near the workload tail or after aging. The default `-bt 0` selects exact-first mode and disables exact runtime deadlines. Setting a positive value selects balanced mode: every admission quantile currently modeled (P50 and P90) must be within `-bt`, and the cumulative exact-attempt runtime for an interval is cooperatively stopped at the same limit. Only after eligible exact candidates are exhausted or that explicit deadline is reached does the shared fallback tier run. KSW2 fallback requires `band >= max(query, reference)` plus a full traceback that fits `w^2`; sliding uses the same per-attempt ceiling. The selector compares their predicted score loss and chooses the result expected to be closer to full DP, using runtime only as a tie-breaker. Long predicted gaps are prefetched early within a bounded rolling window while results are still emitted in anchor order. Reducing ```-w``` lowers every WFA and exact/fallback KSW2 attempt ceiling regardless of whether `-M` is set. `-M` is a predictive in-process envelope with an internal reserve, not an operating-system hard cap; use a cgroup or job-scheduler memory limit when kill-at-cap enforcement is required. Reducing ```-fa3``` changes novel-anchor splitting and can affect runtime and alignment quality.
+This command might still cost a couple of days. WFA-Singletrack high and WFA high are fast exact paths; memory-feasible intervals can also use medium/low WFA, KSW2-Singletrack, full KSW2 or score-certified KSW2. The latter computes the unbanded global optimum without traceback and accepts an adaptively widened traceback only when its score is identical. The normal per-attempt algorithm ceiling is `w^2`; when `query_length * reference_length <= w^2`, however, Tier 1 remains mandatory and all exact engines may compete with a larger predicted footprint if process-wide `-M` admission permits it. An immediately runnable high WFA that is no slower than the fastest calibrated exact runtime is not charged the normal memory-shadow penalty, but a faster KSW2 path still wins. If current memory is busy, AnchorWave compares predicted wait plus runtime across exact candidates, parks eligible gap tasks without occupying a worker, and drains memory near the workload tail or after aging. The default `-bt 0` selects exact-first mode and disables exact runtime deadlines. Setting a positive value selects balanced mode: P50 and P90 plus cumulative exact-attempt runtime must be within `-bt`, except for the mandatory `query_length * reference_length <= w^2` Tier-1 contract. Only after eligible exact candidates are exhausted or that explicit deadline is reached does the shared fallback tier run. Banded KSW2 and sliding window use the normal per-attempt ceiling. At the default scoring parameters and `-w 100000`, a versioned paired B73/Mo17 model predicts `score(banded)-score(sliding)` and uses a conservative one-sided rule to select the expected higher-scoring result; out-of-domain settings use a deterministic analytic score-loss rule. The second approximate method is normally only a runtime-failure rescue, not a mandatory validation run. Long predicted gaps are prefetched early within a bounded rolling window while results are still emitted in anchor order. `-M` is a predictive in-process envelope with an internal reserve, not an operating-system hard cap; use a cgroup or job-scheduler memory limit when kill-at-cap enforcement is required. Reducing ```-fa3``` changes novel-anchor splitting and can affect runtime and alignment quality.
+
+Version 1.3.0 uses `-fa3 50000` by default; use `-fa3 100000` to reproduce the
+former threshold. Reducing `-fa3` enables novel-anchor search in more gaps. It
+can increase the number of local anchors, change interval fragmentation, and
+affect runtime and alignment quality.
 
 Version 1.3.0 fixes a historical 32-bit overflow in the `-fa3` comparison.
 Novel-anchor search now consistently requires
 `reference_length * query_length > fa3^2`. Consequently, an anchor file made
 with v1.3.0 can contain fewer novel anchors than one made by an affected older
-build at the same default; this is an intentional correctness change.
+build at the same explicit parameter value; this is an intentional correctness
+change.
 
 ### Genome alignment with relocation variation, chromosome fusion or whole genome duplication (an option of command 4)
 When comparing two genomes undergone different genome duplications (goldfish genome, plant genomes and maybe hexapod genomes), this program implemented algorithm to identify collinear blocks with user specified coverage, and perform base pair resolution genome alignment for each collinear block.  \
@@ -375,16 +415,21 @@ Options
  -o   FILE    output file in maf format
  -f   FILE    output sequence alignment for each anchor/inter-anchor region in maf format
  -b   FILE    output the actual alignment method for each interval in BED format
-              all WFA memory modes are reported as WAVEFRONT
+              WFA modes: WAVEFRONT; exact KSW2 modes: KSW2
+              fallback modes: BANDED_KSW2 or SLIDING_WINDOW
  -t   INT     maximum number of anchor-organization and alignment threads (default: 1)
  -M   FLOAT   predictive maximum total AnchorWave memory in GiB
+              omitted by default (no process-wide memory envelope)
               enables dynamic scheduling; must be at least w^2 bytes
+              not an operating-system-enforced hard RSS limit
  -bt  FLOAT   exact-DP prediction/runtime ceiling per interval in minutes (default: 0)
               0 selects exact-first mode; a positive value selects balanced mode
+              qlen*rlen <= w^2 remains a mandatory Tier-1 exception
  -fa3 INT     minimum side length for novel-anchor search: require
-              reference_length * query_length > fa3^2 (default: 100000)
- -w   INT     alignment window and hard per-thread algorithm budget w^2 bytes
-              (default: 100000, about 9.3 GiB per thread)
+              reference_length * query_length > fa3^2 (default: 50000)
+ -w   INT     alignment window and normal per-alignment budget w^2 bytes
+              (default: 100000, about 9.3 GiB per alignment)
+              qlen*rlen <= w^2 forces Tier 1; exact memory may exceed w^2
  -R   INT     reference genome maximum alignment coverage 
  -Q   INT     query genome maximum alignment coverage 
  -B   INT     mismatching penalty (default: -4)
@@ -393,8 +438,8 @@ Options
  -O2  INT     open gap penalty 2 (default: -80)
  -E2  INT     extend gap penalty 2 (default: -1)
  -m   INT     minimum exon length to use (default: 20, should be identical with the setting of gff2seq function)
- -mi  DOUBLE  minimum full-length CDS anchor hit similarity to use (default:0)
- -mi2 DOUBLE  minimum novel anchor hit similarity to use (default:0)
+ -mi  DOUBLE  minimum full-length CDS anchor hit similarity to use (default:0.95)
+ -mi2 DOUBLE  minimum novel anchor hit similarity to use (default:0.2)
  -e   INT     maximum expected copy number of each gene on each chromosome (default: 1)
               This prevents using tandem duplicated genes to identify collinear block
  -y   DOUBLE  minimal ratio of e+1 similarity to 1 similarity to drop an anchor (default: 0.6)
@@ -458,6 +503,11 @@ Proceedings of the National Academy of Sciences Jan 2022, 119 (1) e2113075119; D
 [Shuai Wang, Qinlin Xu, Baoxing Song.
 Applying AnchorWave to Address Plant Genome Alignment.
 Bio-protocol Oct 2023; DOI: 10.21769/BioProtoc.4830](https://bio-protocol.org/exchange/protocoldetail?id=4830&type=1)
+
+[Lorién López-Villellas, Cristian Iñiguez, Albert Jiménez-Blanco, et al.
+Singletrack: an algorithm for improving memory consumption and performance of
+gap-affine sequence alignment. Bioinformatics, Volume 42, Issue 5, May 2026,
+btag183; DOI: 10.1093/bioinformatics/btag183.](https://doi.org/10.1093/bioinformatics/btag183)
 
 [license]: ./LICENSE
 [license-badge]: https://img.shields.io/badge/license-MIT-blue.svg

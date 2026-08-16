@@ -28,6 +28,10 @@
 #define KSW_EZ_SPLICE_REV  0x200
 #define KSW_EZ_SPLICE_FLANK 0x400
 #define KSW_EZ_SEMIGLOBAL_END 0x800 // traceback to the better sequence end
+// Internal extd2 traceback mode. The score recurrence is unchanged; AVX2/
+// AVX512 kernels store Singletrack's two difference tracks instead of KSW2's
+// packed transition byte. Public minimap2 callers never set this flag.
+#define KSW_EZ_SINGLETRACK 0x1000
 
 #ifdef __cplusplus
 extern "C" {
