@@ -504,10 +504,5 @@ Proceedings of the National Academy of Sciences Jan 2022, 119 (1) e2113075119; D
 Applying AnchorWave to Address Plant Genome Alignment.
 Bio-protocol Oct 2023; DOI: 10.21769/BioProtoc.4830](https://bio-protocol.org/exchange/protocoldetail?id=4830&type=1)
 
-[Lorién López-Villellas, Cristian Iñiguez, Albert Jiménez-Blanco, et al.
-Singletrack: an algorithm for improving memory consumption and performance of
-gap-affine sequence alignment. Bioinformatics, Volume 42, Issue 5, May 2026,
-btag183; DOI: 10.1093/bioinformatics/btag183.](https://doi.org/10.1093/bioinformatics/btag183)
-
 [license]: ./LICENSE
 [license-badge]: https://img.shields.io/badge/license-MIT-blue.svg
